@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../fidelis_plus_backoffice"
+		},
+		{
+			"path": "../fidelis_plus_mobile"
+		}
+	],
+	"settings": {}
+}

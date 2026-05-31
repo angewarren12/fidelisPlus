@@ -1,0 +1,64 @@
+<main class="w-full max-w-[400px] bg-white rounded-xl login-card-shadow p-10 overflow-hidden mx-auto my-20">
+  <!-- Header Section -->
+  <header class="flex flex-col items-center mb-8 text-center">
+    <div class="w-14 h-14 bg-primary-container rounded-xl flex items-center justify-center mb-4 text-white">
+      <span class="material-symbols-outlined text-3xl font-bold">terminal</span>
+    </div>
+    <h1 class="font-headline font-extrabold text-2xl text-[#1a1831] tracking-tight">Mayelia CRM</h1>
+    <p class="font-label text-sm text-on-surface-variant/70 tracking-wide mt-1">Gestion Commerciale</p>
+  </header>
+
+  <!-- Login Form -->
+  <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-6">
+    <div class="space-y-4">
+      <!-- Error Message -->
+      <div *ngIf="errorMessage" class="bg-error-container text-on-error-container px-4 py-2 rounded-lg text-xs font-medium border border-error/10 animate-shake">
+        <i class="fas fa-exclamation-triangle mr-2"></i> {{ errorMessage }}
+      </div>
+
+      <!-- Login Field (Email or Phone) -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider ml-1" for="login">Email ou Téléphone</label>
+        <div class="relative">
+          <input 
+            class="w-full bg-[#f4f6f8] border-none rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary-container/20 focus:bg-white transition-all duration-250 outline-none" 
+            id="login" 
+            formControlName="login" 
+            placeholder="votre@email.com ou 01..." 
+            type="text"
+            required>
+        </div>
+      </div>
+
+      <!-- Password Field -->
+      <div class="space-y-1.5">
+        <div class="flex justify-between items-center px-1">
+          <label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider" for="password">Mot de passe</label>
+          <a class="text-xs font-medium text-primary-container hover:text-primary transition-colors cursor-pointer">Mot de passe oublié ?</a>
+        </div>
+        <div class="relative">
+          <input 
+            class="w-full bg-[#f4f6f8] border-none rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary-container/20 focus:bg-white transition-all duration-250 outline-none" 
+            id="password" 
+            formControlName="password" 
+            placeholder="••••••••" 
+            type="password"
+            required>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA Button -->
+    <button 
+      [disabled]="loading || loginForm.invalid"
+      class="w-full bg-[#15b9a3] hover:bg-[#006b5d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-lg transition-all duration-250 transform active:scale-[0.98] login-card-shadow flex items-center justify-center gap-2" 
+      type="submit">
+      <span *ngIf="!loading">Se connecter</span>
+      <span *ngIf="loading" class="flex items-center gap-2">
+        <i class="fas fa-spinner fa-spin"></i> Connexion...
+      </span>
+      <span class="material-symbols-outlined text-lg">arrow_forward</span>
+    </button>
+  </form>
+
+</main>

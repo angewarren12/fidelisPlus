@@ -1,0 +1,538 @@
+openapi: 3.0.3
+info:
+  title: Fidelis Plus API
+  description: |
+    API REST Laravel Sanctum (`Authorization: Bearer {token}`).
+
+    **Application mobile caisse** : rôles `caissier` ou `admin` pour le scan fidélité.
+    En-tête obligatoire sur le scan : `Idempotency-Key`.
+
+    Référence configurateur : `config/fidelis_api.php`. Routes nommées Laravel : préfixe `api.v1.*`.
+
+    Artefacts caisse : collection Postman `docs/postman/Fidelis-Plus-Caissier.postman_collection.json`,
+    script `docs/api/curl-caissier.sh`, guide `docs/api/caissier-postman-curl.md`.
+  version: "1.0.0"
+
+servers:
+  - url: "{baseUrl}"
+    variables:
+      baseUrl:
+        default: http://localhost:8000
+        description: APP_URL + chemin API
+
+tags:
+  - name: Auth
+  - name: CaissierMobile
+    description: Flux minimal pour l’app Flutter caisse (login, stations, scan)
+  - name: Notifications
+  - name: LoyaltyCRM
+    description: Fidélité back-office (admin + marketing) et émission QR (marketing uniquement)
+  - name: Core
+    description: Flotte, RDV, devis, équipe, etc.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+
+  schemas:
+    ApiSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+    ApiError:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login:
+          type: string
+          description: E-mail ou téléphone
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+            token_type:
+              type: string
+              example: Bearer
+            user:
+              type: object
+    LoyaltyPosScanRequest:
+      type: object
+      required: [qr_payload, station_id, occurred_at]
+      properties:
+        qr_payload:
+          type: string
+          description: Payload QR signé (format défini par SignedLoyaltyQrService)
+        station_id:
+          type: integer
+        occurred_at:
+          type: string
+          format: date-time
+        device_id:
+          type: string
+          maxLength: 128
+    LoyaltyPosScanSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            success:
+              type: boolean
+            points_credited:
+              type: integer
+            new_balance:
+              type: integer
+            loyalty_account_id:
+              type: integer
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth, CaissierMobile]
+      summary: Connexion (token Sanctum)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Identifiants invalides
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth, CaissierMobile]
+      summary: Profil utilisateur connecté
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth, CaissierMobile]
+      summary: Révoquer le token courant
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/auth/fcm-token:
+    patch:
+      tags: [CaissierMobile]
+      summary: Mettre à jour le jeton FCM (push)
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/stations:
+    get:
+      tags: [CaissierMobile]
+      summary: Liste des stations (pour station_id du scan)
+      responses:
+        "200":
+          description: Liste triée par nom
+
+  /api/v1/loyalty/pos/scan:
+    post:
+      tags: [CaissierMobile]
+      summary: Scan carte fidélité en magasin
+      description: |
+        Rôles `caissier`, `admin`. Throttling 180/min.
+
+        **Headers** : `Idempotency-Key` (obligatoire, max 80 caractères).
+
+        Réponse `409` si même Idempotency-Key (replay idempotent).
+
+        Notifie le commercial référent (`loyalty_visit`) lors d’un premier crédit réussi.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            maxLength: 80
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoyaltyPosScanRequest"
+      responses:
+        "200":
+          description: Points crédités
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyPosScanSuccess"
+        "409":
+          description: Doublon idempotence (même clé)
+        "422":
+          description: Validation, QR expiré, compte bloqué, QR déjà utilisé (jti)
+        "403":
+          description: Rôle non autorisé
+
+  /api/v1/notifications:
+    get:
+      tags: [Notifications, CaissierMobile]
+      summary: Liste paginée des notifications
+      parameters:
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/notifications/unread-count:
+    get:
+      tags: [Notifications, CaissierMobile]
+      summary: Nombre de non lues
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/notifications/mark-all-read:
+    patch:
+      tags: [Notifications]
+      summary: Tout marquer comme lu
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Marquer une notification comme lue
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/loyalty/accounts:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Liste des comptes fidélité
+      description: |
+        Rôles `admin`, `marketing` (liste complète) et `commercial` (uniquement comptes rattachés aux sociétés dont il est titulaire, `commercial_id`).
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Accès refusé
+
+  /api/v1/loyalty/accounts/{id}:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Détail compte fidélité
+      description: Même périmètre que la liste ; `404` si le commercial demande un compte hors portefeuille.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/loyalty/accounts/bootstrap:
+    post:
+      tags: [LoyaltyCRM]
+      summary: Créer / rattacher un compte et retourner un payload QR
+      description: Rôles **admin** ou **marketing** uniquement (pas les commerciaux).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id:
+                  type: integer
+                user_id:
+                  type: integer
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Non marketing
+
+  /api/v1/loyalty/accounts/{id}/qr-payload:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Régénérer le payload QR pour impression
+      description: Rôles **admin** ou **marketing** uniquement.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/loyalty/accounts/{id}/adjust:
+    post:
+      tags: [LoyaltyCRM]
+      summary: Ajustement manuel des points
+      description: Rôles admin, marketing
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/loyalty/rewards:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Catalogue récompenses
+      description: Lecture autorisée pour `admin`, `marketing`, `commercial` ; création / mise à jour réservées admin + marketing.
+      responses:
+        "200":
+          description: OK
+    post:
+      tags: [LoyaltyCRM]
+      summary: Créer une récompense
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/loyalty/rewards/{id}:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Détail récompense
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+    patch:
+      tags: [LoyaltyCRM]
+      summary: Mettre à jour une récompense
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+    delete:
+      tags: [LoyaltyCRM]
+      summary: Supprimer une récompense
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/loyalty/reports/station-scans:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Rapport passages en station (scans POS)
+      description: |
+        Rôles `admin`, `marketing`, `commercial`. Agrège les scans fidélité caisse (`commercial` uniquement pour les cartes du portefeuille).
+
+        Filtre temporel (obligatoire, l’un ou l’autre) :
+        - **`date`** : un jour civil (`YYYY-MM-DD`) dans le fuseau applicatif (`APP_TIMEZONE`).
+        - **`from`** + **`to`** : plage inclusive de jours civils.
+
+        Filtre optionnel : **`station_id`**.
+
+        Réponse : totaux, détail par station, détail par jour (`by_day` utile sur une plage).
+      parameters:
+        - in: query
+          name: date
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2026-05-06"
+        - in: query
+          name: from
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: station_id
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                        properties:
+                          from:
+                            type: string
+                            format: date-time
+                          to:
+                            type: string
+                            format: date-time
+                          timezone:
+                            type: string
+                      totals:
+                        type: object
+                        properties:
+                          scans_count:
+                            type: integer
+                          points_credited:
+                            type: integer
+                      by_station:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            station_id:
+                              type: integer
+                            station_name:
+                              type: string
+                            scans_count:
+                              type: integer
+                            points_credited:
+                              type: integer
+                      by_day:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            day:
+                              type: string
+                              description: Jour civil YYYY-MM-DD (fuseau DB)
+                            scans_count:
+                              type: integer
+                            points_credited:
+                              type: integer
+        "422":
+          description: Paramètres invalides ou plage incohérente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/loyalty/lookup/client-users:
+    get:
+      tags: [LoyaltyCRM]
+      summary: Recherche utilisateurs (rôle client)
+      description: |
+        Rôles `admin`, `marketing`. Sert à la sélection d’un titulaire de carte (particulier)
+        dans le back-office : recherche par nom, e-mail ou téléphone.
+      parameters:
+        - in: query
+          name: search
+          required: false
+          schema:
+            type: string
+            maxLength: 120
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 40
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        first_name:
+                          type: string
+                        last_name:
+                          type: string
+                        email:
+                          type: string
+                          nullable: true
+                        phone:
+                          type: string
+                          nullable: true
+                        company_id:
+                          type: integer
+                          nullable: true
+
+security:
+  - bearerAuth: []
