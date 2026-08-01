@@ -41,8 +41,8 @@ import { AuthService } from '../../../services/auth.service';
             </div>
             
             <div class="space-y-2">
-              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">SIRET / Registre Commerce</label>
-              <input type="text" formControlName="siret" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="123 456 789 00012">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Numéro Registre de Commerce (RCCM)</label>
+              <input type="text" formControlName="rccm" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="CI-ABJ-2026-A-12345">
             </div>
             
             <div class="space-y-2">
@@ -164,7 +164,7 @@ export class ClientFormComponent implements OnInit {
     const currentUser = this.authService.getCurrentUser();
     this.clientForm = this.fb.group({
       name: ['', Validators.required],
-      siret: [''],
+      rccm: [''],
       sector: ['Logistique & Transport'],
       address: [''],
       // Correspondent

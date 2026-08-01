@@ -55,6 +55,10 @@ class LoyaltyPosScanController extends Controller
             'station_id' => 'required|integer|exists:stations,id',
             'device_id' => 'nullable|string|max:128',
             'occurred_at' => 'required|date',
+            'vehicle_registration' => 'nullable|string|max:30',
+            'vehicle_brand' => 'nullable|string|max:60',
+            'vehicle_color' => 'nullable|string|max:40',
+            'visit_type' => 'nullable|string|max:40',
         ]);
 
         if ($validator->fails()) {
@@ -94,6 +98,10 @@ class LoyaltyPosScanController extends Controller
 
         try {
             $result = DB::transaction(function () use ($request, $claims, $idempotencyKey, $user) {
+                $vehicleRegistration = $request->input('vehicle_registration');
+                $vehicleBrand = $request->input('vehicle_brand');
+                $vehicleColor = $request->input('vehicle_color');
+                $visitType = $request->input('visit_type', 'visite_technique');
                 if (LoyaltyPosScanEvent::query()->where('qr_jti', $claims['jti'])->lockForUpdate()->exists()) {
                     return ['conflict' => 'jti'];
                 }
@@ -124,6 +132,10 @@ class LoyaltyPosScanController extends Controller
                     'points_credited' => $points,
                     'payload_hash' => $this->qrService->payloadHash($request->string('qr_payload')->toString()),
                     'device_id' => $request->input('device_id'),
+                    'vehicle_registration' => $vehicleRegistration,
+                    'vehicle_brand' => $vehicleBrand,
+                    'vehicle_color' => $vehicleColor,
+                    'visit_type' => $visitType,
                 ]);
 
                 return [

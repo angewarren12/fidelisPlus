@@ -61,12 +61,11 @@ import { ToastService } from '../../../services/toast.service';
           </div>
 
           <div class="mt-8 p-4 bg-secondary/5 border border-secondary/10 rounded-xl flex items-start gap-4">
-             <span class="material-symbols-outlined text-secondary">lock_open</span>
+             <span class="material-symbols-outlined text-secondary" aria-hidden="true">lock_open</span>
              <div>
                <p class="text-[11px] font-black uppercase text-secondary tracking-widest mb-1">Sécurité</p>
                <p class="text-xs font-semibold text-secondary/80">
-                 Le mot de passe par défaut est <span class="bg-secondary text-white px-2 py-0.5 rounded">fidelis2026</span>. 
-                 L'utilisateur pourra le modifier après sa première connexion mobile.
+                 Un mot de passe est généré automatiquement et envoyé par email à ce correspondant. Il devra le modifier obligatoirement lors de sa première connexion.
                </p>
              </div>
           </div>

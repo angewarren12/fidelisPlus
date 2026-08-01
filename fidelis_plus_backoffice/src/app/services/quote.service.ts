@@ -21,6 +21,7 @@ export interface Quote {
   items: QuoteItem[];
   company?: any;
   vehicles?: any[];
+  bon_de_commande_url?: string | null;
 }
 
 export interface QuoteListMeta {
@@ -128,8 +129,17 @@ export class QuoteService {
     );
   }
 
-  // Mise à jour du statut (déclenche la notification si passé à 'sent')
-  updateStatus(id: number, status: string): Observable<any> {
-    return this.http.patch<any>(`${this.API_URL}/${id}/status`, { status });
+  // Mise à jour du statut (déclenche la notification + l'email réel si passé à 'sent')
+  updateStatus(id: number, status: string, options: { email?: string; message?: string } = {}): Observable<any> {
+    return this.http.patch<any>(`${this.API_URL}/${id}/status`, { status, ...options });
+  }
+
+  // Upload du bon de commande (par le client, ou par le commercial pour le compte du client)
+  uploadBonDeCommande(id: number, file: File): Observable<Quote> {
+    const formData = new FormData();
+    formData.append('bon_de_commande', file);
+    return this.http.post<any>(`${this.API_URL}/${id}/upload-accord`, formData).pipe(
+      map(res => res.data)
+    );
   }
 }

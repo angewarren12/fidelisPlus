@@ -16,8 +16,30 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
   standalone: true,
   imports: [CommonModule, BaseChartDirective, RouterModule, QuoteRequestModalComponent],
   template: `
-    <div class="space-y-10 animate-fade-in pb-20" *ngIf="stats()">
-      
+    <!-- SKELETON LOADING -->
+    <div *ngIf="loading()" class="space-y-10 pb-20 animate-pulse">
+      <div class="h-14 w-2/3 bg-surface-container rounded-2xl"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="h-40 bg-surface-container rounded-[2rem]"></div>
+        <div class="h-40 bg-surface-container rounded-[2rem]"></div>
+        <div class="h-40 bg-surface-container rounded-[2rem]"></div>
+      </div>
+      <div class="h-96 bg-surface-container rounded-[2.5rem]"></div>
+    </div>
+
+    <!-- ERROR STATE -->
+    <div *ngIf="!loading() && error()" class="py-24 flex flex-col items-center justify-center bg-white rounded-[2.5rem] border border-outline-variant/10">
+      <span class="material-symbols-outlined text-error/40 text-6xl mb-4">cloud_off</span>
+      <p class="text-on-surface font-bold text-lg mb-1">Impossible de charger le tableau de bord</p>
+      <p class="text-outline text-sm mb-6">Une erreur réseau est survenue. Vérifiez votre connexion et réessayez.</p>
+      <button type="button" (click)="loadStats()" class="px-6 py-3 bg-primary text-white font-bold text-sm rounded-xl hover:brightness-110 transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">refresh</span>
+        Réessayer
+      </button>
+    </div>
+
+    <div class="space-y-10 animate-fade-in pb-20" *ngIf="!loading() && !error() && stats()">
+
       <!-- GREETING & HEADER -->
       <section class="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
@@ -35,15 +57,14 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
       </section>
 
       <!-- PREMIUM KPI ROW -->
-      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+
         <!-- KPI: Chiffre d'Affaires -->
         <div class="relative bg-[#1b1932] p-8 rounded-[2rem] overflow-hidden group shadow-2xl">
           <div class="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-[60px] -mr-16 -mt-16"></div>
           <div class="relative z-10">
             <div class="flex items-center justify-between mb-6">
                <span class="material-symbols-outlined text-primary text-3xl">payments</span>
-               <span class="text-[10px] font-black text-secondary uppercase tracking-widest">+12%</span>
             </div>
             <p class="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Chiffre d'Affaires</p>
             <h3 class="text-3xl font-headline font-black text-white">{{ stats()?.revenue?.total_accepted | currency:'XOF':'symbol':'1.0-2' }}</h3>
@@ -75,6 +96,16 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
           <h3 class="text-3xl font-headline font-black text-error">{{ stats()?.fleet?.en_retard }}</h3>
         </div>
 
+        <!-- KPI: Devis -->
+        <div class="relative bg-white p-8 rounded-[2rem] border border-outline-variant/10 shadow-sm group">
+          <div class="flex items-center justify-between mb-6">
+             <span class="material-symbols-outlined text-primary text-3xl">request_quote</span>
+             <span class="text-[10px] font-black text-secondary uppercase tracking-widest">{{ stats()?.revenue?.new_quotes_count }} à relancer</span>
+          </div>
+          <p class="text-outline/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Devis</p>
+          <h3 class="text-3xl font-headline font-black text-on-surface">{{ stats()?.revenue?.total_quotes_count }}</h3>
+        </div>
+
       </section>
 
       <!-- MAIN CONTENT GRID -->
@@ -85,29 +116,21 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
           <div class="bg-white rounded-[2.5rem] p-10 shadow-sm border border-outline-variant/5">
              <div class="flex items-center justify-between mb-10">
                <div>
-                  <h3 class="text-xl font-headline font-black text-on-surface">Performance Opérationnelle</h3>
-                  <p class="text-xs text-outline font-medium tracking-tight">Volume d'inspections sur les 7 derniers jours</p>
+                  <h3 class="text-xl font-headline font-black text-on-surface">Performance Commerciale</h3>
+                  <p class="text-xs text-outline font-medium tracking-tight">Devis créés sur les 7 derniers jours</p>
                </div>
-               <div class="flex bg-surface-container rounded-xl p-1">
-                 <button class="px-4 py-1.5 text-[10px] font-black uppercase rounded-lg bg-white shadow-sm text-on-surface">Semaine</button>
-                 <button class="px-4 py-1.5 text-[10px] font-black uppercase rounded-lg text-outline">Mois</button>
-               </div>
+               <div class="px-4 py-1.5 text-[10px] font-black uppercase rounded-lg bg-surface-container text-outline">7 derniers jours</div>
              </div>
              <div class="h-80 relative">
-               <canvas baseChart [data]="chartData" [options]="chartOptions" [type]="'bar'"></canvas>
+               <canvas *ngIf="hasChartData()" baseChart [data]="chartData" [options]="chartOptions" [type]="'bar'"></canvas>
+               <div *ngIf="!hasChartData()" class="h-full flex flex-col items-center justify-center text-outline/40">
+                 <span class="material-symbols-outlined text-5xl mb-2">bar_chart</span>
+                 <p class="text-sm font-medium">Aucun devis créé cette semaine.</p>
+               </div>
              </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-             <div class="bg-surface-container-low p-8 rounded-[2rem] border border-outline-variant/10 flex items-center justify-between">
-                <div>
-                   <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Prospects Actifs</p>
-                   <p class="text-3xl font-headline font-black text-on-surface">{{ stats()?.crm?.total_prospects }}</p>
-                </div>
-                <div class="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-primary">
-                   <span class="material-symbols-outlined text-3xl">add_reaction</span>
-                </div>
-             </div>
+          <div class="grid grid-cols-1 gap-8">
              <div class="bg-surface-container-low p-8 rounded-[2rem] border border-outline-variant/10 flex items-center justify-between">
                 <div>
                    <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Devis à Relancer</p>
@@ -166,41 +189,6 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
 
       </div>
 
-      <!-- BOTTOM: AGENDA SECTION -->
-      <section class="bg-white rounded-[2.5rem] p-10 shadow-sm border border-outline-variant/5">
-         <div class="flex items-center justify-between mb-10">
-            <div>
-               <h3 class="text-2xl font-headline font-black text-on-surface">Agenda du Jour</h3>
-               <p class="text-xs text-outline font-medium tracking-tight">Rendez-vous programmés pour aujourd'hui</p>
-            </div>
-            <span class="text-[10px] font-black uppercase text-outline/50">Vue synthétique</span>
-         </div>
-
-         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
-            <div *ngFor="let apt of stats()?.agenda" class="p-6 rounded-[2rem] bg-surface-container-low border border-outline-variant/5 flex flex-col gap-6 group hover:border-primary/20 transition-all">
-               <div class="flex items-center justify-between">
-                  <span class="text-xl font-headline font-black text-primary">{{ apt.appointment_date | date:'HH:mm' }}</span>
-                  <span class="px-3 py-1 bg-white rounded-full text-[9px] font-black uppercase tracking-widest text-outline border border-outline-variant/10 shadow-sm">Confirmé</span>
-               </div>
-               <div>
-                  <h4 class="font-black text-on-surface mb-1">{{ apt.company?.name || 'Client Direct' }}</h4>
-                  <p class="text-xs text-outline font-medium">{{ apt.vehicle?.brand }} {{ apt.vehicle?.model }} — {{ apt.vehicle?.license_plate }}</p>
-               </div>
-               <div class="flex items-center gap-2 pt-2 border-t border-outline-variant/10">
-                  <span class="material-symbols-outlined text-sm text-outline">location_on</span>
-                  <span class="text-[10px] font-bold text-outline">{{ apt.station?.name || 'Centre Principal' }}</span>
-               </div>
-            </div>
-
-            <div *ngIf="!stats()?.agenda?.length" class="col-span-full py-20 flex flex-col items-center justify-center bg-surface-container text-outline/30 rounded-[2rem] border border-dashed border-outline-variant/20 italic">
-               <span class="material-symbols-outlined text-5xl mb-3">event_busy</span>
-               Aucun rendez-vous aujourd'hui.
-            </div>
-
-         </div>
-      </section>
-
       <!-- MODALS -->
       <app-quote-request-modal 
         *ngIf="showQuoteRequests()" 
@@ -218,6 +206,9 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
 export class DashboardComponent implements OnInit {
   stats = signal<DashboardStats | null>(null);
   showQuoteRequests = signal(false);
+  loading = signal(true);
+  error = signal(false);
+  hasChartData = signal(false);
   today = new Date();
 
   private dashboardService = inject(DashboardService);
@@ -249,7 +240,7 @@ export class DashboardComponent implements OnInit {
   public chartData: ChartData<'bar'> = {
     labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
     datasets: [{
-      data: [12, 19, 15, 25, 22, 18, 12],
+      data: [],
       backgroundColor: '#006B5D',
       hoverBackgroundColor: '#004D40',
       borderRadius: 12,
@@ -258,24 +249,35 @@ export class DashboardComponent implements OnInit {
   };
 
   ngOnInit(): void {
+    this.loadStats();
+  }
+
+  loadStats(): void {
+    this.loading.set(true);
+    this.error.set(false);
     this.dashboardService.getStats().subscribe({
       next: (data) => {
         this.stats.set(data);
-        if (data.inspections_weekly && Array.isArray(data.inspections_weekly)) {
+        this.loading.set(false);
+        const weekly = data.quotes_weekly;
+        if (Array.isArray(weekly) && weekly.some(v => v > 0)) {
           this.chartData = {
             labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
             datasets: [{
-              data: data.inspections_weekly,
+              data: weekly,
               backgroundColor: '#006B5D',
               hoverBackgroundColor: '#004D40',
               borderRadius: 12,
               barThickness: 32
             }]
           };
+          this.hasChartData.set(true);
         }
       },
       error: (err) => {
         console.error('Dashboard Stats Error', err);
+        this.loading.set(false);
+        this.error.set(true);
         this.toastService.error('Impossible de charger le tableau de bord.');
       },
     });
@@ -308,8 +310,8 @@ export class DashboardComponent implements OnInit {
         { label: 'Flotte à jour', value: String(s.fleet?.a_jour ?? 0) },
         { label: 'Flotte bientôt', value: String(s.fleet?.bientot ?? 0) },
         { label: 'Flotte en retard', value: String(s.fleet?.en_retard ?? 0), hint: 'À traiter en priorité' },
+        { label: 'Flotte jamais contrôlée', value: String(s.fleet?.jamais_controle ?? 0) },
         { label: 'Demandes devis en attente', value: String(s.alerts?.pending_requests ?? 0) },
-        { label: 'RDV du jour', value: String(Array.isArray(s.agenda) ? s.agenda.length : 0) },
       ],
     });
     const rows = buildDashboardStatsCsvRows(s, {

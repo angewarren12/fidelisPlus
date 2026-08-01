@@ -19,10 +19,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
   final MobileScannerController _controller = MobileScannerController(formats: const [BarcodeFormat.qrCode]);
   bool _isProcessing = false;
   String? _lastScanned;
+  final TextEditingController _regController = TextEditingController();
+  final TextEditingController _brandController = TextEditingController();
+  final TextEditingController _colorController = TextEditingController();
 
   @override
   void dispose() {
     _controller.dispose();
+    _regController.dispose();
+    _brandController.dispose();
+    _colorController.dispose();
     super.dispose();
   }
 
@@ -59,6 +65,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   void _showClientDetails(dynamic client, String qrPayload) {
+    _regController.clear();
+    _brandController.clear();
+    _colorController.clear();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -121,7 +130,25 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   _buildStatItem('Points à gagner', '+${client['points_per_scan']}', Icons.add_circle_outline),
                 ],
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
+              Text('VÉHICULE (VISITE TECHNIQUE)', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1, color: AppTheme.textSecondary)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _regController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(labelText: 'Immatriculation', isDense: true),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _brandController,
+                decoration: const InputDecoration(labelText: 'Marque', isDense: true),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _colorController,
+                decoration: const InputDecoration(labelText: 'Couleur', isDense: true),
+              ),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -162,13 +189,23 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   Future<void> _validatePassage(String qrPayload) async {
+    final vehicleRegistration = _regController.text.trim();
+    final vehicleBrand = _brandController.text.trim();
+    final vehicleColor = _colorController.text.trim();
     Navigator.pop(context); // Close sheet
     setState(() => _isProcessing = true);
 
     try {
       final api = context.read<ApiService>();
       final idem = const Uuid().v4();
-      final res = await api.scanLoyalty(qrPayload, widget.station['id'], idem);
+      final res = await api.scanLoyalty(
+        qrPayload,
+        widget.station['id'],
+        idem,
+        vehicleRegistration: vehicleRegistration,
+        vehicleBrand: vehicleBrand,
+        vehicleColor: vehicleColor,
+      );
 
       if (!mounted) return;
 

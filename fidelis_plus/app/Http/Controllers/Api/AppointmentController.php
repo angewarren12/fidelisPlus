@@ -28,7 +28,7 @@ class AppointmentController extends Controller
         // Sécurité automatique
         $this->scopeForUser($query);
 
-        $appointments = $query->with(['company', 'vehicle'])->get();
+        $appointments = $query->with(['company', 'vehicles'])->get();
 
         return AppointmentResource::collection($appointments);
     }
@@ -47,9 +47,9 @@ class AppointmentController extends Controller
         $date = $request->date;
 
         // Définition des créneaux de la journée (ex: 08:00 à 17:00)
-        $slots = [
-            '08:30', '10:30', '13:30', '15:30', '17:30'
-        ];
+        $defaultSlots = ['08:30', '10:30', '13:30', '15:30', '17:30'];
+        $slotsSetting = \App\Models\Setting::getValue('quote.appointment.time_slots');
+        $slots = $slotsSetting && is_array($slotsSetting) ? $slotsSetting : (is_string($slotsSetting) ? explode(',', $slotsSetting) : $defaultSlots);
 
         $availability = [];
 
@@ -61,10 +61,13 @@ class AppointmentController extends Controller
                 ->where('appointment_date', $dateTime)
                 ->count();
 
+            $globalCapacity = \App\Models\Setting::getValue('quote.appointment.global_capacity', 5);
+            $capacity = $station->express_capacity_per_slot > 0 ? $station->express_capacity_per_slot : (int) $globalCapacity;
+
             $availability[] = [
                 'time' => $time,
-                'is_full' => $count >= $station->express_capacity_per_slot,
-                'available_spots' => max(0, $station->express_capacity_per_slot - $count)
+                'is_full' => $count >= $capacity,
+                'available_spots' => max(0, $capacity - $count)
             ];
         }
 
@@ -80,7 +83,8 @@ class AppointmentController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'vehicle_id' => 'required|exists:vehicles,id',
+            'vehicle_ids' => 'required|array|min:1',
+            'vehicle_ids.*' => 'required|exists:vehicles,id',
             'station_id' => 'required|exists:stations,id',
             'appointment_date' => 'required|date_format:Y-m-d H:i:s',
             'is_pass_express' => 'boolean'
@@ -91,7 +95,10 @@ class AppointmentController extends Controller
         }
 
         // Validation stricte des créneaux
-        $allowedSlots = ['08:30:00', '10:30:00', '13:30:00', '15:30:00', '17:30:00'];
+        $defaultSlots = ['08:30:00', '10:30:00', '13:30:00', '15:30:00', '17:30:00'];
+        $slotsSetting = \App\Models\Setting::getValue('quote.appointment.time_slots');
+        $rawSlots = $slotsSetting && is_array($slotsSetting) ? $slotsSetting : (is_string($slotsSetting) ? explode(',', $slotsSetting) : $defaultSlots);
+        $allowedSlots = array_map(fn($s) => strlen($s) === 5 ? "$s:00" : $s, $rawSlots);
         $timeOnly = date('H:i:s', strtotime($request->appointment_date));
         
         if (!in_array($timeOnly, $allowedSlots)) {
@@ -109,12 +116,22 @@ class AppointmentController extends Controller
             ], 422);
         }
 
-        $vehicle = Vehicle::query()->findOrFail($request->vehicle_id);
-        if ((int) $vehicle->company_id !== (int) $companyId) {
+        // Vérification de la propriété des véhicules sélectionnés
+        $vehicles = Vehicle::whereIn('id', $request->vehicle_ids)->get();
+        if ($vehicles->count() !== count(array_unique($request->vehicle_ids))) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Ce véhicule n’appartient pas à votre compte.',
-            ], 403);
+                'message' => 'Un ou plusieurs véhicules sélectionnés sont invalides.',
+            ], 422);
+        }
+
+        foreach ($vehicles as $vehicle) {
+            if ((int) $vehicle->company_id !== (int) $companyId) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Le véhicule {$vehicle->license_plate} n’appartient pas à votre compte.",
+                ], 403);
+            }
         }
 
         $station = Station::findOrFail($request->station_id);
@@ -124,7 +141,10 @@ class AppointmentController extends Controller
             ->where('appointment_date', $request->appointment_date)
             ->count();
 
-        if ($existingCount >= $station->express_capacity_per_slot) {
+        $globalCapacity = \App\Models\Setting::getValue('quote.appointment.global_capacity', 5);
+        $capacity = $station->express_capacity_per_slot > 0 ? $station->express_capacity_per_slot : (int) $globalCapacity;
+
+        if ($existingCount >= $capacity) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Ce créneau est complet.'
@@ -133,17 +153,18 @@ class AppointmentController extends Controller
 
         $appointment = Appointment::create([
             'company_id' => $companyId,
-            'vehicle_id' => $request->vehicle_id,
             'station_id' => $request->station_id,
             'appointment_date' => $request->appointment_date,
             'is_pass_express' => $request->is_pass_express ?? false,
             'status' => 'confirme' // Pas de paiement en ligne, donc confirmé direct
         ]);
 
+        $appointment->vehicles()->sync($request->vehicle_ids);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Rendez-vous réservé avec succès.',
-            'data' => $appointment
+            'data' => $appointment->load('vehicles')
         ], 201);
     }
 

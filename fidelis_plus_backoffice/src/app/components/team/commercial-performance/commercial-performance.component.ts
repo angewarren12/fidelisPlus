@@ -87,7 +87,7 @@ import { KpiTargetService, PeriodType, KpiProgressResponse } from '../../../serv
             </div>
             <div class="flex items-end gap-1 mb-1">
               <h3 class="text-3xl font-headline font-black text-error">{{ stats()!.fleet.en_retard }}</h3>
-              <span class="text-outline text-xs font-bold pb-1.5">/ {{ (stats()!.fleet.a_jour || 0) + (stats()!.fleet.bientot || 0) + (stats()!.fleet.en_retard || 0) }}</span>
+              <span class="text-outline text-xs font-bold pb-1.5">/ {{ (stats()!.fleet.jamais_controle || 0) + (stats()!.fleet.a_jour || 0) + (stats()!.fleet.bientot || 0) + (stats()!.fleet.en_retard || 0) }}</span>
             </div>
             <p class="text-outline/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Véhicules du portefeuille</p>
           </div>
@@ -241,7 +241,7 @@ import { KpiTargetService, PeriodType, KpiProgressResponse } from '../../../serv
         </ng-template>
 
         <!-- MODAL: Fixer / mettre à jour l’objectif (Admin) -->
-        <div *ngIf="isAdmin() && showTargetModal()" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div *ngIf="isAdmin() && showTargetModal()" class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 py-10">
           <div class="absolute inset-0 bg-[#0f172a]/75 backdrop-blur-sm" (click)="closeTargetModal()"></div>
           <div class="relative w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl border border-outline-variant/10 overflow-hidden animate-scale-in" (click)="$event.stopPropagation()">
             <!-- En-tête du modal -->
@@ -664,6 +664,7 @@ export class CommercialPerformanceComponent implements OnInit {
         { label: 'Flotte à jour', value: String(s.fleet?.a_jour ?? 0) },
         { label: 'Flotte bientôt', value: String(s.fleet?.bientot ?? 0) },
         { label: 'Flotte en retard', value: String(s.fleet?.en_retard ?? 0), hint: 'Véhicules à relancer' },
+        { label: 'Flotte jamais contrôlée', value: String(s.fleet?.jamais_controle ?? 0) },
         { label: 'Demandes devis en attente', value: String(s.alerts?.pending_requests ?? 0) },
       ],
     });

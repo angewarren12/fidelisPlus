@@ -16,6 +16,10 @@ class LoyaltyPosScanEvent extends Model
         'points_credited',
         'payload_hash',
         'device_id',
+        'vehicle_registration',
+        'vehicle_brand',
+        'vehicle_color',
+        'visit_type',
     ];
 
     public function loyaltyAccount(): BelongsTo

@@ -1,6 +1,7 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import * as QRCode from 'qrcode';
 import { AuthService } from '../../../services/auth.service';
 import { DashboardService, DashboardStats } from '../../../services/dashboard.service';
 import { LoyaltyService } from '../../../services/loyalty.service';
@@ -11,8 +12,32 @@ import { ToastService } from '../../../services/toast.service';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <div class="space-y-10 animate-fade-in pb-20" *ngIf="stats()">
-      
+    <!-- SKELETON LOADING -->
+    <div *ngIf="loading()" class="space-y-10 pb-20 animate-pulse">
+      <div class="h-14 w-2/3 bg-surface-container rounded-2xl"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div class="lg:col-span-5 h-72 bg-surface-container rounded-[2rem]"></div>
+        <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div class="h-36 bg-surface-container rounded-[2rem]"></div>
+          <div class="h-36 bg-surface-container rounded-[2rem]"></div>
+          <div class="h-36 bg-surface-container rounded-[2rem]"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ERROR STATE -->
+    <div *ngIf="!loading() && error()" class="py-24 flex flex-col items-center justify-center bg-white rounded-[2.5rem] border border-outline-variant/10">
+      <span class="material-symbols-outlined text-error/40 text-6xl mb-4">cloud_off</span>
+      <p class="text-on-surface font-bold text-lg mb-1">Impossible de charger votre tableau de bord</p>
+      <p class="text-outline text-sm mb-6">Une erreur réseau est survenue. Vérifiez votre connexion et réessayez.</p>
+      <button type="button" (click)="loadStats()" class="px-6 py-3 bg-primary text-white font-bold text-sm rounded-xl hover:brightness-110 transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">refresh</span>
+        Réessayer
+      </button>
+    </div>
+
+    <div class="space-y-10 animate-fade-in pb-20" *ngIf="!loading() && !error() && stats()">
+
       <!-- GREETING -->
       <section class="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
@@ -56,7 +81,7 @@ import { ToastService } from '../../../services/toast.service';
           <div class="relative z-10 flex justify-between items-end border-t border-white/10 pt-6">
             <div>
               <p class="text-xs font-bold truncate max-w-[200px]">{{ currentUser()?.company?.name || (currentUser()?.first_name + ' ' + currentUser()?.last_name) }}</p>
-              <p class="text-[9px] text-white/40 font-mono tracking-wider mt-0.5">ID: {{ loyaltyKey() }}</p>
+              <p class="text-[9px] text-white/40 font-mono tracking-wider mt-0.5">ID: {{ loyaltyKey() === 'NON_ENREGISTRE' ? 'Non attribué' : loyaltyKey() }}</p>
             </div>
             
             <button (click)="toggleQr()" class="px-4 py-2 bg-[#15b9a3] hover:brightness-110 text-white text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center gap-2">
@@ -68,8 +93,11 @@ import { ToastService } from '../../../services/toast.service';
           <!-- QR Overlay container -->
           <div *ngIf="showQr()" class="absolute inset-0 bg-[#1a1831] flex flex-col items-center justify-center p-6 z-25 transition-all duration-300">
             <p class="text-xs font-bold text-white/80 mb-4">Présentez ce QR code à la caisse</p>
-            <div class="bg-white p-4 rounded-2xl shadow-xl flex items-center justify-center">
-              <img [src]="qrCodeUrl()" alt="QR Code Fidélité" class="w-40 h-40">
+            <div class="bg-white p-4 rounded-2xl shadow-xl flex items-center justify-center w-40 h-40">
+              <img *ngIf="qrCodeUrl(); else noQr" [src]="qrCodeUrl()" alt="QR Code Fidélité" class="w-full h-full">
+              <ng-template #noQr>
+                <span class="text-outline text-[10px] font-bold text-center px-2">QR code indisponible</span>
+              </ng-template>
             </div>
             <button (click)="toggleQr()" class="mt-6 text-xs text-[#15b9a3] font-bold hover:underline">Retour</button>
           </div>
@@ -114,59 +142,55 @@ import { ToastService } from '../../../services/toast.service';
             </div>
           </div>
 
-          <!-- Action Quick links (Double span card) -->
-          <div class="sm:col-span-3 bg-teal-50/20 border border-primary/10 p-6 rounded-[2rem] flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-primary text-3xl bg-white p-3 rounded-2xl shadow-sm">event_note</span>
-              <div>
-                <h4 class="font-black text-sm text-on-surface">Un véhicule à faire inspecter ?</h4>
-                <p class="text-xs text-outline font-medium">Réservez un créneau directement dans l'une de nos stations partenaires.</p>
-              </div>
-            </div>
-            <button routerLink="/client/appointments" class="px-6 py-3 bg-primary hover:brightness-110 text-white text-xs font-bold rounded-xl shadow-md shadow-primary/20 active:scale-95 transition-all shrink-0">
-              Prendre rendez-vous
-            </button>
-          </div>
-
         </div>
 
       </section>
 
-      <!-- BOTTOM GRID: APPOINTMENTS & QUOTES -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        <!-- UPCOMING APPOINTMENTS -->
-        <section class="lg:col-span-5 bg-white rounded-[2.5rem] p-8 shadow-sm border border-outline-variant/5">
-          <div class="flex items-center justify-between mb-8">
-            <h3 class="text-lg font-headline font-black text-on-surface">Prochain Rendez-vous</h3>
-            <span class="text-[9px] font-black uppercase text-outline tracking-wider">Mon Agenda</span>
+      <!-- COMPANY INFO -->
+      <section *ngIf="currentUser()?.company as company" class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-outline-variant/5">
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+            <span class="material-symbols-outlined">domain</span>
           </div>
-
-          <div class="space-y-6">
-            <div *ngFor="let apt of nextAppointments()" class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/5 flex flex-col gap-4">
-              <div class="flex items-center justify-between">
-                <span class="text-lg font-headline font-black text-primary">{{ apt.appointment_date | date:'dd MMM yyyy à HH:mm' }}</span>
-                <span class="px-2.5 py-1 bg-white rounded-full text-[9px] font-bold text-primary border border-primary/10 shadow-sm uppercase">Confirmé</span>
-              </div>
-              <div>
-                <h4 class="font-bold text-sm text-on-surface">{{ apt.vehicle?.brand }} {{ apt.vehicle?.model }}</h4>
-                <p class="text-xs text-outline mt-0.5">Immatriculation : {{ apt.vehicle?.license_plate }}</p>
-              </div>
-              <div class="flex items-center gap-1.5 pt-2 border-t border-outline-variant/10 text-[10px] text-outline font-bold">
-                <span class="material-symbols-outlined text-sm">location_on</span>
-                {{ apt.station?.name || 'Centre d\\'inspection' }}
-              </div>
-            </div>
-
-            <div *ngIf="nextAppointments().length === 0" class="py-12 flex flex-col items-center justify-center bg-surface-container text-outline/30 rounded-2xl italic">
-              <span class="material-symbols-outlined text-4xl mb-2">event_busy</span>
-              Aucun rendez-vous planifié.
-            </div>
+          <div>
+            <h3 class="text-lg font-headline font-black text-on-surface">Informations entreprise</h3>
+            <p class="text-outline text-xs font-medium">Coordonnées associées à votre compte Mayelia</p>
           </div>
-        </section>
+        </div>
 
-        <!-- RECENT QUOTES -->
-        <section class="lg:col-span-7 bg-white rounded-[2.5rem] p-8 shadow-sm border border-outline-variant/5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div class="p-4 rounded-2xl bg-surface-container-low">
+            <p class="text-[9px] font-black uppercase text-outline tracking-widest mb-1">Raison sociale</p>
+            <p class="font-bold text-on-surface truncate">{{ company.name || '—' }}</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-surface-container-low" *ngIf="company.rccm">
+            <p class="text-[9px] font-black uppercase text-outline tracking-widest mb-1">Registre de Commerce (RCCM)</p>
+            <p class="font-bold text-on-surface truncate">{{ company.rccm }}</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-surface-container-low" *ngIf="company.phone">
+            <p class="text-[9px] font-black uppercase text-outline tracking-widest mb-1">Téléphone</p>
+            <p class="font-bold text-on-surface truncate">{{ company.phone }}</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-surface-container-low" *ngIf="company.email">
+            <p class="text-[9px] font-black uppercase text-outline tracking-widest mb-1">Email</p>
+            <p class="font-bold text-on-surface truncate">{{ company.email }}</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-surface-container-low" *ngIf="company.sector">
+            <p class="text-[9px] font-black uppercase text-outline tracking-widest mb-1">Secteur</p>
+            <p class="font-bold text-on-surface truncate">{{ company.sector }}</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-surface-container-low sm:col-span-2" *ngIf="company.address || company.city">
+            <p class="text-[9px] font-black uppercase text-outline tracking-widest mb-1">Adresse</p>
+            <p class="font-bold text-on-surface">
+              {{ company.address || '' }}<span *ngIf="company.address && (company.city || company.zip_code)">, </span>{{ company.zip_code || '' }} {{ company.city || '' }}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- RECENT QUOTES -->
+      <div class="grid grid-cols-1 gap-8">
+        <section class="bg-white rounded-[2.5rem] p-8 shadow-sm border border-outline-variant/5">
           <div class="flex items-center justify-between mb-8">
             <h3 class="text-lg font-headline font-black text-on-surface">Derniers Devis</h3>
             <button routerLink="/client/quotes" class="text-xs text-primary font-bold hover:underline flex items-center gap-1">
@@ -213,6 +237,8 @@ import { ToastService } from '../../../services/toast.service';
 export class ClientDashboardComponent implements OnInit {
   stats = signal<DashboardStats | null>(null);
   showQr = signal(false);
+  loading = signal(true);
+  error = signal(false);
   today = new Date();
 
   private dashboardService = inject(DashboardService);
@@ -249,30 +275,48 @@ export class ClientDashboardComponent implements OnInit {
     return 'NON_ENREGISTRE';
   });
 
-  qrCodeUrl = computed(() => {
+  qrCodeUrl = signal<string>('');
+
+  private loyaltyUuid = computed(() => {
     const user = this.currentUser();
     if (!user) return '';
-    let uuid = '';
     if (user.company?.loyalty_accounts && user.company.loyalty_accounts.length > 0) {
-      uuid = user.company.loyalty_accounts[0].public_uuid;
-    } else if (user.loyalty_accounts && user.loyalty_accounts.length > 0) {
-      uuid = user.loyalty_accounts[0].public_uuid;
+      return user.company.loyalty_accounts[0].public_uuid;
     }
-    if (!uuid) return '';
-    // Service en ligne QR ou génération simple (API d'image publique pour la démo)
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${uuid}`;
+    if (user.loyalty_accounts && user.loyalty_accounts.length > 0) {
+      return user.loyalty_accounts[0].public_uuid;
+    }
+    return '';
   });
 
-  nextAppointments = computed(() => {
-    const agenda = this.stats()?.agenda ?? [];
-    return agenda.slice(0, 1);
+  private qrEffect = effect(() => {
+    const uuid = this.loyaltyUuid();
+    if (!uuid) {
+      this.qrCodeUrl.set('');
+      return;
+    }
+    // Génération locale : aucune donnée client n'est envoyée à un service tiers.
+    QRCode.toDataURL(uuid, { width: 200, margin: 1 })
+      .then(dataUrl => this.qrCodeUrl.set(dataUrl))
+      .catch(() => this.qrCodeUrl.set(''));
   });
 
   ngOnInit(): void {
+    this.loadStats();
+  }
+
+  loadStats(): void {
+    this.loading.set(true);
+    this.error.set(false);
     this.dashboardService.getStats().subscribe({
-      next: (data) => this.stats.set(data),
+      next: (data) => {
+        this.stats.set(data);
+        this.loading.set(false);
+      },
       error: (err) => {
         console.error('Stats client error', err);
+        this.loading.set(false);
+        this.error.set(true);
         this.toastService.error('Impossible de charger votre tableau de bord client.');
       }
     });

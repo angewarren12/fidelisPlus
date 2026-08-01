@@ -1,13 +1,14 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AccountService } from '../../../services/account.service';
-import { VehicleService, Vehicle } from '../../../services/vehicle.service';
+import { VehicleService, Vehicle, VehicleImportResult } from '../../../services/vehicle.service';
 import { ToastService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
 import { SubscriptionContractService } from '../../../services/subscription-contract.service';
 import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.component';
+import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehicle-status';
 
 @Component({
   selector: 'app-client-detail',
@@ -51,10 +52,6 @@ import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.comp
               class="w-full px-8 py-3.5 rounded-xl font-headline font-bold text-sm bg-gradient-to-br from-primary to-secondary text-white shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 text-center no-underline">
               <span class="material-symbols-outlined">description</span>
               Créer un devis
-            </a>
-            <a *ngIf="showLoyaltyShortcut()" [routerLink]="['/marketing/fidelite']" [queryParams]="{ company_id: client()!.id }"
-              class="w-full text-center text-xs font-black uppercase tracking-widest text-primary hover:underline py-1 no-underline">
-              Carte fidélité — préremplir société
             </a>
             <div class="grid grid-cols-2 gap-3">
               <button [routerLink]="['/clients', client().id, 'vehicules', 'nouveau']" class="px-4 py-3 rounded-xl font-headline font-bold text-xs bg-primary text-white hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-sm shadow-primary/20">
@@ -118,8 +115,8 @@ import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.comp
               </div>
               <div class="bg-white rounded-3xl border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
                 <div class="p-6">
-                  <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 shadow-sm block">SIRET / RC</span>
-                  <p class="font-bold text-on-surface">{{ client()?.siret || 'N/A' }}</p>
+                  <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 shadow-sm block">Registre de Commerce (RCCM)</span>
+                  <p class="font-bold text-on-surface">{{ client()?.rccm || 'N/A' }}</p>
                 </div>
                 <div class="p-6">
                   <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 block">Téléphone</span>
@@ -202,26 +199,93 @@ import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.comp
                         [class]="'text-lg font-headline font-extrabold pb-2 relative transition-all ' + (activeTab() === 'fleet' ? 'text-primary border-b-2 border-primary' : 'text-outline hover:text-on-surface')">
                   Parc Automobile
                 </button>
-                <button *ngIf="client()?.category === 'entreprise'"
-                        (click)="activeTab.set('contract')"
-                        [class]="'text-lg font-headline font-extrabold pb-2 relative transition-all ' + (activeTab() === 'contract' ? 'text-primary border-b-2 border-primary' : 'text-outline hover:text-on-surface')">
-                  Abonnement & Contrat
+              </div>
+              <!-- Action Buttons for Parc Automobile -->
+              <div *ngIf="activeTab() === 'fleet'" class="flex items-center gap-3">
+                <button (click)="openImportModal()" class="px-5 py-2.5 rounded-xl bg-white border border-outline-variant/30 text-on-surface text-xs font-bold flex items-center gap-2 hover:bg-surface-container transition-all">
+                  <span class="material-symbols-outlined text-sm">upload_file</span> Importer (Excel)
+                </button>
+                <button [routerLink]="['/clients', client().id, 'vehicules', 'nouveau']" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-105 transition-all">
+                  <span class="material-symbols-outlined text-sm">add</span> Nouveau Véhicule
                 </button>
               </div>
-              <!-- Action Button for Parc Automobile -->
-              <button *ngIf="activeTab() === 'fleet'" [routerLink]="['/clients', client().id, 'vehicules', 'nouveau']" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-105 transition-all">
-                <span class="material-symbols-outlined text-sm">add</span> Nouveau Véhicule
-              </button>
             </div>
 
             <!-- Tab: Fleet (Vehicles) -->
             <div *ngIf="activeTab() === 'fleet'" class="space-y-6">
+
+              <!-- Search + view toggle -->
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="relative flex-1 min-w-[220px]">
+                  <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]" aria-hidden="true">search</span>
+                  <input type="text" [(ngModel)]="fleetSearch"
+                         placeholder="Rechercher par plaque, marque, modèle..."
+                         class="w-full pl-10 pr-4 py-2.5 bg-white border border-outline-variant/20 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div class="flex items-center gap-1 bg-surface-container-low rounded-xl p-1">
+                  <button type="button" (click)="fleetView.set('grid')" title="Vue grille"
+                          [class]="'w-9 h-9 rounded-lg flex items-center justify-center transition-all ' + (fleetView() === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+                    <span class="material-symbols-outlined text-lg">grid_view</span>
+                  </button>
+                  <button type="button" (click)="fleetView.set('list')" title="Vue liste"
+                          [class]="'w-9 h-9 rounded-lg flex items-center justify-center transition-all ' + (fleetView() === 'list' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+                    <span class="material-symbols-outlined text-lg">view_list</span>
+                  </button>
+                </div>
+              </div>
+
               <div *ngIf="loadingVehicles()" class="flex justify-center py-20">
                 <span class="material-symbols-outlined animate-spin text-primary text-5xl">sync</span>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6" *ngIf="!loadingVehicles()">
-                <div *ngFor="let v of vehicles()" class="group bg-white p-0 rounded-3xl border border-outline-variant/10 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all overflow-hidden">
+              <div *ngIf="!loadingVehicles() && filteredVehicles().length === 0" class="bg-white p-10 rounded-3xl border border-dashed border-outline-variant/20 text-center text-outline text-sm font-bold">
+                Aucun véhicule ne correspond à votre recherche.
+              </div>
+
+              <!-- List view -->
+              <div *ngIf="!loadingVehicles() && fleetView() === 'list' && filteredVehicles().length > 0" class="bg-white rounded-3xl border border-outline-variant/10 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-surface-container-low border-b border-outline-variant/30">
+                        <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Plaque</th>
+                        <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Marque / Modèle</th>
+                        <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Statut</th>
+                        <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Dernière visite</th>
+                        <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/10">
+                      <tr *ngFor="let v of filteredVehicles()" class="hover:bg-surface-container-low/50 transition-colors">
+                        <td class="px-6 py-4">
+                          <span class="font-headline font-black text-on-surface">{{ v.license_plate }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-outline">{{ v.brand }} {{ v.model || '' }} {{ v.year ? '• ' + v.year : '' }}</td>
+                        <td class="px-6 py-4">
+                          <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest" [ngClass]="statusBadgeClass(v.status)">
+                            {{ statusLabel(v.status) }}
+                          </span>
+                        </td>
+                        <td class="px-6 py-4 text-xs font-bold text-outline">{{ v.last_visit ? (v.last_visit | date:'dd MMM yyyy') : 'Jamais entretenu' }}</td>
+                        <td class="px-6 py-4">
+                          <div class="flex justify-end gap-2">
+                            <button (click)="deleteVehicle(v)" class="w-9 h-9 rounded-xl bg-surface-container-low flex items-center justify-center text-outline hover:bg-error/10 hover:text-error transition-all">
+                              <span class="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                            <button [routerLink]="['/clients', client().id, 'vehicules', v.id]" class="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center hover:scale-110 transition-all shadow-md">
+                              <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Grid view -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6" *ngIf="!loadingVehicles() && fleetView() === 'grid'">
+                <div *ngFor="let v of filteredVehicles()" class="group bg-white p-0 rounded-3xl border border-outline-variant/10 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all overflow-hidden">
                   <!-- Vehicle Images Gallery -->
                   <div class="relative h-48 bg-surface-container overflow-hidden">
                     <div *ngIf="!v.photos || v.photos.length === 0" class="w-full h-full flex items-center justify-center text-outline/30">
@@ -276,282 +340,6 @@ import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.comp
               </div>
             </div>
 
-            <!-- Tab: Contract -->
-            <div *ngIf="activeTab() === 'contract'" class="space-y-6">
-              <!-- If Contract not exists or not signed -->
-              <div *ngIf="!contract() || contract().status !== 'signed'" class="bg-white rounded-3xl p-8 border border-outline-variant/10 shadow-sm space-y-6">
-                <div class="flex items-center gap-4 text-amber-500 bg-amber-50 p-4 rounded-2xl border border-amber-200">
-                  <span class="material-symbols-outlined text-3xl">warning</span>
-                  <div>
-                    <h4 class="font-bold text-sm text-amber-800">Contrat d'abonnement non signé</h4>
-                    <p class="text-xs text-amber-700">Ce client n'a pas encore de contrat d'abonnement actif. Pour les apporteurs d'affaires et flottes, la signature du contrat est requise.</p>
-                  </div>
-                </div>
-
-                <div class="space-y-4">
-                  <h4 class="font-headline font-bold text-lg text-on-surface">Avantages du Contrat Partenaire</h4>
-                  <ul class="space-y-3 text-sm text-outline">
-                    <li class="flex items-start gap-2">
-                      <span class="material-symbols-outlined text-primary text-lg">check_circle</span>
-                      <span><strong>Rémunération :</strong> Bons d'achat automatiques (10 000 FCFA à 20 scans, 15 000 FCFA à 30 scans, 25 000 FCFA à 50 scans).</span>
-                    </li>
-                    <li class="flex items-start gap-2">
-                      <span class="material-symbols-outlined text-primary text-lg">check_circle</span>
-                      <span><strong>Visite Offerte :</strong> Une visite technique offerte à partir de 50 passages cumulés.</span>
-                    </li>
-                    <li class="flex items-start gap-2">
-                      <span class="material-symbols-outlined text-primary text-lg">check_circle</span>
-                      <span><strong>Engagement :</strong> Collaboration sur une durée de 3 ans avec évaluation annuelle pour optimisation.</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <button (click)="openContractModal()" class="w-full sm:w-auto px-6 py-3.5 rounded-xl font-headline font-bold text-sm bg-primary text-white shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                  <span class="material-symbols-outlined">edit_square</span>
-                  Remplir la Fiche & Signer le Contrat
-                </button>
-              </div>
-
-              <!-- If Contract exists and is signed -->
-              <div *ngIf="contract() && contract().status === 'signed'" class="space-y-6">
-                <!-- Document display container -->
-                <div id="printable-contract" class="bg-white rounded-3xl p-8 md:p-12 border-2 border-primary/20 shadow-sm space-y-8 relative overflow-hidden">
-                  <!-- Decorative top bar for Mayelia branding -->
-                  <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-primary-container to-secondary"></div>
-                  
-                  <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-outline-variant/10 pb-6">
-                    <div>
-                      <div class="flex items-center gap-2 text-primary font-bold text-2xl tracking-wider uppercase font-headline">
-                        <span class="material-symbols-outlined text-3xl">verified</span>
-                        <span>Mayelia <span class="text-secondary font-black">Fidelis+</span></span>
-                      </div>
-                      <p class="text-[10px] text-outline font-black uppercase tracking-widest mt-1">FICHE D'IDENTIFICATION & DE CONTRAT D'ABONNEMENT</p>
-                    </div>
-                    <div class="flex items-center gap-2 px-4 py-2 bg-secondary-container/20 border border-secondary/15 rounded-xl text-secondary text-[11px] font-black uppercase tracking-widest">
-                      <span class="material-symbols-outlined text-sm">verified_user</span>
-                      <span>Contrat Actif & Signé</span>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
-                    <div class="space-y-6">
-                      <h4 class="font-headline font-extrabold text-on-surface border-b border-outline-variant/5 pb-2">Informations Générales</h4>
-                      <div class="space-y-4">
-                        <div>
-                          <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Raison sociale / Client</span>
-                          <span class="font-bold text-on-surface text-base">{{ client()?.name }}</span>
-                        </div>
-                        <div>
-                          <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Bénéficiaire / Signataire</span>
-                          <span class="font-bold text-on-surface">{{ contract()?.subscriber_name }}</span>
-                        </div>
-                        <div>
-                          <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Adresse ou Zone d'Activité</span>
-                          <span class="font-bold text-on-surface">{{ contract()?.address_zone || 'Non spécifiée' }}</span>
-                        </div>
-                        <div>
-                          <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Numéro de Carte Associé</span>
-                          <span class="font-bold text-primary">{{ contract()?.card_number || 'Non spécifié' }}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="space-y-6">
-                      <h4 class="font-headline font-extrabold text-on-surface border-b border-outline-variant/5 pb-2">Détails Contractuels</h4>
-                      <div class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                          <div>
-                            <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Date d'Abonnement</span>
-                            <span class="font-bold text-on-surface">{{ contract()?.subscription_date | date:'dd MMMM yyyy' }}</span>
-                          </div>
-                          <div>
-                            <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Période de Validité</span>
-                            <span class="font-bold text-on-surface">3 ans (Renouvelable)</span>
-                          </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                          <div>
-                            <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Date Début</span>
-                            <span class="font-bold text-on-surface">{{ contract()?.start_date | date:'dd/MM/yyyy' }}</span>
-                          </div>
-                          <div>
-                            <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Date Échéance</span>
-                            <span class="font-bold text-on-surface">{{ contract()?.end_date | date:'dd/MM/yyyy' }}</span>
-                          </div>
-                        </div>
-                        <div>
-                          <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Prochaine Évaluation Annuelle</span>
-                          <span class="font-bold text-amber-600">{{ contract()?.annual_evaluation_date | date:'dd MMMM yyyy' }}</span>
-                        </div>
-                        <div>
-                          <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-1">Fréquence de Récompense</span>
-                          <span class="font-bold text-on-surface">{{ contract()?.reward_frequency === 'monthly' ? 'Mensuelle' : 'Trimestrielle' }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 text-sm space-y-4">
-                    <h5 class="font-headline font-bold text-primary flex items-center gap-2">
-                      <span class="material-symbols-outlined">handshake</span>
-                      Engagements Minimums & Réglementation
-                    </h5>
-                    <p class="text-xs text-outline leading-relaxed">
-                      L'apporteur d'affaires s'engage à orienter un volume minimum estimé à <strong>10 véhicules par jour</strong> soit environ <strong>50 véhicules par mois</strong> vers la visite technique automobile. Le présent partenariat respecte strictement la réglementation relative au contrôle technique automobile et constitue également une protection juridique de parts et d'autres.
-                    </p>
-                  </div>
-
-                  <!-- Signatures section inside contract -->
-                  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-8 pt-6 border-t border-outline-variant/10">
-                    <div class="space-y-1">
-                      <span class="text-[10px] font-bold text-outline uppercase tracking-widest block">Statut Juridique</span>
-                      <span class="text-xs font-semibold text-on-surface flex items-center gap-1">
-                        <span class="material-symbols-outlined text-secondary text-sm">check_circle</span>
-                        Signature Électronique Certifiée
-                      </span>
-                    </div>
-                    <div class="text-right">
-                      <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-2">Signature du Bénéficiaire</span>
-                      <span class="font-signature text-3xl text-primary font-bold block mb-1">{{ contract()?.subscriber_name }}</span>
-                      <span class="text-[9px] text-outline font-bold">Signé le {{ contract()?.signed_at | date:'dd/MM/yyyy HH:mm' }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-4">
-                  <button (click)="printContract()" class="px-6 py-3 rounded-xl font-headline font-bold text-sm bg-primary text-white shadow-xl shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
-                    <span class="material-symbols-outlined">print</span>
-                    Imprimer le contrat
-                  </button>
-                  <button (click)="openContractModal()" class="px-6 py-3 rounded-xl font-headline font-bold text-sm bg-white border border-outline-variant/30 text-on-surface hover:bg-surface-container transition-all flex items-center gap-2">
-                    <span class="material-symbols-outlined">edit</span>
-                    Mettre à jour la fiche
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Contrat d'abonnement Modal -->
-    <div *ngIf="showContractModal()" class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
-      <!-- Backdrop with blur -->
-      <div class="fixed inset-0 bg-[#161d1b]/40 backdrop-blur-sm transition-opacity" (click)="closeContractModal()"></div>
-      
-      <!-- Modal container -->
-      <div class="bg-white rounded-3xl shadow-2xl border border-outline-variant/10 max-w-2xl w-full p-8 space-y-6 relative transform transition-all z-10 animate-fade-in-up">
-        
-        <!-- Header -->
-        <div class="flex items-center justify-between border-b border-outline-variant/10 pb-4">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary text-2xl">description</span>
-            <h3 class="text-xl font-headline font-bold text-on-surface">Fiche d'Abonnement & Contrat</h3>
-          </div>
-          <button (click)="closeContractModal()" class="text-outline hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
-
-        <!-- Form content -->
-        <form (ngSubmit)="onSaveContract()" class="space-y-6">
-          <div class="grid grid-cols-2 gap-4">
-            <div class="col-span-2 space-y-1">
-              <label class="text-[10px] font-bold text-outline uppercase tracking-wider block ml-1">Nom Complet du Signataire *</label>
-              <input type="text" [(ngModel)]="subscriberName" name="subscriberName" required
-                     class="w-full bg-surface-container-low border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                     placeholder="Ex: Jean Kouassi">
-            </div>
-            
-            <div class="col-span-2 space-y-1">
-              <label class="text-[10px] font-bold text-outline uppercase tracking-wider block ml-1">Adresse ou Zone d'Activité</label>
-              <input type="text" [(ngModel)]="addressZone" name="addressZone"
-                     class="w-full bg-surface-container-low border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                     placeholder="Ex: Zone Industrielle Yopougon, Abidjan">
-            </div>
-
-            <div class="space-y-1">
-              <label class="text-[10px] font-bold text-outline uppercase tracking-wider block ml-1">Numéro de Carte Fidélité</label>
-              <input type="text" [(ngModel)]="cardNumber" name="cardNumber"
-                     class="w-full bg-surface-container-low border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                     placeholder="Ex: M-100293">
-            </div>
-
-            <div class="space-y-1">
-              <label class="text-[10px] font-bold text-outline uppercase tracking-wider block ml-1">Date d'Abonnement *</label>
-              <input type="date" [(ngModel)]="subscriptionDate" name="subscriptionDate" required
-                     class="w-full bg-surface-container-low border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
-            </div>
-
-            <div class="col-span-2 space-y-1">
-              <label class="text-[10px] font-bold text-outline uppercase tracking-wider block ml-1">Périodicité des Récompenses *</label>
-              <div class="flex gap-4">
-                <label class="flex items-center gap-2 bg-surface-container-low p-3 rounded-xl flex-1 cursor-pointer select-none">
-                  <input type="radio" [(ngModel)]="rewardFrequency" name="rewardFrequency" value="monthly" class="text-primary focus:ring-primary/20">
-                  <span class="text-xs font-bold text-on-surface">Mensuelle</span>
-                </label>
-                <label class="flex items-center gap-2 bg-surface-container-low p-3 rounded-xl flex-1 cursor-pointer select-none">
-                  <input type="radio" [(ngModel)]="rewardFrequency" name="rewardFrequency" value="quarterly" class="text-primary focus:ring-primary/20">
-                  <span class="text-xs font-bold text-on-surface">Trimestrielle</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Commitments Box -->
-          <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs space-y-2">
-            <h5 class="font-headline font-bold text-amber-800 flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-sm">gavel</span>
-              ENGAGEMENTS DE L'APPORTEUR D'AFFAIRES
-            </h5>
-            <p class="text-amber-700 leading-relaxed">
-              L'apporteur s'engage à orienter un volume minimum estimé à <strong>10 véhicules par jour soit 50 véhicules par mois</strong> vers la visite technique. Le contrat est conclu pour une durée de <strong>3 ans</strong> renouvelable après évaluation annuelle.
-            </p>
-          </div>
-
-          <!-- Signature stylized -->
-          <div class="space-y-4 pt-2 border-t border-outline-variant/10">
-            <label class="flex items-start gap-2 cursor-pointer select-none">
-              <input type="checkbox" [(ngModel)]="termsAccepted" name="termsAccepted" required
-                     class="text-primary focus:ring-primary/20 rounded mt-0.5">
-              <span class="text-xs text-outline font-medium leading-normal">
-                Je certifie avoir lu et approuvé les conditions générales du partenariat et l'engagement d'apporteur d'affaires ci-dessus.
-              </span>
-            </label>
-
-            <div class="space-y-1">
-              <label class="text-[10px] font-bold text-outline uppercase tracking-wider block ml-1">Signature Stylisée (Saisir votre nom complet pour signer) *</label>
-              <input type="text" [(ngModel)]="signatureName" name="signatureName" required
-                     class="w-full bg-surface-container-low border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                     placeholder="Écrivez votre nom pour signer...">
-            </div>
-
-            <!-- Signature visualization -->
-            <div *ngIf="signatureName" class="p-6 border-2 border-dashed border-outline-variant/30 rounded-2xl bg-surface-container-low flex flex-col items-center justify-center animate-fade-in-up">
-              <span class="text-[8px] uppercase tracking-widest text-outline font-black mb-2">Signature Électronique Certifiée</span>
-              <span class="font-signature text-4xl text-primary font-medium tracking-wide py-2">{{ signatureName }}</span>
-              <span class="text-[9px] text-outline font-semibold">Le {{ subscriptionDate | date:'dd/MM/yyyy' }}</span>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex items-center justify-end gap-4 pt-4">
-            <button type="button" (click)="closeContractModal()" class="text-outline hover:text-on-surface font-bold text-sm transition-colors cursor-pointer px-4 py-2">
-              Annuler
-            </button>
-            <button type="submit"
-                    [disabled]="!termsAccepted || !signatureName || !subscriberName || savingContract()"
-                    class="bg-primary text-white px-6 py-3 rounded-xl font-headline font-bold text-sm shadow-xl shadow-primary/25 hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all flex items-center gap-2">
-              <span class="material-symbols-outlined" *ngIf="!savingContract()">verified</span>
-              <span class="material-symbols-outlined animate-spin" *ngIf="savingContract()">sync</span>
-              {{ savingContract() ? 'Enregistrement...' : 'Signer & Valider le Contrat' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
     <!-- Modals -->
     <app-confirm-modal *ngIf="vehicleToDelete()"
       title="Retirer le véhicule"
@@ -561,15 +349,81 @@ import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.comp
       (confirm)="onConfirmDeleteVehicle()"
       (cancel)="vehicleToDelete.set(null)">
     </app-confirm-modal>
+
+    <!-- Import Excel Modal -->
+    <div *ngIf="showImportModal()" class="fixed inset-0 z-[200] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-sm animate-fade-in">
+      <div class="bg-white w-full max-w-xl rounded-[2rem] shadow-2xl overflow-hidden border border-outline-variant/10 p-8 max-h-[90vh] overflow-y-auto">
+
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-xl font-headline font-black text-on-surface">Importer la flotte (Excel)</h3>
+          <button (click)="closeImportModal()" aria-label="Fermer" class="text-outline hover:text-on-surface p-1">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div class="bg-primary/5 border border-primary/10 rounded-2xl p-5 mb-6 flex items-start gap-4">
+          <span class="material-symbols-outlined text-primary text-2xl">info</span>
+          <div class="text-sm text-on-surface leading-relaxed">
+            <p class="font-bold mb-1">1. Téléchargez le modèle</p>
+            <p class="text-outline text-xs mb-3">Remplissez-le avec la flotte du client, puis importez-le ci-dessous. Seule l'immatriculation est obligatoire.</p>
+            <button (click)="downloadTemplate()" [disabled]="downloadingTemplate()" class="px-4 py-2 rounded-xl bg-white border border-primary/30 text-primary text-xs font-bold hover:bg-primary/5 transition-all flex items-center gap-2 disabled:opacity-50">
+              <span class="material-symbols-outlined text-sm" [class.animate-spin]="downloadingTemplate()">{{ downloadingTemplate() ? 'sync' : 'download' }}</span>
+              Télécharger le modèle Excel
+            </button>
+          </div>
+        </div>
+
+        <p class="text-xs font-bold uppercase tracking-widest text-outline mb-2">2. Importer le fichier rempli</p>
+        <div (click)="importFileInput.click()"
+             [class]="'group border-2 border-dashed rounded-2xl p-8 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 mb-6 ' + (selectedImportFile ? 'border-primary bg-primary/5' : 'border-outline-variant/40 hover:border-primary/50 hover:bg-surface-container-low')">
+          <span class="material-symbols-outlined text-4xl" [class.text-primary]="selectedImportFile">{{ selectedImportFile ? 'description' : 'upload_file' }}</span>
+          <p class="text-xs font-bold text-center">{{ selectedImportFile ? selectedImportFile.name : 'Choisir le fichier Excel rempli (.xlsx)' }}</p>
+          <input #importFileInput type="file" (change)="handleImportFile($event)" accept=".xlsx,.xls,.csv" class="hidden">
+        </div>
+
+        <div *ngIf="importResult() as result" class="mb-6 space-y-3">
+          <div class="flex items-center gap-4">
+            <div class="flex-1 bg-teal-50 rounded-xl p-4 text-center">
+              <p class="text-2xl font-black text-primary">{{ result.created }}</p>
+              <p class="text-[10px] font-bold uppercase tracking-widest text-primary/70">Véhicules importés</p>
+            </div>
+            <div class="flex-1 bg-red-50 rounded-xl p-4 text-center">
+              <p class="text-2xl font-black text-error">{{ result.errors_count }}</p>
+              <p class="text-[10px] font-bold uppercase tracking-widest text-error/70">Lignes en erreur</p>
+            </div>
+          </div>
+
+          <div *ngIf="result.errors.length > 0" class="bg-surface-container-low rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
+            <div *ngFor="let err of result.errors" class="text-xs flex items-start gap-2">
+              <span class="font-bold text-error shrink-0">L{{ err.row }}{{ err.license_plate ? ' · ' + err.license_plate : '' }} :</span>
+              <span class="text-outline">{{ err.message }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3">
+          <button (click)="closeImportModal()" class="px-5 py-2.5 text-outline hover:text-on-surface font-bold text-xs uppercase tracking-widest transition-colors">
+            {{ importResult() ? 'Fermer' : 'Annuler' }}
+          </button>
+          <button *ngIf="!importResult()" (click)="submitImport()" [disabled]="!selectedImportFile || importing()"
+                  class="px-6 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 disabled:opacity-40 transition-all flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm animate-spin" *ngIf="importing()">sync</span>
+            {{ importing() ? 'Import en cours…' : "Lancer l'import" }}
+          </button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     :host { display: block; }
+    /* Pas de transform sur cette anim: un transform sur ce conteneur racine casserait le
+       "position: fixed" des modals imbriqués (import Excel, suppression véhicule...). */
     .animate-fade-in-up {
       animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
     @media print {
       body * {
@@ -593,38 +447,36 @@ import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.comp
   `]
 })
 export class ClientDetailComponent implements OnInit {
+  statusLabel = vehicleStatusLabel;
+  statusBadgeClass = vehicleStatusBadgeClass;
   client = signal<any>(null);
   error = signal<string | null>(null);
   vehicles = signal<any[]>([]);
   loadingVehicles = signal(true);
+  activeTab = signal<'fleet'>('fleet');
+  fleetSearch = signal('');
+  fleetView = signal<'grid' | 'list'>('grid');
 
-  // Tab and Contract details
-  activeTab = signal<'fleet' | 'contract'>('fleet');
-  contract = signal<any>(null);
-  showContractModal = signal(false);
-  savingContract = signal(false);
+  filteredVehicles = computed(() => {
+    const q = this.fleetSearch().trim().toLowerCase();
+    if (!q) return this.vehicles();
+    return this.vehicles().filter((v: any) => {
+      const haystack = [v.license_plate, v.brand, v.model].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  });
 
-  // Form Fields for Contract Modal
-  subscriberName = '';
-  addressZone = '';
-  cardNumber = '';
-  subscriptionDate = '';
-  rewardFrequency: 'monthly' | 'quarterly' = 'monthly';
-  termsAccepted = false;
-  signatureName = '';
-  
+  showImportModal = signal(false);
+  downloadingTemplate = signal(false);
+  importing = signal(false);
+  importResult = signal<VehicleImportResult | null>(null);
+  selectedImportFile: File | null = null;
+
   private route = inject(ActivatedRoute);
   private accountService = inject(AccountService);
   private vehicleService = inject(VehicleService);
   private toastService = inject(ToastService);
   private authService = inject(AuthService);
-  private subscriptionContractService = inject(SubscriptionContractService);
-
-  /** Raccourci vers la fidélité (admin / marketing ; commercial pour suivi du portefeuille). */
-  showLoyaltyShortcut(): boolean {
-    const r = this.authService.getCurrentUser()?.role;
-    return r === 'admin' || r === 'marketing' || r === 'commercial';
-  }
 
   ngOnInit(): void {
     this.refreshClientData();
@@ -637,77 +489,12 @@ export class ClientDetailComponent implements OnInit {
         next: (data) => {
           this.client.set(data);
           this.loadVehicles(+id);
-          if (data.category === 'entreprise') {
-            this.loadContract(+id);
-          }
         },
         error: (err) => {
           this.error.set('Données indisponibles.');
         }
       });
     }
-  }
-
-  loadContract(clientId: number): void {
-    this.subscriptionContractService.getContract(clientId).subscribe({
-      next: (data) => {
-        this.contract.set(data);
-      },
-      error: () => {
-        this.contract.set(null);
-      }
-    });
-  }
-
-  openContractModal(): void {
-    const defaultName = this.client()?.contacts?.[0] 
-      ? `${this.client()?.contacts[0].first_name} ${this.client()?.contacts[0].last_name}` 
-      : this.client()?.name;
-      
-    this.subscriberName = this.contract()?.subscriber_name || defaultName || '';
-    this.addressZone = this.contract()?.address_zone || this.client()?.address || '';
-    this.cardNumber = this.contract()?.card_number || '';
-    this.subscriptionDate = this.contract()?.subscription_date || new Date().toISOString().substring(0, 10);
-    this.rewardFrequency = this.contract()?.reward_frequency || 'monthly';
-    this.termsAccepted = this.contract()?.status === 'signed';
-    this.signatureName = this.contract()?.subscriber_name || '';
-    this.showContractModal.set(true);
-  }
-
-  closeContractModal(): void {
-    this.showContractModal.set(false);
-  }
-
-  onSaveContract(): void {
-    const id = this.client()?.id;
-    if (!id) return;
-
-    this.savingContract.set(true);
-    const data = {
-      subscriber_name: this.subscriberName,
-      address_zone: this.addressZone,
-      card_number: this.cardNumber,
-      subscription_date: this.subscriptionDate,
-      reward_frequency: this.rewardFrequency,
-      status: 'signed' as const
-    };
-
-    this.subscriptionContractService.saveContract(id, data).subscribe({
-      next: (res) => {
-        this.savingContract.set(false);
-        this.contract.set(res);
-        this.toastService.success("Le contrat d'abonnement a été signé et validé avec succès.");
-        this.closeContractModal();
-      },
-      error: (err) => {
-        this.savingContract.set(false);
-        this.toastService.error("Une erreur s'est produite lors de l'enregistrement du contrat.");
-      }
-    });
-  }
-
-  printContract(): void {
-    window.print();
   }
 
   loadVehicles(clientId: number): void {
@@ -719,6 +506,68 @@ export class ClientDetailComponent implements OnInit {
       },
       error: (err) => {
         this.loadingVehicles.set(false);
+      }
+    });
+  }
+
+  openImportModal(): void {
+    this.selectedImportFile = null;
+    this.importResult.set(null);
+    this.showImportModal.set(true);
+  }
+
+  closeImportModal(): void {
+    this.showImportModal.set(false);
+    if (this.importResult()?.created) {
+      const id = this.route.snapshot.paramMap.get('id');
+      if (id) this.loadVehicles(+id);
+    }
+  }
+
+  downloadTemplate(): void {
+    this.downloadingTemplate.set(true);
+    this.vehicleService.downloadImportTemplate().subscribe({
+      next: (blob) => {
+        this.downloadingTemplate.set(false);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'modele_import_flotte_fidelisplus.xlsx';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.downloadingTemplate.set(false);
+        this.toastService.error('Impossible de télécharger le modèle.');
+      }
+    });
+  }
+
+  handleImportFile(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+      this.selectedImportFile = file;
+      this.importResult.set(null);
+    }
+  }
+
+  submitImport(): void {
+    const client = this.client();
+    if (!this.selectedImportFile || !client) return;
+
+    this.importing.set(true);
+    this.vehicleService.importFromExcel({ companyId: client.id }, this.selectedImportFile).subscribe({
+      next: (result) => {
+        this.importing.set(false);
+        this.importResult.set(result);
+        if (result.created > 0) {
+          this.toastService.success(`${result.created} véhicule(s) importé(s).`);
+        }
+      },
+      error: () => {
+        this.importing.set(false);
+        this.toastService.error("Erreur lors de l'import du fichier.");
       }
     });
   }

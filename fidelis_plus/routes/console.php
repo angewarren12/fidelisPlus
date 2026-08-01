@@ -102,3 +102,4 @@ Artisan::command('notifications:ct-reminders', function (NotificationService $no
 
 // Scheduler: exécute quotidiennement à 08:00.
 Schedule::command('notifications:ct-reminders')->dailyAt('08:00');
+Schedule::command('quotes:check-expired')->dailyAt('08:00');

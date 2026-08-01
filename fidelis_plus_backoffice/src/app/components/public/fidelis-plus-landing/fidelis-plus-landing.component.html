@@ -1,0 +1,287 @@
+<!-- FOND COMPLET -->
+<div class="min-h-screen w-full bg-[#0a1628] relative overflow-hidden flex flex-col">
+
+  <!-- DÉCORS DE FOND (blobs) -->
+  <div class="absolute inset-0 pointer-events-none">
+    <div class="absolute top-[-10%] left-[-10%] w-[450px] h-[450px] rounded-full bg-[#15b9a3]/20 blur-[120px]"></div>
+    <div class="absolute bottom-[-5%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[#0a7c6e]/30 blur-[100px]"></div>
+    <div class="absolute top-[40%] left-[50%] w-[300px] h-[300px] rounded-full bg-[#15b9a3]/10 blur-[90px]"></div>
+  </div>
+
+  <!-- HEADER LOGO -->
+  <header class="relative z-10 px-5 pt-6 pb-2 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-xl bg-[#15b9a3] flex items-center justify-center shadow-lg shadow-[#15b9a3]/30">
+      <span class="material-symbols-outlined text-white text-lg" style="font-variation-settings:'FILL' 1;">verified</span>
+    </div>
+    <div>
+      <span class="text-white font-black text-base tracking-tight">Mayelia</span>
+      <span class="ml-1 text-[#15b9a3] font-black text-base tracking-tight">CRM</span>
+    </div>
+  </header>
+
+  <!-- CONTENU PRINCIPAL -->
+  <main class="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8">
+
+    <!-- ═══════════════ PAGE D'ACCUEIL ═══════════════ -->
+    <div *ngIf="!showForm()" class="w-full max-w-sm animate-slide-up">
+
+      <!-- Badge -->
+      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#15b9a3]/15 border border-[#15b9a3]/30 mb-6">
+        <span class="w-2 h-2 rounded-full bg-[#15b9a3] animate-pulse"></span>
+        <span class="text-[#15b9a3] text-xs font-black uppercase tracking-widest">Service gratuit</span>
+      </div>
+
+      <!-- TITRE -->
+      <h1 class="text-5xl sm:text-6xl font-black text-white leading-none tracking-tighter mb-3">
+        FIDELIS<br><span class="text-[#15b9a3]">PLUS</span>
+      </h1>
+      <p class="text-slate-400 text-sm font-medium mb-8 leading-relaxed">
+        Inscrivez-vous et ne ratez plus jamais votre date de visite technique.
+      </p>
+
+      <!-- AVANTAGES -->
+      <div class="space-y-3 mb-10">
+        <div class="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/8 backdrop-blur-sm">
+          <div class="w-9 h-9 rounded-xl bg-[#15b9a3]/20 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[#15b9a3] text-lg" style="font-variation-settings:'FILL' 1;">verified_user</span>
+          </div>
+          <div>
+            <p class="text-white text-sm font-bold leading-snug">Diagnostic Technique gratuit</p>
+            <p class="text-slate-400 text-xs mt-0.5 leading-relaxed">Profiter d'un (1) diagnostic Technique gratuit lors de votre première visite technique</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/8 backdrop-blur-sm">
+          <div class="w-9 h-9 rounded-xl bg-[#15b9a3]/20 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[#15b9a3] text-lg" style="font-variation-settings:'FILL' 1;">notifications_active</span>
+          </div>
+          <div>
+            <p class="text-white text-sm font-bold leading-snug">Suivi personnalisé</p>
+            <p class="text-slate-400 text-xs mt-0.5 leading-relaxed">Bénéficier d'un suivi personnalisé de rappel de la date d'échéance de votre visite technique</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/8 backdrop-blur-sm">
+          <div class="w-9 h-9 rounded-xl bg-[#15b9a3]/20 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[#15b9a3] text-lg" style="font-variation-settings:'FILL' 1;">event_available</span>
+          </div>
+          <div>
+            <p class="text-white text-sm font-bold leading-snug">RDV en station</p>
+            <p class="text-slate-400 text-xs mt-0.5 leading-relaxed">Bénéficier d'un (1) RDV pour votre visite dans la station de votre choix</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/8 backdrop-blur-sm">
+          <div class="w-9 h-9 rounded-xl bg-[#15b9a3]/20 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[#15b9a3] text-lg" style="font-variation-settings:'FILL' 1;">concierge</span>
+          </div>
+          <div>
+            <p class="text-white text-sm font-bold leading-snug">Offre conciergerie</p>
+            <p class="text-slate-400 text-xs mt-0.5 leading-relaxed">Bénéficier de notre offre conciergerie.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <button type="button" (click)="startForm()"
+        class="w-full h-14 rounded-2xl bg-[#15b9a3] text-white font-black uppercase tracking-widest text-sm shadow-2xl shadow-[#15b9a3]/40 hover:bg-[#13a592] active:scale-95 transition-all flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-xl" style="font-variation-settings:'FILL' 1;">arrow_forward</span>
+        Démarrer maintenant
+      </button>
+      <p class="text-center text-slate-500 text-xs mt-4">Inscription gratuite · Données confidentielles</p>
+    </div>
+
+    <!-- ═══════════════ SUCCÈS ═══════════════ -->
+    <div *ngIf="showForm() && submitted()" class="w-full max-w-sm animate-slide-up">
+      <div class="bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 p-8 text-center space-y-5">
+        <div class="w-20 h-20 rounded-full bg-[#15b9a3]/20 flex items-center justify-center mx-auto border border-[#15b9a3]/30">
+          <span class="material-symbols-outlined text-5xl text-[#15b9a3]" style="font-variation-settings:'FILL' 1;">check_circle</span>
+        </div>
+        <div>
+          <h2 class="text-2xl font-black text-white mb-2">Inscription réussie !</h2>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            Notre équipe vous recontactera avant l'échéance de votre visite technique.<br>
+            <span class="text-[#15b9a3] font-bold">Merci de votre confiance.</span>
+          </p>
+        </div>
+        <div class="pt-2 border-t border-white/10">
+          <p class="text-slate-400 text-xs">Vous pouvez fermer cette fenêtre.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ FORMULAIRE ═══════════════ -->
+    <div *ngIf="showForm() && !submitted()" class="w-full max-w-sm animate-slide-up">
+
+      <!-- Titre formulaire -->
+      <div class="mb-6">
+        <button type="button" (click)="showForm.set(false)"
+          class="flex items-center gap-1.5 text-slate-400 text-xs font-bold mb-4 hover:text-white transition-colors">
+          <span class="material-symbols-outlined text-base">arrow_back</span>
+          Retour
+        </button>
+        <h2 class="text-2xl font-black text-white tracking-tight">Mes informations</h2>
+        <p class="text-slate-400 text-xs mt-1">Tous les champs marqués * sont obligatoires.</p>
+      </div>
+
+      <!-- CARTE FORMULAIRE -->
+      <div class="bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 p-5 space-y-5">
+
+        <!-- Identité -->
+        <div class="space-y-3">
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[#15b9a3]">Vos coordonnées</p>
+          <div class="relative">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-lg">person</span>
+            <input type="text" [(ngModel)]="fullName" placeholder="Nom et prénom *"
+              class="w-full h-13 pl-11 pr-4 py-3.5 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-slate-500 text-sm font-semibold outline-none focus:border-[#15b9a3]/60 focus:bg-white/15 transition-all" />
+          </div>
+          <div class="relative">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-lg">phone</span>
+            <input type="tel" [(ngModel)]="contact" placeholder="Numéro de téléphone *"
+              class="w-full h-13 pl-11 pr-4 py-3.5 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-slate-500 text-sm font-semibold outline-none focus:border-[#15b9a3]/60 focus:bg-white/15 transition-all" />
+          </div>
+        </div>
+
+        <!-- Véhicules -->
+        <div class="space-y-3">
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[#15b9a3]">Vos véhicules</p>
+
+          <div *ngFor="let v of vehicles; let i = index"
+            class="p-4 rounded-2xl bg-black/20 border border-white/10 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-lg bg-[#15b9a3]/20 flex items-center justify-center">
+                  <span class="text-[#15b9a3] text-[10px] font-black">{{ i + 1 }}</span>
+                </div>
+                <span class="text-white text-xs font-black uppercase tracking-widest">Véhicule {{ i + 1 }}</span>
+              </div>
+              <button *ngIf="vehicles.length > 1" type="button" (click)="removeVehicle(i)"
+                class="flex items-center gap-1 text-red-400 text-[10px] font-black uppercase hover:text-red-300 transition-colors">
+                <span class="material-symbols-outlined text-sm">close</span>
+                Retirer
+              </button>
+            </div>
+            <div class="relative">
+              <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-lg">directions_car</span>
+              <input type="text" [(ngModel)]="v.registration" placeholder="Immatriculation (ex: DK-1234-AB)"
+                class="w-full h-12 pl-11 pr-4 rounded-2xl bg-white/10 border border-white/10 text-white placeholder:text-slate-500 text-sm font-bold uppercase outline-none focus:border-[#15b9a3]/60 transition-all" />
+            </div>
+            <div>
+              <label class="text-[10px] font-bold text-slate-400 ml-1 mb-1.5 block">Date d'expiration de la visite technique</label>
+              <div class="relative">
+                <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-lg">calendar_month</span>
+                <input type="date" [(ngModel)]="v.visit_expiration_date"
+                  class="w-full h-12 pl-11 pr-4 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-bold outline-none focus:border-[#15b9a3]/60 transition-all [color-scheme:dark]" />
+              </div>
+            </div>
+          </div>
+
+          <button type="button" (click)="addVehicle()" [disabled]="vehicles.length >= 10"
+            class="w-full h-12 rounded-2xl border-2 border-dashed border-[#15b9a3]/40 text-[#15b9a3] text-xs font-black uppercase tracking-widest hover:bg-[#15b9a3]/10 active:scale-95 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-lg">add</span>
+            Ajouter un véhicule
+          </button>
+        </div>
+
+        <!-- Période d'alerte -->
+        <div class="space-y-3">
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[#15b9a3]">Alerte avant expiration</p>
+          <div class="grid grid-cols-3 gap-2 p-1 rounded-2xl bg-black/20 border border-white/10">
+            <button type="button" (click)="alertPeriod='2_semaines'"
+              [class.bg-[#15b9a3]]="alertPeriod==='2_semaines'"
+              [class.text-white]="alertPeriod==='2_semaines'"
+              [class.shadow-lg]="alertPeriod==='2_semaines'"
+              [class.text-slate-400]="alertPeriod!=='2_semaines'"
+              class="py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all">
+              2 sem.
+            </button>
+            <button type="button" (click)="alertPeriod='1_semaine'"
+              [class.bg-[#15b9a3]]="alertPeriod==='1_semaine'"
+              [class.text-white]="alertPeriod==='1_semaine'"
+              [class.shadow-lg]="alertPeriod==='1_semaine'"
+              [class.text-slate-400]="alertPeriod!=='1_semaine'"
+              class="py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all">
+              1 sem.
+            </button>
+            <button type="button" (click)="alertPeriod='veille'"
+              [class.bg-[#15b9a3]]="alertPeriod==='veille'"
+              [class.text-white]="alertPeriod==='veille'"
+              [class.shadow-lg]="alertPeriod==='veille'"
+              [class.text-slate-400]="alertPeriod!=='veille'"
+              class="py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all">
+              Veille
+            </button>
+          </div>
+        </div>
+
+        <!-- Méthode de contact -->
+        <div class="space-y-3">
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[#15b9a3]">Mode de rappel souhaité</p>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" (click)="contactMethod='appel'"
+              [class.border-[#15b9a3]]="contactMethod==='appel'"
+              [class.bg-[#15b9a3]/15]="contactMethod==='appel'"
+              [class.text-[#15b9a3]]="contactMethod==='appel'"
+              [class.border-white/10]="contactMethod!=='appel'"
+              [class.text-slate-400]="contactMethod!=='appel'"
+              class="flex flex-col items-center gap-1.5 py-3.5 rounded-2xl border bg-black/20 transition-all text-[10px] font-black uppercase">
+              <span class="material-symbols-outlined text-xl" style="font-variation-settings:'FILL' 1;">phone</span>
+              Appel
+            </button>
+            <button type="button" (click)="contactMethod='sms'"
+              [class.border-[#15b9a3]]="contactMethod==='sms'"
+              [class.bg-[#15b9a3]/15]="contactMethod==='sms'"
+              [class.text-[#15b9a3]]="contactMethod==='sms'"
+              [class.border-white/10]="contactMethod!=='sms'"
+              [class.text-slate-400]="contactMethod!=='sms'"
+              class="flex flex-col items-center gap-1.5 py-3.5 rounded-2xl border bg-black/20 transition-all text-[10px] font-black uppercase">
+              <span class="material-symbols-outlined text-xl" style="font-variation-settings:'FILL' 1;">sms</span>
+              SMS
+            </button>
+            <button type="button" (click)="contactMethod='whatsapp'"
+              [class.border-[#15b9a3]]="contactMethod==='whatsapp'"
+              [class.bg-[#15b9a3]/15]="contactMethod==='whatsapp'"
+              [class.text-[#15b9a3]]="contactMethod==='whatsapp'"
+              [class.border-white/10]="contactMethod!=='whatsapp'"
+              [class.text-slate-400]="contactMethod!=='whatsapp'"
+              class="flex flex-col items-center gap-1.5 py-3.5 rounded-2xl border bg-black/20 transition-all text-[10px] font-black uppercase">
+              <span class="material-symbols-outlined text-xl" style="font-variation-settings:'FILL' 1;">chat</span>
+              WhatsApp
+            </button>
+          </div>
+        </div>
+
+        <!-- Consentement RGPD -->
+        <label class="flex items-start gap-3 p-4 rounded-2xl bg-black/20 border border-white/10 cursor-pointer hover:border-[#15b9a3]/30 transition-all group">
+          <div class="relative mt-0.5 shrink-0">
+            <input type="checkbox" [(ngModel)]="consentAccepted" class="sr-only peer" />
+            <div class="w-5 h-5 rounded-md border-2 border-slate-500 peer-checked:border-[#15b9a3] peer-checked:bg-[#15b9a3] transition-all flex items-center justify-center">
+              <span class="material-symbols-outlined text-white text-[14px] opacity-0 peer-checked:opacity-100" style="font-variation-settings:'FILL' 1;font-size:14px;">check</span>
+            </div>
+          </div>
+          <span class="text-[11px] text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
+            Les données collectées via ce formulaire sont traitées de manière confidentielle et utilisées uniquement pour des rappels de contrôle technique. Elles ne seront jamais transmises à des tiers sans votre accord.
+          </span>
+        </label>
+
+        <!-- Message d'erreur -->
+        <div *ngIf="errorMessage()" class="flex items-center gap-2 p-3 rounded-xl bg-red-500/15 border border-red-500/30">
+          <span class="material-symbols-outlined text-red-400 text-base shrink-0">error</span>
+          <p class="text-xs font-bold text-red-300">{{ errorMessage() }}</p>
+        </div>
+
+        <!-- BOUTON ENVOI -->
+        <button type="button" (click)="submit()" [disabled]="submitting()"
+          class="w-full h-14 rounded-2xl bg-[#15b9a3] text-white font-black uppercase tracking-widest text-sm shadow-xl shadow-[#15b9a3]/30 hover:bg-[#13a592] active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+          <span *ngIf="submitting()" class="material-symbols-outlined animate-spin text-xl">sync</span>
+          <span *ngIf="!submitting()" class="material-symbols-outlined text-xl" style="font-variation-settings:'FILL' 1;">send</span>
+          {{ submitting() ? 'Envoi en cours...' : 'Envoyer ma demande' }}
+        </button>
+
+      </div>
+
+      <p class="text-center text-slate-500 text-xs mt-5 pb-8">
+        <span class="material-symbols-outlined text-xs align-middle mr-1">lock</span>
+        Données protégées · Aucune inscription requise
+      </p>
+    </div>
+
+  </main>
+</div>

@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed, effect, ElementRef, ViewChild } from '@angular/core';
+import { Component, OnInit, signal, inject, computed, effect, ElementRef, Injector, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -7,6 +7,8 @@ import { AccountService } from '../../../services/account.service';
 import { VehicleService, Vehicle } from '../../../services/vehicle.service';
 import { ToastService } from '../../../services/toast.service';
 import { QuoteRequestService } from '../../../services/quote-request.service';
+import { SettingService } from '../../../services/setting.service';
+import { StationService } from '../../../services/station.service';
 import { QuotePreviewModalComponent } from '../quote-preview-modal/quote-preview-modal.component';
 
 // ─── TABLEAUX DE PRIX ──────────────────────────────────────────────────────
@@ -111,7 +113,10 @@ const ADDITIONAL_SERVICES = [
 
 interface VehicleService_ {
   vehicleId: number;
-  vignette: { enabled: boolean; category: string; ageGroup: string; price: number };
+  vignette: {
+    enabled: boolean; category: string; ageGroup: string; price: number;
+    penaltyActive: boolean; penaltyRate: 25 | 100 | null;
+  };
   visite:   { enabled: boolean; category: string; type: 'visite' | 'revisite' | 'volontaire'; price: number };
   additionals: string[];
 }
@@ -132,11 +137,12 @@ function vignetteAgeLabel(ageGroup: string): string {
   return '11 ans et plus';
 }
 
-function computeVignettePrice(category: string, ageGroup: string): number {
-  const rates = VIGNETTE_RATES[category];
+function computeVignettePrice(category: string, ageGroup: string, ratesObj?: any): number {
+  const allRates = ratesObj || VIGNETTE_RATES;
+  const rates = allRates[category];
   if (!rates) return 0;
   if (category === 'tourisme_16cv') {
-    if (ageGroup === 'recent_1_2' || ageGroup === 'recent') return rates['recent_1_2'] || 250000;
+    if (ageGroup === 'recent_1_2' || ageGroup === 'recent') return rates['recent_1_2'] || rates['recent'] || 250000;
     if (ageGroup === 'recent_3_4') return rates['recent_3_4'] || 190000;
     if (ageGroup === 'medium') return rates['medium'] || 142500;
     return rates['old'] || 80000;
@@ -152,8 +158,9 @@ function yearRangeForBand(band: 'recent' | 'medium' | 'old'): string {
   return `≤ ${y - 10}`;
 }
 
-function computeVtPrice(category: string, type: 'visite' | 'revisite' | 'volontaire'): number {
-  const rates = VT_RATES[category];
+function computeVtPrice(category: string, type: 'visite' | 'revisite' | 'volontaire', ratesObj?: any): number {
+  const allRates = ratesObj || VT_RATES;
+  const rates = allRates[category];
   if (!rates) return 0;
   return rates[type] ?? 0;
 }
@@ -227,10 +234,27 @@ function parseAdditionalDescription(desc: string): { plate: string; key: string 
   return null;
 }
 
+/**
+ * Encode/décode la pénalité indépendamment du taux (%) configuré par l'admin, qui peut
+ * changer entre la création du devis et sa relecture : on persiste la tranche de retard
+ * ("6 mois" / "1 an et 1 jour"), pas le pourcentage littéral.
+ */
+function penaltyBandLabel(rate: 25 | 100): string {
+  return rate === 25 ? '6 mois' : '1 an et 1 jour';
+}
+
+function parsePenaltyDescription(desc: string): { plate: string; rate: 25 | 100 } | null {
+  const m = desc.match(/^Pénalité vignette — retard (6 mois|1 an et 1 jour) \([\d.,]+%\) — (.+)$/);
+  if (!m) return null;
+  return { rate: m[1] === '6 mois' ? 25 : 100, plate: m[2].trim() };
+}
+
 function hydrateVehicleServicesFromQuoteItems(
   items: { description: string; price: number; quantity?: number }[],
   vehicleIds: number[],
   vehicles: Vehicle[],
+  customVignetteRates?: any,
+  customVtRates?: any
 ): Map<number, VehicleService_> {
   const map = new Map<number, VehicleService_>();
   for (const vid of vehicleIds) {
@@ -242,6 +266,8 @@ function hydrateVehicleServicesFromQuoteItems(
       category: '',
       ageGroup: getAgeGroup(vehicle.year ?? null),
       price: 0,
+      penaltyActive: false,
+      penaltyRate: null,
     };
     let visite: VehicleService_['visite'] = {
       enabled: false,
@@ -259,8 +285,16 @@ function hydrateVehicleServicesFromQuoteItems(
           enabled: true,
           category: pv.catKey,
           ageGroup: pv.ageGroup,
-          price: computeVignettePrice(pv.catKey, pv.ageGroup),
+          price: computeVignettePrice(pv.catKey, pv.ageGroup, customVignetteRates),
+          penaltyActive: vignette.penaltyActive,
+          penaltyRate: vignette.penaltyRate,
         };
+        continue;
+      }
+      const pp = parsePenaltyDescription(d);
+      if (pp && normalizePlateForMatch(pp.plate) === plateNorm) {
+        vignette.penaltyActive = true;
+        vignette.penaltyRate = pp.rate;
         continue;
       }
       const pvt = parseVtDescription(d);
@@ -269,7 +303,7 @@ function hydrateVehicleServicesFromQuoteItems(
           enabled: true,
           category: pvt.catKey,
           type: pvt.visiteType,
-          price: computeVtPrice(pvt.catKey, pvt.visiteType),
+          price: computeVtPrice(pvt.catKey, pvt.visiteType, customVtRates),
         };
         continue;
       }
@@ -320,15 +354,19 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
           </div>
         </div>
         <div class="flex gap-3">
-           <button (click)="cancel()" class="px-6 py-3 rounded-2xl bg-surface-container text-outline text-xs font-black uppercase tracking-widest hover:bg-surface-container-high transition-all">Annuler</button>
-           <button (click)="saveDraft()" [disabled]="!isValid() || !allVehiclesCompliant()" class="px-6 py-3 rounded-2xl bg-[#1b1932] text-white text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-primary/10 disabled:opacity-50">Brouillon</button>
-           <button (click)="showPreview.set(true)" [disabled]="!isValid() || !allVehiclesCompliant()" class="px-8 py-3 rounded-2xl bg-white border border-outline-variant/20 text-on-surface text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-sm disabled:opacity-50 flex items-center gap-2">
+           <button (click)="cancel()" [disabled]="submitting()" class="px-6 py-3 rounded-2xl bg-surface-container text-outline text-xs font-black uppercase tracking-widest hover:bg-surface-container-high transition-all disabled:opacity-50">Annuler</button>
+           <button *ngIf="!submitting()" (click)="saveDraft()" [disabled]="!isValid() || !allVehiclesCompliant()" class="px-6 py-3 rounded-2xl bg-[#1b1932] text-white text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-primary/10 disabled:opacity-50">Brouillon</button>
+           <button *ngIf="!submitting()" (click)="showPreview.set(true)" [disabled]="!isValid() || !allVehiclesCompliant()" class="px-8 py-3 rounded-2xl bg-white border border-outline-variant/20 text-on-surface text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-sm disabled:opacity-50 flex items-center gap-2">
              <span class="material-symbols-outlined text-lg">visibility</span>
              Aperçu PDF
            </button>
-           <button (click)="sendQuote()" [disabled]="!isValid() || !allVehiclesCompliant()" class="px-8 py-3 rounded-2xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center gap-2">
+           <button *ngIf="!submitting()" (click)="sendQuote()" [disabled]="!isValid() || !allVehiclesCompliant()" class="px-8 py-3 rounded-2xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center gap-2">
              <span class="material-symbols-outlined text-lg">send</span>
              Générer Devis
+           </button>
+           <button *ngIf="submitting()" type="button" disabled class="px-8 py-3 rounded-2xl bg-primary/50 text-white text-xs font-black uppercase tracking-widest cursor-not-allowed flex items-center gap-2">
+             <span class="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+             Génération en cours…
            </button>
         </div>
       </div>
@@ -354,7 +392,8 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                  </div>
                  <div class="space-y-2">
                     <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Numéro de Devis</label>
-                    <input type="text" [(ngModel)]="quote.quote_number" placeholder="DEV-2024-XXXX" class="w-full bg-surface-container-low border-none rounded-2xl p-4 text-sm font-bold focus:ring-primary/20 outline-none">
+                    <input type="text" [(ngModel)]="quote.quote_number" placeholder="Généré automatiquement à l'enregistrement" class="w-full bg-surface-container-low border-none rounded-2xl p-4 text-sm font-bold focus:ring-primary/20 outline-none">
+                    <p class="text-[10px] text-outline/70 ml-1">Laissez vide pour une génération automatique, ou saisissez un numéro personnalisé.</p>
                  </div>
               </div>
 
@@ -378,8 +417,8 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                           </div>
                        </div>
                        <div class="absolute top-5 right-5">
-                          <span *ngIf="vehicle.has_all_docs" class="material-symbols-outlined text-primary text-lg">check_circle</span>
-                          <span *ngIf="!vehicle.has_all_docs" class="material-symbols-outlined text-error text-lg animate-pulse">warning</span>
+                          <span *ngIf="vehicle.has_required_doc" class="material-symbols-outlined text-primary text-lg">check_circle</span>
+                          <span *ngIf="!vehicle.has_required_doc" class="material-symbols-outlined text-error text-lg animate-pulse">warning</span>
                        </div>
                        <div *ngIf="isVehicleSelected(vehicle.id)" class="relative z-10 mt-4 pt-4 border-t border-outline-variant/15 flex flex-wrap gap-2 justify-stretch sm:justify-end" (click)="$event.stopPropagation()">
                           <button type="button"
@@ -417,6 +456,35 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                  </div>
                  <div *ngIf="companyVehicles().length === 0" class="p-8 text-center bg-surface-container-low rounded-[2rem] border border-dashed border-outline-variant/20 italic text-outline text-xs">
                     Aucun véhicule enregistré pour ce client.
+                 </div>
+
+                 <!-- Ajout rapide d'un véhicule absent de la flotte du client -->
+                 <button type="button" *ngIf="!showAddVehicleInline()" (click)="openAddVehicleInline()"
+                         class="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">
+                    <span class="material-symbols-outlined text-sm">add_circle</span>
+                    Ce véhicule n'est pas dans la flotte du client ? Ajoutez-le
+                 </button>
+
+                 <div *ngIf="showAddVehicleInline()" class="p-4 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 space-y-3">
+                    <p class="text-xs font-bold text-on-surface">Nouveau véhicule pour ce client</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                       <input type="text" [(ngModel)]="newVehiclePlate" [ngModelOptions]="{standalone: true}"
+                              placeholder="Immatriculation *" class="px-3 py-2 rounded-lg bg-white border border-outline-variant/20 text-sm font-mono uppercase outline-none focus:ring-2 focus:ring-primary/20">
+                       <input type="text" [(ngModel)]="newVehicleBrand" [ngModelOptions]="{standalone: true}"
+                              placeholder="Marque" class="px-3 py-2 rounded-lg bg-white border border-outline-variant/20 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                       <input type="text" [(ngModel)]="newVehicleModel" [ngModelOptions]="{standalone: true}"
+                              placeholder="Modèle" class="px-3 py-2 rounded-lg bg-white border border-outline-variant/20 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                    </div>
+                    <div class="flex items-center justify-end gap-2">
+                       <button type="button" (click)="cancelAddVehicleInline()" class="px-3 py-1.5 text-outline hover:text-on-surface font-bold text-[11px] uppercase tracking-wider">
+                          Annuler
+                       </button>
+                       <button type="button" (click)="confirmAddVehicleInline()" [disabled]="!newVehiclePlate.trim() || addingVehicle()"
+                               class="px-4 py-1.5 bg-primary text-white font-bold text-[11px] uppercase tracking-wider rounded-lg disabled:opacity-50 flex items-center gap-1.5">
+                          <span class="material-symbols-outlined text-sm animate-spin" *ngIf="addingVehicle()">sync</span>
+                          {{ addingVehicle() ? 'Ajout…' : 'Ajouter et sélectionner' }}
+                       </button>
+                    </div>
                  </div>
               </div>
            </div>
@@ -598,6 +666,52 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                          <span class="text-xs font-bold text-amber-700">Tarif vignette calculé</span>
                          <span class="font-black text-amber-700 text-lg font-headline">{{ getVehicleSvc(vehicle.id).vignette.price | number:'1.0-0' }} XOF</span>
                       </div>
+
+                      <!-- PÉNALITÉ DE RETARD -->
+                      <div *ngIf="getVehicleSvc(vehicle.id).vignette.price > 0" class="pt-1">
+                         <button type="button" (click)="togglePenalty(vehicle.id)"
+                                 class="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
+                                 [class.border-error]="getVehicleSvc(vehicle.id).vignette.penaltyActive"
+                                 [class.bg-error/5]="getVehicleSvc(vehicle.id).vignette.penaltyActive"
+                                 [class.border-outline-variant/15]="!getVehicleSvc(vehicle.id).vignette.penaltyActive"
+                                 [class.bg-white]="!getVehicleSvc(vehicle.id).vignette.penaltyActive">
+                            <span class="flex items-center gap-2 text-xs font-black uppercase tracking-widest" [class.text-error]="getVehicleSvc(vehicle.id).vignette.penaltyActive" [class.text-outline]="!getVehicleSvc(vehicle.id).vignette.penaltyActive">
+                               <span class="material-symbols-outlined text-base">warning</span>
+                               Pénalité (visite technique en retard)
+                            </span>
+                            <span class="material-symbols-outlined text-base" [class.text-error]="getVehicleSvc(vehicle.id).vignette.penaltyActive" [class.text-outline]="!getVehicleSvc(vehicle.id).vignette.penaltyActive">
+                               {{ getVehicleSvc(vehicle.id).vignette.penaltyActive ? 'check_box' : 'check_box_outline_blank' }}
+                            </span>
+                         </button>
+
+                         <div *ngIf="getVehicleSvc(vehicle.id).vignette.penaltyActive" class="mt-3 space-y-3 animate-fade-in">
+                            <p class="text-[11px] text-outline leading-relaxed">Vérifiez le retard sur la dernière visite technique du véhicule, puis choisissez la tranche applicable.</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                               <button type="button" (click)="pickPenaltyRate(vehicle.id, 25)"
+                                       [attr.aria-pressed]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 25"
+                                       class="text-left p-4 rounded-2xl border border-outline-variant/15 bg-white transition-all hover:border-error/50"
+                                       [class.ring-2]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 25"
+                                       [class.ring-error]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 25"
+                                       [class.bg-error/5]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 25">
+                                  <span class="block text-xs font-black text-on-surface">Retard &gt; 6 mois</span>
+                                  <span class="block text-[10px] text-error font-bold mt-0.5">{{ penaltyRate6Months() }}% de la vignette</span>
+                               </button>
+                               <button type="button" (click)="pickPenaltyRate(vehicle.id, 100)"
+                                       [attr.aria-pressed]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 100"
+                                       class="text-left p-4 rounded-2xl border border-outline-variant/15 bg-white transition-all hover:border-error/50"
+                                       [class.ring-2]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 100"
+                                       [class.ring-error]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 100"
+                                       [class.bg-error/5]="getVehicleSvc(vehicle.id).vignette.penaltyRate === 100">
+                                  <span class="block text-xs font-black text-on-surface">Retard &gt; 1 an et 1 jour</span>
+                                  <span class="block text-[10px] text-error font-bold mt-0.5">{{ penaltyRate1Year() }}% de la vignette</span>
+                               </button>
+                            </div>
+                            <div *ngIf="penaltyAmount(vehicle.id) > 0" class="flex items-center justify-between bg-error/10 rounded-2xl px-6 py-4">
+                               <span class="text-xs font-bold text-error">Montant de la pénalité</span>
+                               <span class="font-black text-error text-lg font-headline">{{ penaltyAmount(vehicle.id) | number:'1.0-0' }} XOF</span>
+                            </div>
+                         </div>
+                      </div>
                    </div>
                 </div>
 
@@ -719,13 +833,16 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                     <span class="text-[10px] font-black uppercase tracking-widest">Services configurés</span>
                     <span class="font-bold">{{ configuredServicesCount() }}</span>
                  </div>
-
                  <!-- Lines per vehicle -->
                  <div *ngFor="let vehicle of selectedVehicles()" class="space-y-2 pt-4 border-t border-white/10">
                     <p class="text-[10px] font-black text-white/40 uppercase tracking-widest">{{ vehicle.license_plate }}</p>
                     <div *ngIf="getVehicleSvc(vehicle.id).vignette.enabled && getVehicleSvc(vehicle.id).vignette.price > 0" class="flex justify-between items-center text-sm">
                        <span class="text-white/70 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Vignette</span>
                        <span class="font-bold text-amber-400">{{ getVehicleSvc(vehicle.id).vignette.price | number:'1.0-0' }}</span>
+                    </div>
+                    <div *ngIf="penaltyAmount(vehicle.id) > 0" class="flex justify-between items-center text-sm">
+                       <span class="text-white/70 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-error inline-block"></span> Pénalité vignette</span>
+                       <span class="font-bold text-error">{{ penaltyAmount(vehicle.id) | number:'1.0-0' }}</span>
                     </div>
                     <div *ngIf="getVehicleSvc(vehicle.id).visite.enabled && getVehicleSvc(vehicle.id).visite.price > 0" class="flex justify-between items-center text-sm">
                        <span class="text-white/70 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary inline-block"></span> Visite Tech.</span>
@@ -787,6 +904,8 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
 export class QuoteFormComponent implements OnInit {
   @ViewChild('vehSlider') vehSlider?: ElementRef<HTMLElement>;
   currentVehicleSlide = signal(0);
+  /** Empêche les doubles soumissions (double-clic) et masque les actions une fois le devis généré. */
+  submitting = signal(false);
 
   quote: any = {
     company_id: 0,
@@ -794,7 +913,7 @@ export class QuoteFormComponent implements OnInit {
     status: 'draft',
     total_amount: 0,
     items: [],
-    vehicle_ids: []
+    vehicle_ids: [],
   };
 
   clients         = signal<any[]>([]);
@@ -802,8 +921,19 @@ export class QuoteFormComponent implements OnInit {
   selectedVehicleIds = signal<number[]>([]);
   vehicleServices = signal<Map<number, VehicleService_>>(new Map());
   showPreview     = signal(false);
+
+  // Ajout rapide d'un véhicule absent de la flotte du client, depuis ce formulaire de devis
+  showAddVehicleInline = signal(false);
+  addingVehicle = signal(false);
+  newVehiclePlate = '';
+  newVehicleBrand = '';
+  newVehicleModel = '';
   /** Si défini, enregistrement via PATCH (brouillon existant). */
   editingQuoteId  = signal<number | null>(null);
+
+  settingSvc = inject(SettingService);
+  stationSvc = inject(StationService);
+  stations = signal<any[]>([]);
 
   // Data tables exposed to template
   vignetteCategories = VIGNETTE_CATEGORIES;
@@ -874,13 +1004,13 @@ export class QuoteFormComponent implements OnInit {
   });
 
   selectedVehicles            = computed(() => this.companyVehicles().filter(v => this.selectedVehicleIds().includes(v.id)));
-  selectedVehiclesMissingDocs = computed(() => this.selectedVehicles().filter(v => !v.has_all_docs));
-  allVehiclesCompliant        = computed(() => this.selectedVehicles().every(v => v.has_all_docs));
+  selectedVehiclesMissingDocs = computed(() => this.selectedVehicles().filter(v => !v.has_required_doc));
+  allVehiclesCompliant        = computed(() => this.selectedVehicles().every(v => v.has_required_doc));
 
   totalHT = computed(() => {
     let total = 0;
-    for (const [, svc] of this.vehicleServices()) {
-      if (svc.vignette.enabled)  total += svc.vignette.price;
+    for (const [vehicleId, svc] of this.vehicleServices()) {
+      if (svc.vignette.enabled)  total += svc.vignette.price + this.penaltyAmount(vehicleId);
       if (svc.visite.enabled)    total += svc.visite.price;
       for (const key of svc.additionals) total += this.getAdditionalPrice(key);
     }
@@ -907,31 +1037,46 @@ export class QuoteFormComponent implements OnInit {
   private quoteRequestService = inject(QuoteRequestService);
   private route          = inject(ActivatedRoute);
   private router         = inject(Router);
-  private preselectVehicleId: number | null = null;
+  private injector       = inject(Injector);
+  private preselectVehicleIds: number[] = [];
 
   ngOnInit(): void {
-    this.accountService.getClients().subscribe(data => this.clients.set(data));
+    this.settingSvc.loadSettings();
+    this.stationSvc.list().subscribe(data => this.stations.set(data.filter(s => s.is_active)));
 
-    const editParam = this.route.snapshot.queryParamMap.get('edit');
-    if (editParam) {
-      this.loadQuoteForEdit(+editParam);
-    } else {
+    // Le <select> "Client / Entreprise" ne peut afficher la bonne option que si ses
+    // <option> (générées par *ngFor="let client of clients()") existent déjà dans le DOM
+    // au moment où quote.company_id est assigné. On résout donc les query params
+    // (company_id / request_id) UNIQUEMENT une fois clients() chargé, pour éviter la
+    // course où le véhicule/client est "prêt" en mémoire mais jamais reflété dans le <select>
+    // tant que l'utilisateur ne le rouvre pas manuellement.
+    this.accountService.getClients().subscribe(data => {
+      this.clients.set(data);
+
+      const editParam = this.route.snapshot.queryParamMap.get('edit');
+      if (editParam) {
+        this.loadQuoteForEdit(+editParam);
+        return;
+      }
+
       const qp = this.route.snapshot.queryParamMap;
       const companyId = qp.get('company_id');
       const vehicleId = qp.get('vehicle_id');
       const requestId = qp.get('request_id');
 
       if (requestId) this.quote.quote_request_id = +requestId;
-      if (vehicleId) this.preselectVehicleId = +vehicleId;
+      if (vehicleId) this.preselectVehicleIds = [+vehicleId];
 
       // Si request_id est présent mais vehicle_id absent, on récupère la demande
-      // pour inférer le véhicule et sécuriser la pré-sélection.
+      // pour pré-sélectionner TOUS ses véhicules (une demande peut en couvrir plusieurs).
       if (requestId && !vehicleId) {
         this.quoteRequestService.getById(+requestId).subscribe({
           next: (req: any) => {
             const inferredCompanyId = Number(req.company_id || req.company?.id || companyId || 0);
-            const inferredVehicleId = Number(req.vehicle_id || req.vehicle?.id || 0);
-            if (inferredVehicleId) this.preselectVehicleId = inferredVehicleId;
+            const inferredVehicleIds: number[] = Array.isArray(req.vehicles) && req.vehicles.length > 0
+              ? req.vehicles.map((v: any) => Number(v.id)).filter((id: number) => id > 0)
+              : (Number(req.vehicle_id || req.vehicle?.id || 0) ? [Number(req.vehicle_id || req.vehicle?.id)] : []);
+            if (inferredVehicleIds.length > 0) this.preselectVehicleIds = inferredVehicleIds;
             if (inferredCompanyId) this.quote.company_id = inferredCompanyId;
             if (this.quote.company_id > 0) this.onClientChange();
           },
@@ -946,11 +1091,11 @@ export class QuoteFormComponent implements OnInit {
         this.quote.company_id = +companyId;
         this.onClientChange();
       }
-    }
+    });
 
     effect(() => {
       this.quote.vehicle_ids = this.selectedVehicleIds();
-    }, { allowSignalWrites: true });
+    }, { allowSignalWrites: true, injector: this.injector });
 
     // Reset index quand la sélection change (navigation boutons).
     effect(() => {
@@ -962,7 +1107,7 @@ export class QuoteFormComponent implements OnInit {
       // Si l’index courant dépasse, on le ramène.
       const cur = this.currentVehicleSlide();
       if (cur > count - 1) this.currentVehicleSlide.set(0);
-    }, { allowSignalWrites: true });
+    }, { allowSignalWrites: true, injector: this.injector });
   }
 
   private vehicleSlideElements(): HTMLElement[] {
@@ -1022,7 +1167,13 @@ export class QuoteFormComponent implements OnInit {
             vehicleIds = inferVehicleIdsFromItems(rawItems, vehicles);
           }
           this.selectedVehicleIds.set(vehicleIds);
-          const map = hydrateVehicleServicesFromQuoteItems(rawItems, vehicleIds, vehicles);
+          const map = hydrateVehicleServicesFromQuoteItems(
+            rawItems,
+            vehicleIds,
+            vehicles,
+            this.settingSvc.settings()?.[ 'pricing.vignette' ],
+            this.settingSvc.settings()?.[ 'pricing.visite_technique' ]
+          );
           this.vehicleServices.set(map);
         });
       },
@@ -1037,11 +1188,11 @@ export class QuoteFormComponent implements OnInit {
     if (this.quote.company_id > 0) {
       this.vehicleSvc.getByClient(this.quote.company_id).subscribe(data => {
         this.companyVehicles.set(data);
-        const vehicleId = this.preselectVehicleId;
-        if (vehicleId) {
-          this.selectedVehicleIds.set([vehicleId]);
-          this.ensureVehicleService(vehicleId, data.find(v => v.id === vehicleId));
-          this.preselectVehicleId = null;
+        const vehicleIds = this.preselectVehicleIds;
+        if (vehicleIds.length > 0) {
+          this.selectedVehicleIds.set(vehicleIds);
+          vehicleIds.forEach(id => this.ensureVehicleService(id, data.find(v => v.id === id)));
+          this.preselectVehicleIds = [];
         }
       });
     } else {
@@ -1060,13 +1211,50 @@ export class QuoteFormComponent implements OnInit {
     }
   }
 
+  openAddVehicleInline(): void {
+    this.showAddVehicleInline.set(true);
+    this.newVehiclePlate = '';
+    this.newVehicleBrand = '';
+    this.newVehicleModel = '';
+  }
+
+  cancelAddVehicleInline(): void {
+    this.showAddVehicleInline.set(false);
+  }
+
+  confirmAddVehicleInline(): void {
+    const plate = this.newVehiclePlate.trim();
+    if (!plate || !this.quote.company_id) return;
+
+    this.addingVehicle.set(true);
+    this.vehicleSvc.create({
+      company_id: this.quote.company_id,
+      license_plate: plate.toUpperCase(),
+      brand: this.newVehicleBrand.trim(),
+      model: this.newVehicleModel.trim(),
+    }).subscribe({
+      next: (vehicle) => {
+        this.addingVehicle.set(false);
+        this.showAddVehicleInline.set(false);
+        this.companyVehicles.update(list => [vehicle, ...list]);
+        this.toggleVehicle(vehicle);
+        this.toastService.success('Véhicule ajouté et sélectionné pour ce devis.');
+      },
+      error: (err) => {
+        this.addingVehicle.set(false);
+        const msg = err?.error?.errors?.license_plate?.[0] || 'Erreur lors de l\'ajout du véhicule.';
+        this.toastService.error(msg);
+      },
+    });
+  }
+
   private ensureVehicleService(vehicleId: number, vehicle?: Vehicle): void {
     const map = new Map(this.vehicleServices());
     if (!map.has(vehicleId)) {
       const ageGroup = getAgeGroup(vehicle?.year ?? null);
       map.set(vehicleId, {
         vehicleId,
-        vignette: { enabled: false, category: '', ageGroup, price: 0 },
+        vignette: { enabled: false, category: '', ageGroup, price: 0, penaltyActive: false, penaltyRate: null },
         visite:   { enabled: false, category: '', type: 'visite', price: 0 },
         additionals: [],
       });
@@ -1083,7 +1271,7 @@ export class QuoteFormComponent implements OnInit {
     if (!map.has(vehicleId)) {
       const newSvc: VehicleService_ = {
         vehicleId,
-        vignette: { enabled: false, category: '', ageGroup: 'recent', price: 0 },
+        vignette: { enabled: false, category: '', ageGroup: 'recent', price: 0, penaltyActive: false, penaltyRate: null },
         visite:   { enabled: false, category: '', type: 'visite', price: 0 },
         additionals: [],
       };
@@ -1098,7 +1286,45 @@ export class QuoteFormComponent implements OnInit {
   toggleVignetteEnabled(vehicleId: number): void {
     const svc = this.getVehicleSvc(vehicleId);
     svc.vignette.enabled = !svc.vignette.enabled;
+    if (!svc.vignette.enabled) {
+      svc.vignette.penaltyActive = false;
+      svc.vignette.penaltyRate = null;
+    }
     this.vehicleServices.set(new Map(this.vehicleServices()));
+  }
+
+  /** Taux de pénalité configurés par l'admin (Paramètres > Mentions légales), avec repli sur 25/100. */
+  penaltyRate6Months(): number {
+    return Number(this.settingSvc.settings()?.['quote.penalty.rate_6_months'] ?? 25);
+  }
+
+  penaltyRate1Year(): number {
+    return Number(this.settingSvc.settings()?.['quote.penalty.rate_1_year'] ?? 100);
+  }
+
+  togglePenalty(vehicleId: number): void {
+    const svc = this.getVehicleSvc(vehicleId);
+    svc.vignette.penaltyActive = !svc.vignette.penaltyActive;
+    if (!svc.vignette.penaltyActive) {
+      svc.vignette.penaltyRate = null;
+    } else if (svc.vignette.penaltyRate == null) {
+      svc.vignette.penaltyRate = 25;
+    }
+    this.vehicleServices.set(new Map(this.vehicleServices()));
+  }
+
+  pickPenaltyRate(vehicleId: number, rate: 25 | 100): void {
+    const svc = this.getVehicleSvc(vehicleId);
+    svc.vignette.penaltyRate = rate;
+    this.vehicleServices.set(new Map(this.vehicleServices()));
+  }
+
+  /** Montant de la pénalité (appliqué sur le prix de la vignette du véhicule). */
+  penaltyAmount(vehicleId: number): number {
+    const svc = this.getVehicleSvc(vehicleId);
+    if (!svc.vignette.enabled || !svc.vignette.penaltyActive || !svc.vignette.penaltyRate) return 0;
+    const rate = svc.vignette.penaltyRate === 25 ? this.penaltyRate6Months() : this.penaltyRate1Year();
+    return Math.round(svc.vignette.price * (rate / 100));
   }
 
   toggleVisiteEnabled(vehicleId: number): void {
@@ -1109,20 +1335,23 @@ export class QuoteFormComponent implements OnInit {
 
   recalcVignette(vehicleId: number): void {
     const svc = this.getVehicleSvc(vehicleId);
-    svc.vignette.price = computeVignettePrice(svc.vignette.category, svc.vignette.ageGroup);
+    const customRates = this.settingSvc.settings()?.[ 'pricing.vignette' ];
+    svc.vignette.price = computeVignettePrice(svc.vignette.category, svc.vignette.ageGroup, customRates);
     this.vehicleServices.set(new Map(this.vehicleServices()));
   }
 
   recalcVisite(vehicleId: number): void {
     const svc = this.getVehicleSvc(vehicleId);
-    svc.visite.price = computeVtPrice(svc.visite.category, svc.visite.type);
+    const customRates = this.settingSvc.settings()?.[ 'pricing.visite_technique' ];
+    svc.visite.price = computeVtPrice(svc.visite.category, svc.visite.type, customRates);
     this.vehicleServices.set(new Map(this.vehicleServices()));
   }
 
   isVolontaireDisabled(vehicleId: number): boolean {
     const cat = this.getVehicleSvc(vehicleId).visite.category;
     if (!cat) return false;
-    return VT_RATES[cat]?.volontaire === null;
+    const rates = this.settingSvc.settings()?.[ 'pricing.visite_technique' ] || VT_RATES;
+    return rates[cat]?.volontaire === null;
   }
 
   isAdditionalSelected(vehicleId: number, key: string): boolean {
@@ -1150,7 +1379,7 @@ export class QuoteFormComponent implements OnInit {
   getVehicleTotal(vehicleId: number): number {
     const svc = this.getVehicleSvc(vehicleId);
     let total = 0;
-    if (svc.vignette.enabled) total += svc.vignette.price;
+    if (svc.vignette.enabled) total += svc.vignette.price + this.penaltyAmount(vehicleId);
     if (svc.visite.enabled)   total += svc.visite.price;
     for (const key of svc.additionals) total += this.getAdditionalPrice(key);
     return total;
@@ -1185,7 +1414,7 @@ export class QuoteFormComponent implements OnInit {
   }
 
   /** Génère les items de devis depuis les services configurés */
-  private buildItems(): QuoteItem[] {
+  private buildItems(forSubmit = false): QuoteItem[] {
     const items: QuoteItem[] = [];
     for (const vehicle of this.selectedVehicles()) {
       const svc = this.getVehicleSvc(vehicle.id);
@@ -1198,6 +1427,14 @@ export class QuoteFormComponent implements OnInit {
           price: svc.vignette.price,
           quantity: 1,
         });
+        if (svc.vignette.penaltyActive && svc.vignette.penaltyRate) {
+          const rate = svc.vignette.penaltyRate === 25 ? this.penaltyRate6Months() : this.penaltyRate1Year();
+          items.push({
+            description: `Pénalité vignette — retard ${penaltyBandLabel(svc.vignette.penaltyRate)} (${rate}%) — ${plate}`,
+            price: this.penaltyAmount(vehicle.id),
+            quantity: 1,
+          });
+        }
       }
       if (svc.visite.enabled && svc.visite.price > 0) {
         const vtLabel = VT_CATEGORIES.find(c => c.key === svc.visite.category)?.label ?? '';
@@ -1226,18 +1463,23 @@ export class QuoteFormComponent implements OnInit {
   getPdfData(): any {
     return {
       ...this.quote,
-      items: this.buildItems(),
+      items: this.buildItems(false),
       total_amount: this.totalTTC(),
       company_name: this.selectedCompanyName(),
     };
   }
 
   private submit(targetStatus: 'draft' | 'sent'): void {
+    if (this.submitting()) return;
     if (!this.isValid() || !this.allVehiclesCompliant()) return;
-    this.quote.items = this.buildItems();
+    this.submitting.set(true);
+    this.quote.items = this.buildItems(true);
     this.quote.status = targetStatus;
     this.quote.total_amount = this.totalTTC();
 
+    // La mise à jour du contenu (lignes, véhicules) reste toujours en brouillon côté
+    // serveur : l'envoi réel (email + notification) passe systématiquement par
+    // updateStatus, seule source de vérité pour ce changement d'état.
     const payload: any = {
       company_id: this.quote.company_id,
       vehicle_ids: this.selectedVehicleIds(),
@@ -1245,7 +1487,7 @@ export class QuoteFormComponent implements OnInit {
       total_amount: this.quote.total_amount,
       quote_request_id: this.quote.quote_request_id,
       valid_until: this.quote.valid_until,
-      status: targetStatus,
+      status: 'draft',
     };
     const qn = String(this.quote.quote_number ?? '').trim();
     if (qn) payload.quote_number = qn;
@@ -1254,10 +1496,25 @@ export class QuoteFormComponent implements OnInit {
     if (editId) {
       this.quoteService.update(editId, payload).subscribe({
         next: () => {
+          if (targetStatus === 'sent') {
+            this.quoteService.updateStatus(editId, 'sent').subscribe({
+              next: () => {
+                this.toastService.success('Devis mis à jour et envoyé au client.');
+                this.router.navigate(['/vente']);
+              },
+              error: () => {
+                this.submitting.set(false);
+                this.toastService.error('Devis mis à jour, mais l\'envoi au client a échoué. Réessayez depuis la liste.');
+                this.router.navigate(['/vente']);
+              },
+            });
+            return;
+          }
           this.toastService.success('Brouillon mis à jour.');
           this.router.navigate(['/vente']);
         },
         error: (err) => {
+          this.submitting.set(false);
           const msg = err?.error?.message || err?.error?.errors ? 'Données invalides.' : 'Erreur lors de la mise à jour.';
           this.toastService.error(typeof msg === 'string' ? msg : 'Erreur lors de la mise à jour.');
         },
@@ -1273,12 +1530,32 @@ export class QuoteFormComponent implements OnInit {
       items: this.quote.items,
     };
     if (qn) createBody.quote_number = qn;
+
     this.quoteService.create(createBody as unknown as Quote).subscribe({
-      next: () => {
-        this.toastService.success('Devis enregistré avec succès.');
+      next: (created) => {
+        // Un devis est toujours créé en brouillon côté serveur : s'il doit être
+        // envoyé immédiatement, on déclenche le vrai envoi (email + notification) ensuite.
+        if (targetStatus === 'sent' && created?.id) {
+          this.quoteService.updateStatus(created.id, 'sent').subscribe({
+            next: () => {
+              this.toastService.success('Devis créé et envoyé au client.');
+              this.router.navigate(['/vente']);
+            },
+            error: () => {
+              this.submitting.set(false);
+              this.toastService.error('Devis créé, mais l\'envoi au client a échoué. Réessayez depuis la liste.');
+              this.router.navigate(['/vente']);
+            },
+          });
+          return;
+        }
+        this.toastService.success('Devis enregistré en brouillon.');
         this.router.navigate(['/vente']);
       },
-      error: () => this.toastService.error('Erreur lors de la création.'),
+      error: () => {
+        this.submitting.set(false);
+        this.toastService.error('Erreur lors de la création.');
+      },
     });
   }
 

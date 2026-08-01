@@ -77,13 +77,7 @@ import { TeamService } from '../../../services/team.service';
             <option *ngFor="let s of sectors()" [value]="s">{{ s }}</option>
           </select>
         </div>
-        <div class="w-full sm:w-36">
-          <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1 ml-0.5">Source lead</label>
-          <select [(ngModel)]="filterLeadSource" (ngModelChange)="onFilterChange()" class="w-full py-3 px-3 rounded-xl bg-surface-container-low border-none text-sm font-semibold outline-none">
-            <option value="">Toutes sources</option>
-            <option *ngFor="let src of leadSources()" [value]="src">{{ src }}</option>
-          </select>
-        </div>
+        
         <div class="w-full sm:w-24">
           <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1 ml-0.5">Par page</label>
           <select [ngModel]="perPage()" (ngModelChange)="setPerPage(+$event)" class="w-full py-3 px-3 rounded-xl bg-surface-container-low border-none text-sm font-semibold outline-none">
@@ -100,6 +94,16 @@ import { TeamService } from '../../../services/team.service';
       </div>
 
       <div class="flex flex-wrap items-center justify-end gap-4 mb-2">
+        <div class="flex items-center gap-1 bg-surface-container-low rounded-xl p-1 mr-auto">
+          <button type="button" (click)="viewMode.set('list')" title="Vue liste"
+            [class]="'w-10 h-10 rounded-lg flex items-center justify-center transition-all ' + (viewMode() === 'list' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            <span class="material-symbols-outlined text-lg">view_list</span>
+          </button>
+          <button type="button" (click)="viewMode.set('cards')" title="Vue cartes"
+            [class]="'w-10 h-10 rounded-lg flex items-center justify-center transition-all ' + (viewMode() === 'cards' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            <span class="material-symbols-outlined text-lg">grid_view</span>
+          </button>
+        </div>
         <button routerLink="/prospection/nouveau" class="bg-primary hover:bg-secondary text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20 active:scale-95">
           <span class="material-symbols-outlined">add</span>
           Ajouter Prospect
@@ -114,7 +118,7 @@ import { TeamService } from '../../../services/team.service';
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-surface-container/30">
+      <div *ngIf="viewMode() === 'list'" class="bg-white rounded-2xl shadow-sm overflow-hidden border border-surface-container/30">
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-surface-container-low/50">
@@ -197,6 +201,63 @@ import { TeamService } from '../../../services/team.service';
         </table>
       </div>
 
+      <!-- VUE CARTES -->
+      <div *ngIf="loading() && viewMode() === 'cards'" class="py-16 text-center">
+        <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
+        <p class="text-outline font-medium mt-2">Chargement des prospects...</p>
+      </div>
+      <div *ngIf="!loading() && viewMode() === 'cards'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div *ngFor="let p of prospects()" class="bg-white rounded-2xl border border-surface-container/30 shadow-sm p-6 flex flex-col gap-4 hover:shadow-md transition-shadow">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center font-bold text-outline text-lg shrink-0">
+                {{ p.name.charAt(0) }}
+              </div>
+              <div class="min-w-0">
+                <p class="font-bold text-[#1a1831] text-sm truncate">{{ p.name }}</p>
+                <p class="text-xs text-on-surface-variant truncate">{{ p.sector || 'Secteur non défini' }}</p>
+              </div>
+            </div>
+            <select [value]="p.temperature"
+                    (change)="updateTemperature(p, $any($event.target).value)"
+                    [class]="'px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-tighter cursor-pointer border-none outline-none shrink-0 ' + getTempClass(p.temperature)">
+              <option value="chaud" class="bg-white text-error">CHAUD</option>
+              <option value="tiede" class="bg-white text-amber-600">TIÈDE</option>
+              <option value="froid" class="bg-white text-blue-600">FROID</option>
+            </select>
+          </div>
+
+          <div class="bg-surface-container-low rounded-xl p-3" *ngIf="p.contacts && p.contacts.length > 0">
+            <p class="text-[10px] font-bold text-outline uppercase tracking-wider mb-0.5">Correspondant</p>
+            <p class="text-sm font-semibold">{{ p.contacts[0].first_name }} {{ p.contacts[0].last_name }}</p>
+            <p class="text-xs text-outline">{{ p.contacts[0].phone }}</p>
+          </div>
+
+          <div class="flex items-center justify-between text-xs text-outline">
+            <span>{{ (p.last_contact_date || p.created_at) | date:'short' }}</span>
+            <span class="italic">{{ p.lead_source }}</span>
+          </div>
+
+          <div class="pt-3 border-t border-outline-variant/10">
+            <button *ngIf="p.temperature === 'chaud'" type="button"
+                    (click)="openConvertModal(p)"
+                    class="w-full px-3 py-2.5 bg-secondary text-white text-[10px] font-bold rounded-lg hover:brightness-110 transition-all uppercase tracking-wider">
+              Convertir Client
+            </button>
+            <button *ngIf="p.temperature !== 'chaud'" type="button" disabled
+                    title="Seuls les prospects CHAUDS peuvent être convertis en clients"
+                    class="w-full px-3 py-2.5 bg-surface-container text-outline text-[10px] font-bold rounded-lg cursor-not-allowed uppercase tracking-wider">
+              Convertir Client
+            </button>
+          </div>
+        </div>
+
+        <div *ngIf="prospects().length === 0" class="col-span-full py-20 text-center">
+          <span class="material-symbols-outlined text-4xl text-outline/30 mb-2">search_off</span>
+          <p class="text-outline font-medium">Aucun prospect pour ces critères.</p>
+        </div>
+      </div>
+
       <div class="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-surface-container/30 flex items-center gap-5">
           <div class="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
@@ -245,7 +306,7 @@ import { TeamService } from '../../../services/team.service';
       </div>
 
       <!-- Modal : confirmation conversion prospect → client -->
-      <div *ngIf="prospectToConvert()" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div *ngIf="prospectToConvert()" class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 py-10">
         <div class="absolute inset-0 bg-[#0f172a]/75 backdrop-blur-sm" (click)="cancelConvertModal()"></div>
         <div class="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl p-10 border border-outline-variant/10">
           <div class="flex items-start gap-4 mb-6">
@@ -296,6 +357,7 @@ export class ProspectListComponent implements OnInit {
   commercials = signal<any[]>([]);
   page = signal(1);
   perPage = signal(15);
+  viewMode = signal<'list' | 'cards'>('list');
 
   private search$ = new Subject<string>();
   private prospectService = inject(ProspectService);

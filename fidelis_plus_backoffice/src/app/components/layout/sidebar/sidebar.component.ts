@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
+import { LayoutService } from '../../../services/layout.service';
 import { User } from '../../../models/auth.model';
 import { UserRoles } from '../../../models/user-roles';
 
@@ -10,108 +11,145 @@ import { UserRoles } from '../../../models/user-roles';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <aside class="bg-[#1a1831] h-screen w-64 fixed left-0 top-0 overflow-y-auto flex flex-col py-6 shadow-xl z-50">
-      <div class="px-6 mb-10">
+    <!-- Overlay mobile : ferme la sidebar au clic en dehors -->
+    <div *ngIf="layoutService.sidebarOpen()"
+         (click)="layoutService.closeSidebar()"
+         class="fixed inset-0 bg-slate-900/50 z-40 lg:hidden"
+         aria-hidden="true">
+    </div>
+
+    <aside [ngClass]="layoutService.sidebarOpen() ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+           aria-label="Navigation principale"
+           class="bg-[#1a1831] h-screen w-64 fixed left-0 top-0 overflow-y-auto flex flex-col py-6 shadow-xl z-50 transition-transform duration-300 ease-out">
+      <div class="px-6 mb-10 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center">
-            <span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">precision_manufacturing</span>
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#15b9a3] to-[#006b5d] flex items-center justify-center">
+            <span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;" aria-hidden="true">precision_manufacturing</span>
           </div>
           <div>
             <h1 class="text-xl font-bold text-white tracking-tight">Mayelia CRM</h1>
-            <p class="text-[10px] text-slate-400 font-medium uppercase tracking-[0.2em]">Precision Editorial</p>
+            <p class="text-[11px] text-slate-300 font-medium uppercase tracking-[0.2em]">Gestion Commerciale</p>
           </div>
         </div>
+        <button (click)="layoutService.closeSidebar()" aria-label="Fermer le menu" class="lg:hidden text-slate-400 hover:text-white p-1">
+          <span class="material-symbols-outlined">close</span>
+        </button>
       </div>
-      
-      <nav class="flex-1 space-y-1">
+
+      <nav class="flex-1 space-y-0.5 overflow-y-auto" aria-label="Sections" (click)="onNavClick()">
         <!-- ESPACE CLIENT -->
-        <a *ngIf="showClientNav" routerLink="/client/dashboard" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]" [routerLinkActiveOptions]="{exact: true}" 
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">dashboard</span>
+        <p *ngIf="showClientNav" class="px-6 pt-1 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Mon espace</p>
+        <a *ngIf="showClientNav" routerLink="/client/dashboard" [routerLinkActiveOptions]="{exact: true}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">dashboard</span>
           Tableau de bord
         </a>
-        <a *ngIf="showClientNav" routerLink="/client/fleet" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">directions_car</span>
+        <a *ngIf="showClientNav" routerLink="/client/fleet" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">directions_car</span>
           Ma Flotte
         </a>
-        <a *ngIf="showClientNav" routerLink="/client/quotes" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">request_quote</span>
+        <a *ngIf="showClientNav" routerLink="/client/quotes" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">request_quote</span>
           Mes Devis
         </a>
-        <a *ngIf="showClientNav" routerLink="/client/appointments" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">event</span>
-          Mes Rendez-vous
+        <a *ngIf="showClientNav" routerLink="/client/support" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">support_agent</span>
+          Support
+        </a>
+        <a *ngIf="showClientNav" routerLink="/client/profile" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">person</span>
+          Mon Profil
         </a>
 
-        <!-- CRM / ADMIN -->
-        <a *ngIf="showCrmNav" routerLink="/dashboard" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]" [routerLinkActiveOptions]="{exact: true}" 
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">dashboard</span>
+        <!-- CRM -->
+        <p *ngIf="showCrmNav" class="px-6 pt-1 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Commercial</p>
+        <a *ngIf="showCrmNav" routerLink="/dashboard" [routerLinkActiveOptions]="{exact: true}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">dashboard</span>
           Dashboard
         </a>
-        <a *ngIf="showClientsNav" routerLink="/clients" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">group</span>
+        <a *ngIf="showClientsNav" routerLink="/clients" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">group</span>
           Clients & Contacts
         </a>
-        <a *ngIf="showCrmNav" routerLink="/prospection" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">analytics</span>
+        <a *ngIf="showCrmNav" routerLink="/prospection" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">analytics</span>
           Prospection
         </a>
-        <a *ngIf="showCrmNav" routerLink="/vente" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">receipt_long</span>
+        <a *ngIf="showCrmNav" routerLink="/vente" [routerLinkActiveOptions]="{exact: true}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">receipt_long</span>
           Devis
         </a>
-        <a *ngIf="showCrmNav" routerLink="/fleet" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">directions_car</span>
+        <a *ngIf="showCrmNav" routerLink="/vente/rappels" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+          FidelisPlus
+        </a>
+        <a *ngIf="showCrmNav" routerLink="/fleet" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">directions_car</span>
           Flotte
         </a>
-        <a *ngIf="showStaffNav" routerLink="/equipe" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">supervisor_account</span>
+        <a *ngIf="showStaffNav" routerLink="/equipe" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">supervisor_account</span>
           Équipe
         </a>
-        <a *ngIf="showLoyaltyNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">card_giftcard</span>
+
+        <!-- FIDÉLITÉ -->
+        <p *ngIf="showLoyaltyReadNav" class="px-6 pt-5 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Fidélité</p>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">card_giftcard</span>
           Comptes Fidélité
         </a>
-        <a *ngIf="showLoyaltyNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'bootstrap'}" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">badge</span>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'requests'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">inbox</span>
+          Demandes SIRA
+        </a>
+        <a *ngIf="showLoyaltyNav" routerLink="/marketing/studio-carte" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">badge</span>
           Studio Cartes PVC
         </a>
-        <a *ngIf="showLoyaltyNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'rewards'}" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">featured_seasonal_and_gifts</span>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'rewards'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">featured_seasonal_and_gifts</span>
           Catalogue Cadeaux
         </a>
-        <a *ngIf="showLoyaltyNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'reports'}" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">insert_chart</span>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'reports'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">insert_chart</span>
           Analytics Marketing
         </a>
-        <a *ngIf="showAdminNav" routerLink="/admin/stations" routerLinkActive="bg-white/5 border-[#15b9a3] text-[#15b9a3]"
-           class="flex items-center gap-3 px-4 py-3 text-slate-400 border-l-4 border-transparent hover:text-white transition-colors hover:bg-white/10 hover:translate-x-1 duration-250 font-headline text-sm tracking-wide">
-          <span class="material-symbols-outlined">ev_station</span>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'activity'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">history</span>
+          Activité
+        </a>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'redemptions'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">redeem</span>
+          Lots
+        </a>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'reminders'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">build_circle</span>
+          Rappels CT
+        </a>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'stations'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">ev_station</span>
           Stations
+        </a>
+        <a *ngIf="showAdminNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'settings'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">tune</span>
+          Réglages Fidélité
+        </a>
+
+        <!-- ADMINISTRATION -->
+        <p *ngIf="showAdminNav" class="px-6 pt-5 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Administration</p>
+        <a *ngIf="showAdminNav" routerLink="/admin/settings" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">settings</span>
+          Paramètres
         </a>
       </nav>
 
-      <div class="px-4 mt-auto">
-        <div class="flex items-center gap-3 px-2 border-t border-white/5 pt-6">
-          <div class="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-white font-bold text-xs border border-white/10">
+      <div class="px-4 mt-auto pt-4">
+        <div class="flex items-center gap-3 px-3 py-3 rounded-2xl bg-white/[0.04] border border-white/5">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-[#15b9a3] to-[#006b5d] flex items-center justify-center text-white font-bold text-xs shrink-0">
             {{ userInitials }}
           </div>
           <div class="overflow-hidden">
             <p class="text-white text-sm font-semibold truncate">{{ userName }}</p>
-            <p class="text-slate-500 text-xs truncate">{{ userRole }}</p>
+            <p class="text-slate-400 text-[11px] truncate capitalize">{{ userRole }}</p>
           </div>
         </div>
       </div>
@@ -123,11 +161,22 @@ import { UserRoles } from '../../../models/user-roles';
 })
 export class SidebarComponent {
   currentUser: User | null = null;
+  layoutService = inject(LayoutService);
+
+  readonly navLink = 'group flex items-center gap-3 mx-3 my-0.5 px-4 py-2.5 rounded-2xl text-slate-300 border-l-[3px] border-transparent hover:text-white hover:bg-white/5 transition-all duration-200 font-headline text-sm tracking-wide';
+  readonly navLinkActive = 'bg-gradient-to-r from-[#15b9a3]/25 to-[#15b9a3]/0 text-white border-[#15b9a3] shadow-sm';
 
   constructor(private authService: AuthService) {
     this.authService.currentUser$.subscribe(user => {
       this.currentUser = user;
     });
+  }
+
+  onNavClick(): void {
+    // Ferme la sidebar après navigation sur mobile
+    if (window.innerWidth < 1024) {
+      this.layoutService.closeSidebar();
+    }
   }
 
   get showCrmNav(): boolean {
@@ -139,14 +188,20 @@ export class SidebarComponent {
   }
 
   get showClientsNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL, UserRoles.MARKETING);
+    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL);
   }
 
   get showStaffNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN);
+    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL);
   }
 
+  /** Accès complet fidélité : admin + marketing (bootstrap, gestion récompenses) */
   get showLoyaltyNav(): boolean {
+    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.MARKETING);
+  }
+
+  /** Fidélité (comptes, catalogue, analytics) : réservé au service marketing + admin. */
+  get showLoyaltyReadNav(): boolean {
     return this.authService.hasRole(UserRoles.ADMIN, UserRoles.MARKETING);
   }
 

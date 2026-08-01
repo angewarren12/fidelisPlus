@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { VehicleService } from '../../../services/vehicle.service';
 import { ToastService } from '../../../services/toast.service';
+import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehicle-status';
 
 @Component({
   selector: 'app-vehicle-detail',
@@ -37,10 +38,9 @@ import { ToastService } from '../../../services/toast.service';
           </div>
           
           <div class="flex items-center gap-3">
-            <span [class]="'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ' + 
-              (vehicle().status === 'a_jour' ? 'bg-secondary/10 text-secondary' : 'bg-error/10 text-error')">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest" [ngClass]="statusBadgeClass(vehicle().status)">
               <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
-              {{ vehicle().status === 'a_jour' ? 'Véhicule en règle' : 'Entretien en retard' }}
+              {{ statusLabel(vehicle().status) }}
             </span>
             <span class="text-[10px] text-outline font-bold uppercase tracking-widest border-l border-outline-variant/20 pl-3">
               {{ vehicle().fuel_type || 'Thermique' }} • {{ vehicle().year || 'N/A' }}
@@ -173,6 +173,53 @@ import { ToastService } from '../../../services/toast.service';
               </div>
             </div>
 
+            <!-- INFOS TECHNIQUES & TARIFICATION (issues de l'import parc auto) -->
+            <div class="pt-8 border-t border-outline-variant/10" *ngIf="hasTechnicalInfo()">
+              <h4 class="text-[10px] font-black text-outline uppercase tracking-widest mb-6">Informations techniques &amp; tarification</h4>
+              <div class="grid grid-cols-2 gap-6">
+                <div class="space-y-1" *ngIf="vehicle().vehicle_type">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Type (genre)</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().vehicle_type }}</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().ptac_kg">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">PTAC</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().ptac_kg }} kg</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().seats">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Places assises</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().seats }}</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().registration_date">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Mise en circulation</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().registration_date | date:'dd/MM/yyyy' }}</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().fiscal_power_cv">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Puissance fiscale</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().fiscal_power_cv }} CV</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().ct_amount_ht != null">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Visite technique HT</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().ct_amount_ht | number:'1.0-0' }} CFA</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().ct_vat_amount != null">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">TVA</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().ct_vat_amount | number:'1.0-0' }} CFA</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().ct_amount_ttc != null">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Visite technique TTC</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().ct_amount_ttc | number:'1.0-0' }} CFA</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().vignette_amount != null">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Vignette</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().vignette_amount | number:'1.0-0' }} CFA</p>
+                </div>
+                <div class="space-y-1" *ngIf="vehicle().penalty_amount != null">
+                  <p class="text-[9px] font-black uppercase text-outline/40 tracking-widest">Pénalité</p>
+                  <p class="text-sm font-bold text-on-surface">{{ vehicle().penalty_amount | number:'1.0-0' }} CFA</p>
+                </div>
+              </div>
+            </div>
+
             <!-- NOTES / MAINTENANCE PULSE -->
             <div class="pt-8 border-t border-outline-variant/10">
               <div class="flex items-center gap-4 p-6 rounded-3xl bg-surface-container text-on-surface">
@@ -219,7 +266,7 @@ import { ToastService } from '../../../services/toast.service';
       </div>
 
       <!-- Modal : date de visite -->
-      <div *ngIf="showVisitModal()" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div *ngIf="showVisitModal()" class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 py-10">
         <div class="absolute inset-0 bg-[#0f172a]/70 backdrop-blur-sm" (click)="closeVisitModal()"></div>
         <div class="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-8 border border-outline-variant/10 animate-fade-in">
           <div class="flex items-center gap-3 mb-2">
@@ -262,6 +309,8 @@ import { ToastService } from '../../../services/toast.service';
   `]
 })
 export class VehicleDetailComponent implements OnInit {
+  statusLabel = vehicleStatusLabel;
+  statusBadgeClass = vehicleStatusBadgeClass;
   vehicle = signal<any>(null);
   requestId = signal<number | null>(null);
   recordingVisit = signal(false);
@@ -273,6 +322,15 @@ export class VehicleDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private vehicleService = inject(VehicleService);
   private toastService = inject(ToastService);
+
+  hasTechnicalInfo(): boolean {
+    const v = this.vehicle();
+    if (!v) return false;
+    return [
+      v.vehicle_type, v.ptac_kg, v.seats, v.registration_date, v.fiscal_power_cv,
+      v.ct_amount_ht, v.ct_vat_amount, v.ct_amount_ttc, v.vignette_amount, v.penalty_amount,
+    ].some((f) => f !== null && f !== undefined && f !== '');
+  }
 
   ngOnInit(): void {
     const rid = this.route.snapshot.queryParamMap.get('request_id');

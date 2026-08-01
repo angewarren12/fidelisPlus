@@ -10,18 +10,23 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 use App\Traits\ScopesByRole;
+use App\Services\NotificationService;
 
 class QuoteRequestController extends Controller
 {
     use ScopesByRole;
+
+    public function __construct(private readonly NotificationService $notifs)
+    {
+    }
 
     /**
      * Liste des demandes de devis (Vue Commercial/Admin).
      */
     public function index(Request $request)
     {
-        $query = QuoteRequest::with(['user', 'company', 'vehicle']);
-        
+        $query = QuoteRequest::with(['user', 'company', 'vehicles']);
+
         $this->scopeForUser($query);
 
         return response()->json([
@@ -36,7 +41,8 @@ class QuoteRequestController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'vehicle_id' => 'required|exists:vehicles,id',
+            'vehicle_ids' => 'required|array',
+            'vehicle_ids.*' => 'exists:vehicles,id',
             // Mobile peut envoyer une demande sans pièces jointes.
             'registration_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
             'vignette_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
@@ -48,14 +54,17 @@ class QuoteRequestController extends Controller
         }
 
         $user = $request->user();
-        $vehicle = Vehicle::findOrFail($request->vehicle_id);
+        
+        $vehicles = Vehicle::whereIn('id', $request->vehicle_ids)->get();
 
-        // Sécurité : Vérifier que le véhicule appartient à l'entreprise de l'utilisateur
-        if ($vehicle->company_id !== $user->company_id && $user->role !== 'admin') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Ce véhicule ne vous appartient pas.'
-            ], 403);
+        // Sécurité : Vérifier que les véhicules appartiennent à l'entreprise de l'utilisateur
+        foreach ($vehicles as $vehicle) {
+            if ($vehicle->company_id !== $user->company_id && $user->role !== 'admin') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Le véhicule avec l\'ID ' . $vehicle->id . ' ne vous appartient pas.'
+                ], 403);
+            }
         }
 
         // Stockage optionnel des images
@@ -69,12 +78,17 @@ class QuoteRequestController extends Controller
         $quoteRequest = QuoteRequest::create([
             'user_id' => $user->id,
             'company_id' => $user->company_id,
-            'vehicle_id' => $vehicle->id,
+            'vehicle_id' => $vehicles->first()->id, // Keep the first one to avoid null constraint issue
             'registration_image' => $regPath,
             'vignette_image' => $vigPath,
             'status' => 'pending',
             'notes' => $request->notes,
         ]);
+
+        $quoteRequest->vehicles()->attach($request->vehicle_ids);
+
+        // Recharger avec la relation pour le retour
+        $quoteRequest->load('vehicles');
 
         return response()->json([
             'status' => 'success',
@@ -88,7 +102,7 @@ class QuoteRequestController extends Controller
      */
     public function show($id)
     {
-        $quoteRequest = QuoteRequest::with(['user', 'company', 'vehicle'])->findOrFail($id);
+        $quoteRequest = QuoteRequest::with(['user', 'company', 'vehicles'])->findOrFail($id);
 
         $user = request()->user();
         if ($user) {
@@ -128,7 +142,28 @@ class QuoteRequestController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Modification refusée.'], 403);
         }
 
+        $oldStatus = $quoteRequest->status;
         $quoteRequest->update(['status' => $request->status]);
+
+        if ($request->status === 'rejected' && $oldStatus !== 'rejected') {
+            $contact = $quoteRequest->company?->contacts()->first()
+                ?? \App\Models\User::where('company_id', $quoteRequest->company_id)->first();
+
+            if ($contact) {
+                // S'il y a plusieurs véhicules, on affiche le nombre ou on join
+                $vehicleLabels = $quoteRequest->vehicles->pluck('license_plate')->implode(', ');
+                $vehicleLabel = $vehicleLabels ?: 'inconnu';
+                $this->notifs->notifyUser(
+                    $contact,
+                    'Demande de devis refusée',
+                    "Votre demande de devis pour le véhicule {$vehicleLabel} a été refusée.",
+                    type: 'quote_request_rejected',
+                    data: ['quote_request_id' => $quoteRequest->id],
+                    action: 'quote_request_list',
+                    channel: 'in_app'
+                );
+            }
+        }
 
         return response()->json([
             'status' => 'success',

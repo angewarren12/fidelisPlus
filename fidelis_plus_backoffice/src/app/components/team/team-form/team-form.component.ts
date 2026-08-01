@@ -111,6 +111,55 @@ import { AuthService } from '../../../services/auth.service';
       </form>
 
     </div>
+
+    <!-- MODAL IDENTIFIANTS -->
+    <div *ngIf="createdCredentials()" class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 py-10">
+      <div class="absolute inset-0 bg-[#161d1b]/60 backdrop-blur-sm"></div>
+      <div class="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-fade-in">
+
+        <div class="bg-[#1b1932] px-8 py-7 flex items-center gap-4">
+          <div class="w-11 h-11 rounded-xl bg-primary-container flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-white text-2xl">check_circle</span>
+          </div>
+          <div>
+            <p class="text-secondary-fixed text-[10px] font-black uppercase tracking-[0.14em]">Compte créé</p>
+            <h2 class="text-white text-lg font-black tracking-tight">Identifiants du collaborateur</h2>
+          </div>
+        </div>
+
+        <div class="p-8 space-y-6">
+          <p class="text-outline text-sm leading-relaxed">
+            Ces identifiants ont aussi été envoyés par email à <strong class="text-on-surface">{{ createdCredentials()?.email }}</strong>.
+            Conseillez au collaborateur de changer son mot de passe dès sa première connexion.
+          </p>
+
+          <div class="bg-surface-container-low rounded-2xl border border-outline-variant/20 divide-y divide-outline-variant/20">
+            <div class="p-5 flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-[10px] font-black uppercase tracking-widest text-outline mb-1">Email</p>
+                <p class="text-sm font-bold text-on-surface truncate">{{ createdCredentials()?.email }}</p>
+              </div>
+              <button type="button" (click)="copy(createdCredentials()?.email, 'email')" class="shrink-0 w-9 h-9 rounded-lg bg-white border border-outline-variant/20 flex items-center justify-center hover:bg-surface-container transition-colors">
+                <span class="material-symbols-outlined text-lg" [class.text-primary]="copiedField === 'email'">{{ copiedField === 'email' ? 'check' : 'content_copy' }}</span>
+              </button>
+            </div>
+            <div class="p-5 flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-[10px] font-black uppercase tracking-widest text-outline mb-1">Mot de passe provisoire</p>
+                <p class="text-base font-black text-primary tracking-widest font-mono">{{ createdCredentials()?.password }}</p>
+              </div>
+              <button type="button" (click)="copy(createdCredentials()?.password, 'password')" class="shrink-0 w-9 h-9 rounded-lg bg-white border border-outline-variant/20 flex items-center justify-center hover:bg-surface-container transition-colors">
+                <span class="material-symbols-outlined text-lg" [class.text-primary]="copiedField === 'password'">{{ copiedField === 'password' ? 'check' : 'content_copy' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <button type="button" (click)="closeCredentialsModal()" class="w-full px-8 py-4 rounded-xl bg-[#1b1932] text-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors">
+            Terminé
+          </button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -122,6 +171,8 @@ export class TeamFormComponent implements OnInit {
   isEditing = false;
   userId: number | null = null;
   isSaving = false;
+  createdCredentials = signal<{ email: string; password: string } | null>(null);
+  copiedField: 'email' | 'password' | null = null;
 
   private fb = inject(FormBuilder);
   private teamService = inject(TeamService);
@@ -195,9 +246,10 @@ export class TeamFormComponent implements OnInit {
       });
     } else {
       this.teamService.create(data).subscribe({
-        next: () => {
+        next: ({ user, temporary_password }) => {
+          this.isSaving = false;
           this.toastService.success('Collaborateur invité. Accès envoyés par email !');
-          this.router.navigate(['/equipe']);
+          this.createdCredentials.set({ email: user.email, password: temporary_password });
         },
         error: (err) => {
           this.isSaving = false;
@@ -205,5 +257,19 @@ export class TeamFormComponent implements OnInit {
         }
       });
     }
+  }
+
+  copy(value: string | undefined, field: 'email' | 'password') {
+    if (!value) return;
+    navigator.clipboard.writeText(value);
+    this.copiedField = field;
+    setTimeout(() => {
+      if (this.copiedField === field) this.copiedField = null;
+    }, 1500);
+  }
+
+  closeCredentialsModal() {
+    this.createdCredentials.set(null);
+    this.router.navigate(['/equipe']);
   }
 }

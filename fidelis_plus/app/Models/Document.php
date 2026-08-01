@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\Storage;
 
 class Document extends Model
 {
@@ -16,5 +17,15 @@ class Document extends Model
     public function documentable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    protected static function booted()
+    {
+        static::deleting(function ($document) {
+            if ($document->path) {
+                $fileName = str_replace('/storage/', '', $document->path);
+                Storage::disk('public')->delete($fileName);
+            }
+        });
     }
 }

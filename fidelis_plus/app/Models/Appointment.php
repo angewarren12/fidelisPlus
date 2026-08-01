@@ -10,7 +10,6 @@ class Appointment extends Model
 {
     protected $fillable = [
         'company_id',
-        'vehicle_id',
         'station_id',
         'appointment_date',
         'is_pass_express',
@@ -27,9 +26,9 @@ class Appointment extends Model
         return $this->belongsTo(Company::class);
     }
 
-    public function vehicle(): BelongsTo
+    public function vehicles()
     {
-        return $this->belongsTo(Vehicle::class);
+        return $this->belongsToMany(Vehicle::class, 'appointment_vehicle');
     }
 
     public function station(): BelongsTo

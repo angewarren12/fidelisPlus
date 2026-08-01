@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "PowerShell(Start-Sleep -Seconds 5; try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/ping\" -UseBasicParsing -TimeoutSec 3; \"Backend OK: $\\($r.StatusCode\\)\" } catch { try { $r2 = Invoke-WebRequest -Uri \"http://localhost:8000\" -UseBasicParsing -TimeoutSec 3; \"Backend OK: $\\($r2.StatusCode\\)\" } catch { \"Backend: $\\($_.Exception.Message\\)\" } })",
+      "PowerShell(cd \"c:\\\\Users\\\\USER2\\\\.gemini\\\\antigravity\\\\scratch\\\\fidlisSass\\\\fidelis_plus\"; php artisan tinker --execute=\"App\\\\Models\\\\User::select\\('login','email','role','password'\\)->whereIn\\('role',['admin','marketing','commercial']\\)->get\\(\\)->each\\(function\\(\\\\$u\\){ echo \\\\$u->role.' | login:'.\\\\$u->login.' | email:'.\\\\$u->email.PHP_EOL; }\\);\" 2>&1)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4200)",
+      "Bash(taskkill //PID 33688 //F)",
+      "Bash(taskkill //PID 7064 //F)",
+      "Bash(curl -s -i -H \"Accept: application/json\" http://127.0.0.1:8000/api/v1/stations)",
+      "Bash(curl -s -H \"Accept: application/json\" -H \"Content-Type: application/json\" -X POST http://127.0.0.1:8000/api/v1/auth/login -d '{\"login\":\"marketing\",\"password\":\"password\"}')",
+      "Bash(curl -s -H \"Accept: application/json\" -H \"Content-Type: application/json\" -X POST http://127.0.0.1:8000/api/v1/auth/login -d '{\"login\":\"marketing@fidelis.ci\",\"password\":\"password\"}')",
+      "Bash(curl -s -H 'Accept: application/json' -H 'Authorization: Bearer 2|pHjPZzOnmaCCTKvKtLUxDzPwwaOIFeYFm8mzS3SN3c615c62' http://127.0.0.1:8000/api/v1/loyalty/accounts/4/scan-history)",
+      "Bash(curl -s -H 'Accept: application/json' -H 'Authorization: Bearer 2|pHjPZzOnmaCCTKvKtLUxDzPwwaOIFeYFm8mzS3SN3c615c62' http://127.0.0.1:8000/api/v1/loyalty/activity?limit=3)",
+      "Bash(curl -s -H \"Accept: application/json\" -H \"Content-Type: application/json\" -X POST http://127.0.0.1:8005/api/v1/auth/login -d '{\"login\":\"marketing@fidelis.ci\",\"password\":\"password\"}')",
+      "Bash(python3 -c ' *)",
+      "Bash(xargs grep -l \"inspection\\\\|visit\\\\|technique\")"
+    ]
+  }
+}

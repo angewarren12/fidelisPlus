@@ -37,6 +37,36 @@ export class AuthService {
     );
   }
 
+  forgotPassword(email: string): Observable<{ status: string; message?: string }> {
+    return this.http.post<{ status: string; message?: string }>(`${this.API_URL}/auth/forgot-password`, { email });
+  }
+
+  changePassword(currentPassword: string, password: string, passwordConfirmation: string): Observable<{ status: string; data: User }> {
+    return this.http.patch<{ status: string; data: User }>(`${this.API_URL}/auth/change-password`, {
+      current_password: currentPassword,
+      password,
+      password_confirmation: passwordConfirmation,
+    }).pipe(
+      tap((res) => {
+        const token = this.getToken();
+        if (token && res.data) {
+          this.setSession(token, res.data);
+        }
+      })
+    );
+  }
+
+  updateProfile(payload: { first_name?: string; last_name?: string; phone?: string | null; email?: string }): Observable<{ status: string; data: User }> {
+    return this.http.patch<{ status: string; data: User }>(`${this.API_URL}/me`, payload).pipe(
+      tap((res) => {
+        const token = this.getToken();
+        if (token && res.data) {
+          this.setSession(token, res.data);
+        }
+      })
+    );
+  }
+
   logout(): void {
     localStorage.removeItem(this.AUTH_TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);

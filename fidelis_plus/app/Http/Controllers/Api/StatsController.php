@@ -78,7 +78,7 @@ class StatsController extends Controller
         $overdueCount = (clone $fleetQuery)->where('status', 'en_retard')->count();
 
         // 5. Rendez-vous du jour
-        $appointmentsQuery = \App\Models\Appointment::with(['company', 'vehicle'])
+        $appointmentsQuery = \App\Models\Appointment::with(['company', 'vehicles', 'station'])
             ->whereDate('appointment_date', today());
             
         if ($isClient) {

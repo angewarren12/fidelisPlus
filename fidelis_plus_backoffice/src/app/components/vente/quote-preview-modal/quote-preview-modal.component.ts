@@ -1,12 +1,13 @@
-import { Component, Input, Output, EventEmitter, computed } from '@angular/core';
+import { Component, Input, Output, EventEmitter, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { SettingService } from '../../../services/setting.service';
 
 @Component({
   selector: 'app-quote-preview-modal',
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 py-10 sm:p-6">
       
       <!-- BACKDROP -->
       <div class="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-sm hide-on-print" (click)="close.emit()"></div>
@@ -27,8 +28,14 @@ import { CommonModule } from '@angular/common';
               <button type="button" (click)="close.emit()" class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-outline hover:bg-surface-container-high transition-all">
                  <span class="material-symbols-outlined">close</span>
               </button>
-              <button type="button" (click)="onSend()" class="px-8 flex items-center gap-2 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20">
+              <button *ngIf="showSendButton" type="button" (click)="onSend()" class="px-8 flex items-center gap-2 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20">
                  <span class="material-symbols-outlined text-sm">send</span> Envoyer
+              </button>
+              <button *ngIf="showAcceptDeclineButtons && quoteData?.status === 'sent'" type="button" (click)="decline.emit()" class="px-6 flex items-center gap-2 rounded-xl bg-red-50 text-error text-xs font-black uppercase tracking-widest hover:bg-error hover:text-white transition-all">
+                 <span class="material-symbols-outlined text-sm">close</span> Refuser
+              </button>
+              <button *ngIf="showAcceptDeclineButtons && quoteData?.status === 'sent'" type="button" (click)="accept.emit()" class="px-8 flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-primary text-white text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20">
+                 <span class="material-symbols-outlined text-sm">check_circle</span> Accepter
               </button>
            </div>
         </div>
@@ -37,7 +44,7 @@ import { CommonModule } from '@angular/common';
         <div class="flex-1 overflow-y-auto p-4 md:p-10 bg-surface-container-low flex justify-center print-scroll-area">
             
             <!-- A4 PAPER -->
-            <div class="bg-white w-full max-w-[794px] min-h-[1123px] shadow-sm p-12 relative print-container">
+            <div class="bg-white w-full max-w-[794px] min-h-[1123px] shadow-sm p-12 relative print-container flex flex-col">
                
                <!-- LOGO & BRANDING -->
                <div class="flex justify-between items-start mb-16">
@@ -89,25 +96,47 @@ import { CommonModule } from '@angular/common';
                      </tr>
                   </thead>
                   <tbody>
-                     <tr *ngFor="let item of quoteData?.items" class="border-b border-outline-variant/10 hover:bg-surface-container-low transition-colors">
-                        <td class="py-4 pr-4">
-                           <ng-container *ngIf="splitDescription(item.description) as s; else rawDesc">
-                              <div class="flex flex-wrap items-center gap-2">
-                                 <p class="text-sm font-bold text-on-surface">{{ s.title }}</p>
-                                 <span *ngIf="s.plate" class="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest">
-                                    {{ s.plate }}
-                                 </span>
+                     <ng-container *ngFor="let group of groupedItems().groups">
+                        <!-- En-tête du groupe de véhicule -->
+                        <tr class="bg-surface-container-low/60 border-b border-outline-variant/10">
+                           <td colspan="4" class="py-2.5 px-3">
+                              <div class="flex items-center gap-3">
+                                 <span class="px-2.5 py-1 rounded-md bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">{{ group.plate }}</span>
+                                 <span *ngIf="group.vehicleName" class="text-xs font-bold text-outline">{{ group.vehicleName }}</span>
                               </div>
-                              <p *ngIf="s.detail" class="text-[10px] text-outline font-medium mt-1">{{ s.detail }}</p>
-                           </ng-container>
-                           <ng-template #rawDesc>
-                              <p class="text-sm font-bold text-on-surface">{{ item.description }}</p>
-                           </ng-template>
-                        </td>
-                        <td class="py-4 text-sm font-bold text-outline text-center">{{ item.quantity || 1 }}</td>
-                        <td class="py-4 text-sm font-bold text-outline text-right">{{ item.price | number:'1.0-0' }}</td>
-                        <td class="py-4 text-sm font-black text-on-surface text-right">{{ (item.price * (item.quantity || 1)) | number:'1.0-0' }}</td>
-                     </tr>
+                           </td>
+                        </tr>
+                        <!-- Lignes du véhicule -->
+                        <tr *ngFor="let item of group.items" class="border-b border-outline-variant/10 hover:bg-surface-container-low transition-colors">
+                           <td class="py-3 pr-4 pl-6">
+                              <p class="text-sm font-bold text-on-surface">{{ item.parsed?.title || item.description }}</p>
+                              <p *ngIf="item.parsed?.detail" class="text-[10px] text-outline font-medium mt-0.5">{{ item.parsed.detail }}</p>
+                           </td>
+                           <td class="py-3 text-sm font-bold text-outline text-center">{{ item.quantity || 1 }}</td>
+                           <td class="py-3 text-sm font-bold text-outline text-right">{{ item.price | number:'1.0-0' }}</td>
+                           <td class="py-3 text-sm font-black text-on-surface text-right">{{ (item.price * (item.quantity || 1)) | number:'1.0-0' }}</td>
+                        </tr>
+                     </ng-container>
+
+                     <!-- Lignes générales (sans plaque ou frais annexes) -->
+                     <ng-container *ngIf="groupedItems().others.length > 0">
+                        <tr *ngIf="groupedItems().groups.length > 0" class="bg-surface-container-low/60 border-b border-outline-variant/10">
+                           <td colspan="4" class="py-2.5 px-3">
+                              <div class="flex items-center gap-3">
+                                 <span class="text-[10px] font-black text-outline uppercase tracking-widest">Autres / Frais Généraux</span>
+                              </div>
+                           </td>
+                        </tr>
+                        <tr *ngFor="let item of groupedItems().others" class="border-b border-outline-variant/10 hover:bg-surface-container-low transition-colors">
+                           <td class="py-3 pr-4 pl-6">
+                              <p class="text-sm font-bold text-on-surface">{{ item.parsed?.title || item.description }}</p>
+                              <p *ngIf="item.parsed?.detail" class="text-[10px] text-outline font-medium mt-0.5">{{ item.parsed.detail }}</p>
+                           </td>
+                           <td class="py-3 text-sm font-bold text-outline text-center">{{ item.quantity || 1 }}</td>
+                           <td class="py-3 text-sm font-bold text-outline text-right">{{ item.price | number:'1.0-0' }}</td>
+                           <td class="py-3 text-sm font-black text-on-surface text-right">{{ (item.price * (item.quantity || 1)) | number:'1.0-0' }}</td>
+                        </tr>
+                     </ng-container>
                   </tbody>
                </table>
 
@@ -119,7 +148,7 @@ import { CommonModule } from '@angular/common';
                         <span class="font-bold text-on-surface">{{ totalHT() | number:'1.0-0' }} XOF</span>
                      </div>
                      <div class="flex items-center justify-between">
-                        <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA (18%)</span>
+                        <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA ({{ tvaRate() }}%)</span>
                         <span class="font-bold text-on-surface">{{ totalTVA() | number:'1.0-0' }} XOF</span>
                      </div>
                      <div class="flex items-center justify-between pt-4 border-t-2 border-on-surface mt-4">
@@ -129,10 +158,12 @@ import { CommonModule } from '@angular/common';
                   </div>
                </div>
 
-               <!-- FOOTER -->
-               <div class="absolute bottom-12 left-12 right-12 text-center border-t border-outline-variant/10 pt-6">
-                  <p class="text-[9px] text-outline uppercase tracking-widest font-bold">Mayelia Automotive - SARL au capital de 10.000.000 XOF - RCCM CI-ABJ-2026-B-XXXXX</p>
-                  <p class="text-[9px] text-outline/50 mt-1">Ce devis est valable 30 jours à compter de sa date d'émission.</p>
+               <!-- FOOTER : "mt-auto" sur un parent flex-col le colle en bas quand le contenu est
+                    court, mais le laisse redescendre naturellement (jamais de chevauchement avec
+                    le Total TTC) quand le contenu (lignes, véhicules) est long. -->
+               <div class="text-center border-t border-outline-variant/10 pt-6 mt-auto">
+                  <p class="text-[9px] text-outline uppercase tracking-widest font-bold whitespace-pre-line">{{ footerText() }}</p>
+                  <p class="text-[9px] text-outline/50 mt-1">Ce devis est valable {{ validityDays() }} jours à compter de sa date d'émission.</p>
                </div>
 
             </div>
@@ -151,11 +182,23 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class QuotePreviewModalComponent {
+  private settingSvc = inject(SettingService);
+
   @Input() quoteData: any;
   @Input() companyName: string = '';
   @Input() vehicles: any[] = [];
+  /** Bouton "Envoyer" — pertinent côté commercial uniquement. */
+  @Input() showSendButton: boolean = true;
+  /** Boutons "Accepter" / "Refuser" — pertinents côté client uniquement. */
+  @Input() showAcceptDeclineButtons: boolean = false;
   @Output() close = new EventEmitter<void>();
   @Output() send = new EventEmitter<void>();
+  @Output() accept = new EventEmitter<void>();
+  @Output() decline = new EventEmitter<void>();
+
+  tvaRate = computed(() => this.settingSvc.settings()?.['quote.legal.tva_rate'] ?? 18);
+  validityDays = computed(() => this.settingSvc.settings()?.['quote.legal.validity_days'] ?? 30);
+  footerText = computed(() => this.settingSvc.settings()?.['quote.legal.footer_text'] ?? 'Mayelia Automotive - SARL au capital de 10.000.000 XOF - RCCM CI-ABJ-2026-B-XXXXX');
 
   /** Nom affiché : input explicite ou champ porté par quoteData (ex. aperçu depuis liste). */
   get clientDisplayName(): string {
@@ -172,8 +215,37 @@ export class QuotePreviewModalComponent {
     return this.quoteData.items.reduce((sum: number, item: any) => sum + (item.price * (item.quantity || 1)), 0);
   });
 
-  totalTVA = computed(() => this.totalHT() * 0.18);
+  totalTVA = computed(() => this.totalHT() * (this.tvaRate() / 100));
   totalTTC = computed(() => this.totalHT() + this.totalTVA());
+
+  groupedItems = computed(() => {
+    if (!this.quoteData || !this.quoteData.items) return { groups: [], others: [] };
+    
+    const groups: { plate: string; vehicleName?: string; items: any[] }[] = [];
+    const others: any[] = [];
+    
+    // Create map for vehicle names
+    const vehicleMap = new Map<string, string>();
+    for (const v of this.vehicles) {
+      vehicleMap.set(v.license_plate, `${v.brand} ${v.model}`);
+    }
+
+    for (const item of this.quoteData.items) {
+      const parsed = this.splitDescription(item.description);
+      if (parsed && parsed.plate) {
+        let group = groups.find(g => g.plate === parsed.plate);
+        if (!group) {
+          group = { plate: parsed.plate, vehicleName: vehicleMap.get(parsed.plate), items: [] };
+          groups.push(group);
+        }
+        group.items.push({ ...item, parsed });
+      } else {
+        others.push({ ...item, parsed: parsed || { title: item.description, plate: '', detail: '' } });
+      }
+    }
+    
+    return { groups, others };
+  });
 
   onSend() {
     this.send.emit();

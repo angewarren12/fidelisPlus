@@ -6,7 +6,7 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#1b1932]/40 backdrop-blur-sm animate-fade-in">
+    <div class="fixed inset-0 z-[200] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-sm animate-fade-in">
       <div class="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden border border-outline-variant/10 p-8 text-center">
         
         <div class="w-16 h-16 rounded-2xl bg-error/10 text-error flex items-center justify-center mx-auto mb-6">

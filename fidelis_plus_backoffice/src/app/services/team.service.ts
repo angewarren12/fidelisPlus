@@ -57,8 +57,10 @@ export class TeamService {
     return this.http.get<{data: User}>(`${this.apiUrl}/${id}`).pipe(map(res => res.data));
   }
 
-  create(user: Partial<User>): Observable<User> {
-    return this.http.post<{data: User}>(this.apiUrl, user).pipe(map(res => res.data));
+  create(user: Partial<User>): Observable<{ user: User; temporary_password: string }> {
+    return this.http.post<{ data: User; temporary_password: string }>(this.apiUrl, user).pipe(
+      map(res => ({ user: res.data, temporary_password: res.temporary_password }))
+    );
   }
 
   update(id: number, user: Partial<User>): Observable<User> {

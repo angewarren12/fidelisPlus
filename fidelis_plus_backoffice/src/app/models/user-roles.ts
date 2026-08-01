@@ -23,8 +23,8 @@ export const BACKOFFICE_ROLES: UserRole[] = [
 
 export const CRM_ROLES: UserRole[] = [UserRoles.ADMIN, UserRoles.COMMERCIAL];
 
+/** Fidélité (comptes, catalogue, analytics) : réservé au service marketing + admin. */
 export const LOYALTY_READ_ROLES: UserRole[] = [
   UserRoles.ADMIN,
   UserRoles.MARKETING,
-  UserRoles.COMMERCIAL,
 ];

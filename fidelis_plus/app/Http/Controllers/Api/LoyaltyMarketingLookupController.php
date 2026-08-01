@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\Company;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 /**
  * Données de sélection pour le back-office marketing (carte fidélité particulier).
@@ -71,11 +73,66 @@ class LoyaltyMarketingLookupController extends Controller
             $q->where('name', 'like', $term);
         }
 
-        $rows = $q->limit($limit)->get(['id', 'name', 'company_type', 'category']);
+        $rows = $q->limit($limit)->get(['id', 'name', 'phone', 'company_type', 'category', 'created_via_marketing']);
 
         return response()->json([
             'status' => 'success',
             'data' => $rows,
+        ]);
+    }
+
+    /**
+     * Crée une nouvelle société cliente directement depuis le flux fidélité
+     * (visible ensuite dans le CRM commercial, type=client, marquée created_via_marketing).
+     */
+    public function createCompany(Request $request): JsonResponse
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:30',
+        ]);
+
+        $company = Company::create([
+            'name' => $request->input('name'),
+            'phone' => $request->input('phone'),
+            'category' => 'entreprise',
+            'type' => 'client',
+            'is_active' => true,
+            'created_via_marketing' => true,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $company->only(['id', 'name', 'phone', 'company_type', 'category', 'created_via_marketing']),
+        ]);
+    }
+
+    /**
+     * Crée un nouveau client particulier (rôle "client") depuis le flux fidélité.
+     */
+    public function createClientUser(Request $request): JsonResponse
+    {
+        $request->validate([
+            'first_name' => 'required|string|max:80',
+            'last_name' => 'required|string|max:80',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email|max:160|unique:users,email',
+        ]);
+
+        $email = $request->input('email') ?: 'loyalty-'.Str::random(10).'@mayelia.local';
+
+        $user = User::create([
+            'role' => 'client',
+            'first_name' => $request->input('first_name'),
+            'last_name' => $request->input('last_name'),
+            'phone' => $request->input('phone'),
+            'email' => $email,
+            'password' => Hash::make(Str::random(16)),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $user->only(['id', 'first_name', 'last_name', 'email', 'phone']),
         ]);
     }
 

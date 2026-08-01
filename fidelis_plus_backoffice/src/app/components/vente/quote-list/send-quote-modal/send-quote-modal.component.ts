@@ -8,7 +8,7 @@ import { QuoteService, Quote } from '../../../../services/quote.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[#1b1932]/40 backdrop-blur-md animate-fade-in text-on-surface">
+    <div class="fixed inset-0 z-[110] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-md animate-fade-in text-on-surface">
       <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-outline-variant/10">
         
         <div class="p-8 border-b border-surface-container/50 bg-surface-container-low/30">
@@ -20,11 +20,11 @@ import { QuoteService, Quote } from '../../../../services/quote.service';
           <!-- DESTINATAIRE -->
           <div class="space-y-2">
             <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Destinataire (Email)</label>
-            <div class="w-full bg-surface-container-low rounded-2xl p-4 flex items-center gap-3">
-               <span class="material-symbols-outlined text-primary text-lg">alternate_email</span>
-               <span class="text-sm font-bold">{{ email() }}</span>
+            <div class="w-full bg-surface-container-low rounded-2xl p-2 flex items-center gap-3 border border-transparent focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+               <span class="material-symbols-outlined text-primary text-lg ml-2">alternate_email</span>
+               <input type="email" [(ngModel)]="customEmail" class="w-full bg-transparent border-none text-sm font-bold outline-none p-2 text-on-surface" placeholder="contact@client.com" />
             </div>
-            <p class="text-[9px] text-outline/60 italic ml-1">* Email du correspondant ayant fait la demande.</p>
+            <p class="text-[9px] text-outline/60 italic ml-1">* Modifiez cet email si vous souhaitez envoyer à une autre adresse.</p>
           </div>
 
           <!-- MESSAGE -->
@@ -56,29 +56,29 @@ export class SendQuoteModalComponent implements OnInit {
   @Output() cancel = new EventEmitter<void>();
   @Output() sent = new EventEmitter<void>();
 
-  email = signal<string>('chargement...');
+  customEmail = '';
   message = '';
   sending = signal(false);
 
   private quoteService = inject(QuoteService);
 
   ngOnInit(): void {
-    // On pourrait charger l'email via la relation quoteRequest.user
-    // Pour la demo, on simule l'extraction de l'email
-    this.email.set(this.quote.company?.email || 'contact@client.com');
+    // On charge l'email du contact principal ou de l'entreprise
+    this.customEmail = this.quote.company?.email || 'contact@client.com';
     this.message = `Bonjour ${this.quote.company?.name},\n\nSuite à votre demande de devis, nous avons le plaisir de vous transmettre notre proposition commerciale concernant votre véhicule.\n\nCordialement,\nL'équipe commerciale Mayelia.`;
   }
 
   send(): void {
     this.sending.set(true);
-    // Simulation d'envoi d'email avec message personnalisé
-    setTimeout(() => {
-        this.quoteService.updateStatus(this.quote.id!, 'sent').subscribe({
-            next: () => {
-                this.sent.emit();
-            },
-            error: () => this.sending.set(false)
-        });
-    }, 1500);
+    this.quoteService.updateStatus(this.quote.id!, 'sent', {
+      email: this.customEmail.trim() || undefined,
+      message: this.message.trim() || undefined,
+    }).subscribe({
+      next: () => {
+        this.sending.set(false);
+        this.sent.emit();
+      },
+      error: () => this.sending.set(false)
+    });
   }
 }

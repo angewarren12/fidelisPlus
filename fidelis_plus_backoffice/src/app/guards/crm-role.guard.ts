@@ -13,8 +13,10 @@ export const crmRoleGuard: CanActivateFn = () => {
   }
   if (role === UserRoles.MARKETING) {
     router.navigate(['/marketing/fidelite']);
+  } else if (role === UserRoles.CLIENT) {
+    router.navigate(['/client/dashboard']);
   } else {
-    router.navigate(['/dashboard']);
+    router.navigate(['/login']);
   }
   return false;
 };

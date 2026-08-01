@@ -28,14 +28,24 @@ class LoyaltyActivityController extends Controller
             ->limit($limit)
             ->get()
             ->map(function ($s) {
+                $account = $s->loyaltyAccount;
+                $holderName = $account?->holder_type === 'company'
+                    ? ($account->company->name ?? 'Société')
+                    : ($account?->user ? $account->user->first_name . ' ' . $account->user->last_name : 'Client');
+
                 return [
                     'type' => 'scan',
                     'id' => $s->id,
                     'title' => 'Scan Carte',
                     'description' => 'Scan effectué à la station ' . ($s->station->name ?? '#'.$s->station_id),
                     'points' => $s->points_credited,
-                    'holder_name' => $s->loyaltyAccount->holder_name ?? 'Client',
+                    'card_number' => $account?->card_number,
+                    'holder_name' => $holderName,
                     'caissier' => $s->cashier ? ($s->cashier->first_name . ' ' . $s->cashier->last_name) : 'Auto',
+                    'vehicle_registration' => $s->vehicle_registration,
+                    'vehicle_brand' => $s->vehicle_brand,
+                    'vehicle_color' => $s->vehicle_color,
+                    'visit_type' => $s->visit_type,
                     'created_at' => $s->created_at,
                 ];
             });

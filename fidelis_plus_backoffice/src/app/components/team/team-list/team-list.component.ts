@@ -56,6 +56,16 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
           <span class="material-symbols-outlined text-lg" [class.animate-spin]="loading()">refresh</span>
           Actualiser
         </button>
+        <div class="flex items-center gap-1 bg-surface-container-low rounded-2xl p-1">
+          <button type="button" (click)="viewMode.set('cards')" title="Vue cartes"
+            [class]="'w-11 h-11 rounded-xl flex items-center justify-center transition-all ' + (viewMode() === 'cards' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            <span class="material-symbols-outlined text-lg">grid_view</span>
+          </button>
+          <button type="button" (click)="viewMode.set('list')" title="Vue liste"
+            [class]="'w-11 h-11 rounded-xl flex items-center justify-center transition-all ' + (viewMode() === 'list' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            <span class="material-symbols-outlined text-lg">view_list</span>
+          </button>
+        </div>
       </section>
 
       <section class="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -78,7 +88,70 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
         </div>
       </div>
 
-      <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- VUE LISTE (tableau) -->
+      <section *ngIf="!loading() && viewMode() === 'list'" class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-surface-container-low border-b border-outline-variant/10">
+                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Collaborateur</th>
+                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Rôle</th>
+                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-center">Clients</th>
+                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-center">Prospects</th>
+                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-outline-variant/10">
+              <tr *ngFor="let user of users()" class="hover:bg-surface-container-low/50 transition-colors">
+                <td class="px-6 py-4">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-on-surface font-bold text-sm shrink-0">
+                      {{ user.first_name.charAt(0) }}{{ user.last_name.charAt(0) }}
+                    </div>
+                    <div class="min-w-0">
+                      <p class="text-sm font-bold text-on-surface truncate">{{ user.first_name }} {{ user.last_name }}</p>
+                      <p class="text-xs text-outline truncate">{{ user.email }}</p>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4">
+                  <span
+                    [class.bg-primary/10]="user.role === 'admin'" [class.text-primary]="user.role === 'admin'"
+                    [class.bg-secondary/10]="user.role === 'commercial'" [class.text-secondary]="user.role === 'commercial'"
+                    class="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                     {{ user.role }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center text-sm font-bold text-on-surface">{{ user.clients_count || 0 }}</td>
+                <td class="px-6 py-4 text-center text-sm font-bold text-on-surface">{{ user.prospects_count || 0 }}</td>
+                <td class="px-6 py-4">
+                  <div class="flex items-center justify-end gap-2">
+                    <a *ngIf="showPerformanceLink(user)" (click)="goToPerformance(user.id)" title="Performances"
+                       class="w-9 h-9 rounded-xl bg-surface-container-low text-primary flex items-center justify-center hover:bg-primary/10 transition-colors cursor-pointer">
+                       <span class="material-symbols-outlined text-lg">monitoring</span>
+                    </a>
+                    <a [routerLink]="['/equipe/editer', user.id]" title="Éditer"
+                       class="w-9 h-9 rounded-xl bg-surface-container-low text-on-surface flex items-center justify-center hover:bg-surface-container-high transition-colors">
+                       <span class="material-symbols-outlined text-lg">edit</span>
+                    </a>
+                    <button type="button" (click)="prepareDelete(user)" title="Supprimer ou Réattribuer"
+                       class="w-9 h-9 rounded-xl bg-error/10 text-error flex items-center justify-center hover:bg-error hover:text-white transition-colors">
+                       <span class="material-symbols-outlined text-lg">delete</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr *ngIf="users().length === 0">
+                <td colspan="5" class="px-6 py-20 text-center text-outline/60 italic">
+                  Aucun collaborateur ne correspond à ces critères.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section *ngIf="viewMode() === 'cards'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
          <div *ngIf="loading()" class="col-span-full py-24 flex flex-col items-center justify-center text-outline">
             <span class="material-symbols-outlined animate-spin text-primary text-5xl mb-3">sync</span>
             <p class="font-medium">Chargement de l'équipe…</p>
@@ -137,7 +210,7 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
          </ng-container>
       </section>
 
-      <div *ngIf="userToDelete()" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div *ngIf="userToDelete()" class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 py-10">
          <div class="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-sm" (click)="cancelDelete()"></div>
          <div class="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl p-10 animate-fade-in">
             <h3 class="text-2xl font-headline font-black text-error mb-2">Attention</h3>
@@ -186,6 +259,7 @@ export class TeamListComponent implements OnInit {
   filterRole = '';
   page = signal(1);
   perPage = signal(12);
+  viewMode = signal<'cards' | 'list'>('cards');
 
   private search$ = new Subject<string>();
   private teamService = inject(TeamService);

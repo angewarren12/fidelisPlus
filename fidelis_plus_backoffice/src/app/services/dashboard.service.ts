@@ -7,6 +7,7 @@ export interface DashboardStats {
   revenue: {
     total_accepted: number;
     new_quotes_count: number;
+    total_quotes_count: number;
   };
   crm: {
     total_prospects: number;
@@ -14,18 +15,18 @@ export interface DashboardStats {
     conversion_rate: number;
   };
   fleet: {
+    jamais_controle: number;
     a_jour: number;
     bientot: number;
     en_retard: number;
   };
-  agenda: any[];
   alerts: {
     overdue_vehicles: number;
     pending_quotes: number;
     pending_requests: number;
   };
   recent_quotes?: any[];
-  inspections_weekly?: number[];
+  quotes_weekly?: number[];
 }
 
 @Injectable({

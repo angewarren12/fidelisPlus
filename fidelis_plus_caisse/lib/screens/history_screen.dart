@@ -112,6 +112,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       children: [
                                         Text(holderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                         Text('$dateStr à $timeStr', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                                        if ((event['vehicle_registration'] ?? '').toString().isNotEmpty)
+                                          Text(
+                                            [event['vehicle_registration'], event['vehicle_brand'], event['vehicle_color']]
+                                                .where((v) => (v ?? '').toString().isNotEmpty)
+                                                .join(' · '),
+                                            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                                          ),
                                       ],
                                     ),
                                   ),

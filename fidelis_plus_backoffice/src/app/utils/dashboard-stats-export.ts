@@ -22,9 +22,9 @@ export function buildDashboardStatsCsvRows(
     ['Flotte à jour (nombre)', stats.fleet?.a_jour ?? 0],
     ['Flotte bientôt (nombre)', stats.fleet?.bientot ?? 0],
     ['Flotte en retard (nombre)', stats.fleet?.en_retard ?? 0],
+    ['Flotte jamais contrôlée (nombre)', stats.fleet?.jamais_controle ?? 0],
     ['Alertes véhicules en retard (nombre)', stats.alerts?.overdue_vehicles ?? 0],
-    ['Demandes devis en attente (nombre)', stats.alerts?.pending_requests ?? 0],
-    ['RDV du jour (nombre)', Array.isArray(stats.agenda) ? stats.agenda.length : 0]
+    ['Demandes devis en attente (nombre)', stats.alerts?.pending_requests ?? 0]
   );
   return rows;
 }

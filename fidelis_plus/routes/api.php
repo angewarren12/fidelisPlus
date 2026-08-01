@@ -43,6 +43,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])
         ->name('auth.reset-password');
 
+    // --- Formulaire public "Fidelis Plus" (QR station, relance visite technique) ---
+    Route::post('/public/technical-visit-reminders', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('public.technical-visit-reminders.store');
+
     Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
@@ -58,6 +63,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('team.reassign');
 
         Route::apiResource('stations', StationController::class);
+        
+        Route::get('/settings', [\App\Http\Controllers\Api\SettingController::class, 'index'])->name('settings.index');
+        Route::put('/settings', [\App\Http\Controllers\Api\SettingController::class, 'update'])->middleware('role:admin')->name('settings.update');
 
         Route::post('admin/notifications/broadcast', [AdminNotificationController::class, 'broadcast'])
             ->middleware('role:admin')
@@ -127,6 +135,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('/{id}', [QuoteController::class, 'show'])->name('show');
             Route::patch('/{id}', [QuoteController::class, 'update'])->name('update');
             Route::patch('/{id}/status', [QuoteController::class, 'updateStatus'])->name('status');
+            Route::post('/{id}/upload-accord', [QuoteController::class, 'uploadBonPourAccord'])->name('upload-accord');
         });
 
         Route::prefix('quote-requests')->middleware('role:admin,commercial,client')->name('quote-requests.')->group(function () {
@@ -174,6 +183,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
             Route::get('/accounts', [LoyaltyAccountController::class, 'index'])->name('accounts.index');
             Route::get('/accounts/{id}', [LoyaltyAccountController::class, 'show'])->name('accounts.show');
+            Route::get('/accounts/{id}/scan-history', [LoyaltyAccountController::class, 'scanHistory'])->name('accounts.scan-history');
 
             Route::get('/rewards', [LoyaltyRewardController::class, 'index'])->name('rewards.index');
             Route::get('/rewards/{id}', [LoyaltyRewardController::class, 'show'])->name('rewards.show');
@@ -191,7 +201,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
         Route::prefix('loyalty')->middleware('role:admin,marketing')->name('loyalty.')->group(function () {
             Route::get('/lookup/client-users', [LoyaltyMarketingLookupController::class, 'clientUsers'])->name('lookup.client-users');
+            Route::post('/lookup/client-users', [LoyaltyMarketingLookupController::class, 'createClientUser'])->name('lookup.client-users.store');
             Route::get('/lookup/companies', [LoyaltyMarketingLookupController::class, 'companies'])->name('lookup.companies');
+            Route::post('/lookup/companies', [LoyaltyMarketingLookupController::class, 'createCompany'])->name('lookup.companies.store');
             Route::get('/stats/referrals', [LoyaltyMarketingLookupController::class, 'referralStats'])->name('stats.referrals');
             Route::post('/accounts/{id}/adjust', [LoyaltyAccountController::class, 'adjust'])->name('accounts.adjust');
 
@@ -211,6 +223,14 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::prefix('loyalty')->middleware('role:admin,marketing')->name('loyalty.marketing.')->group(function () {
             Route::post('/accounts/bootstrap', [LoyaltyAccountController::class, 'bootstrap'])->name('accounts.bootstrap');
             Route::get('/accounts/{id}/qr-payload', [LoyaltyAccountController::class, 'qrPayload'])->name('accounts.qr-payload');
+            Route::patch('/accounts/{id}', [LoyaltyAccountController::class, 'update'])->name('accounts.update');
+            Route::post('/accounts/{id}/associate-card', [LoyaltyAccountController::class, 'associateCard'])->name('accounts.associate-card');
+        });
+
+        /** Call center marketing : relances visite technique (formulaire QR station). */
+        Route::prefix('technical-visit-reminders')->middleware('role:admin,marketing,commercial')->name('technical-visit-reminders.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'index'])->name('index');
+            Route::patch('/{id}', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'update'])->name('update');
         });
     });
 });

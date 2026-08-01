@@ -4,13 +4,15 @@ import { FormsModule } from '@angular/forms';
 import { StationService, Station } from '../../../services/station.service';
 import { ToastService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
+import { MarketingBgPatternComponent } from '../../ui/marketing-bg-pattern/marketing-bg-pattern.component';
 
 @Component({
   selector: 'app-station-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MarketingBgPatternComponent],
   template: `
-    <div class="max-w-6xl mx-auto px-6 py-10 animate-fade-in space-y-10">
+    <app-marketing-bg-pattern></app-marketing-bg-pattern>
+    <div class="max-w-6xl mx-auto px-6 py-10 animate-fade-in space-y-10 relative z-[1]">
       <header class="flex items-center justify-between gap-6">
         <div>
           <h1 class="text-3xl font-headline font-black text-on-surface tracking-tight">Gestion des Stations</h1>
@@ -66,7 +68,7 @@ import { AuthService } from '../../../services/auth.service';
       </div>
 
       <!-- Station Modal Form -->
-      <div *ngIf="showModal()" class="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-fade-in">
+      <div *ngIf="showModal()" class="fixed inset-0 z-[60] overflow-y-auto flex items-start justify-center p-6 py-10 animate-fade-in">
         <div class="absolute inset-0 bg-on-surface/40 backdrop-blur-sm" (click)="closeModal()"></div>
         <div class="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden p-8 space-y-6">
           <header>

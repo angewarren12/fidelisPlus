@@ -15,11 +15,15 @@ class LoyaltyAccount extends Model
 
     protected $fillable = [
         'holder_key',
+        'card_number',
         'holder_type',
         'company_id',
         'user_id',
         'public_uuid',
         'points_balance',
+        'subscriber_name',
+        'trade_register',
+        'subscriber_function',
         'total_vehicles_referred',
         'milestone_apporteur_50_reached_at',
         'milestone_flotte_20_reached_at',
@@ -57,7 +61,22 @@ class LoyaltyAccount extends Model
             if (empty($account->public_uuid)) {
                 $account->public_uuid = (string) Str::uuid();
             }
+            if (empty($account->card_number)) {
+                $account->card_number = static::nextCardNumber();
+            }
         });
+    }
+
+    public static function nextCardNumber(): string
+    {
+        $lastId = (int) (static::max('id') ?? 0);
+
+        return str_pad((string) ($lastId + 1), 4, '0', STR_PAD_LEFT);
+    }
+
+    public function scanEvents(): HasMany
+    {
+        return $this->hasMany(LoyaltyPosScanEvent::class);
     }
 
     public function company(): BelongsTo

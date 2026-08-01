@@ -51,11 +51,11 @@ import { forkJoin, Observable } from 'rxjs';
             </div>
             
             <div class="space-y-2">
-              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Marque *</label>
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Marque</label>
               <input type="text" formControlName="brand" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none" placeholder="Ex: Toyota">
             </div>
             <div class="space-y-2">
-              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Modèle *</label>
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Modèle</label>
               <input type="text" formControlName="model" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none" placeholder="Ex: Hilux">
             </div>
 
@@ -76,6 +76,56 @@ import { forkJoin, Observable } from 'rxjs';
                 <option value="hybride">Hybride</option>
                 <option value="electrique">Électrique</option>
               </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-3xl shadow-sm p-10 border border-surface-container/40 block">
+          <div class="flex items-center gap-3 mb-10">
+            <div class="w-2 h-8 bg-tertiary rounded-full"></div>
+            <h2 class="font-headline font-extrabold text-2xl text-on-surface">Informations techniques &amp; tarification</h2>
+          </div>
+
+          <div class="grid grid-cols-2 gap-8">
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Type (genre)</label>
+              <input type="text" formControlName="vehicle_type" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none" placeholder="Ex: VP, Camionnette">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">PTAC (kg)</label>
+              <input type="number" formControlName="ptac_kg" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none" placeholder="Ex: 1500">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Places assises</label>
+              <input type="number" formControlName="seats" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none" placeholder="Ex: 5">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Mise en circulation</label>
+              <input type="date" formControlName="registration_date" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Puissance fiscale (CV)</label>
+              <input type="number" formControlName="fiscal_power_cv" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none" placeholder="Ex: 9">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Visite technique HT (CFA)</label>
+              <input type="number" formControlName="ct_amount_ht" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">TVA (CFA)</label>
+              <input type="number" formControlName="ct_vat_amount" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Visite technique TTC (CFA)</label>
+              <input type="number" formControlName="ct_amount_ttc" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Montant vignette (CFA)</label>
+              <input type="number" formControlName="vignette_amount" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-outline ml-1">Pénalité (CFA)</label>
+              <input type="number" formControlName="penalty_amount" class="w-full bg-surface-container-low border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none">
             </div>
           </div>
         </section>
@@ -178,11 +228,21 @@ export class VehicleFormComponent implements OnInit {
 
     this.vehicleForm = this.fb.group({
       license_plate: ['', [Validators.required, Validators.minLength(4)]],
-      brand: ['', Validators.required],
-      model: ['', Validators.required],
+      brand: [''],
+      model: [''],
       year: [null],
       fuel_type: [''],
       last_visit_date: [''],
+      vehicle_type: [''],
+      ptac_kg: [null],
+      seats: [null],
+      registration_date: [''],
+      fiscal_power_cv: [null],
+      ct_amount_ht: [null],
+      ct_vat_amount: [null],
+      ct_amount_ttc: [null],
+      vignette_amount: [null],
+      penalty_amount: [null],
     });
 
     if (this.clientId) {
@@ -203,6 +263,16 @@ export class VehicleFormComponent implements OnInit {
             year: v.year ?? null,
             fuel_type: v.fuel_type || '',
             last_visit_date: last ? String(last).slice(0, 10) : '',
+            vehicle_type: v.vehicle_type || '',
+            ptac_kg: v.ptac_kg ?? null,
+            seats: v.seats ?? null,
+            registration_date: v.registration_date ? String(v.registration_date).slice(0, 10) : '',
+            fiscal_power_cv: v.fiscal_power_cv ?? null,
+            ct_amount_ht: v.ct_amount_ht ?? null,
+            ct_vat_amount: v.ct_vat_amount ?? null,
+            ct_amount_ttc: v.ct_amount_ttc ?? null,
+            vignette_amount: v.vignette_amount ?? null,
+            penalty_amount: v.penalty_amount ?? null,
           });
           this.loadingVehicle.set(false);
         },
@@ -259,6 +329,16 @@ export class VehicleFormComponent implements OnInit {
       year: raw.year ?? null,
       fuel_type: raw.fuel_type || null,
       last_visit_date: raw.last_visit_date || null,
+      vehicle_type: raw.vehicle_type || null,
+      ptac_kg: raw.ptac_kg ?? null,
+      seats: raw.seats ?? null,
+      registration_date: raw.registration_date || null,
+      fiscal_power_cv: raw.fiscal_power_cv ?? null,
+      ct_amount_ht: raw.ct_amount_ht ?? null,
+      ct_vat_amount: raw.ct_vat_amount ?? null,
+      ct_amount_ttc: raw.ct_amount_ttc ?? null,
+      vignette_amount: raw.vignette_amount ?? null,
+      penalty_amount: raw.penalty_amount ?? null,
     };
 
     const afterSave = (vehicleId: number) => {

@@ -81,4 +81,21 @@ class Vehicle extends Model
     {
         return $query->where('status', 'en_retard');
     }
+
+    protected static function booted()
+    {
+        // Garantie : si next_ct_date est null, le statut ne peut jamais être
+        // « en_retard » ou « bientot » — cela n'a aucun sens sans date connue.
+        static::saving(function (Vehicle $vehicle) {
+            if (empty($vehicle->next_ct_date) && in_array($vehicle->status, ['en_retard', 'bientot'])) {
+                $vehicle->status = 'a_jour';
+            }
+        });
+
+        static::deleting(function ($vehicle) {
+            foreach ($vehicle->documents as $doc) {
+                $doc->delete();
+            }
+        });
+    }
 }

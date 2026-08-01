@@ -21,6 +21,7 @@
     "apexcharts": "^5.10.6",
     "chart.js": "^4.5.1",
     "font-awesome": "^4.7.0",
+    "html5-qrcode": "^2.3.8",
     "laravel-echo": "^2.3.4",
     "ng-apexcharts": "^2.4.0",
     "ng2-charts": "^10.0.0",

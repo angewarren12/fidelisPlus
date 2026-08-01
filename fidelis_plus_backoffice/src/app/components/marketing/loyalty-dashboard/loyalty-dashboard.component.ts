@@ -4,26 +4,46 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { NgApexchartsModule } from 'ng-apexcharts';
 import QRCode from 'qrcode';
-import { CardGeneratorComponent } from '../card-generator/card-generator.component';
 import {
   LoyaltyService,
   LoyaltyAccountRow,
-  LoyaltyClientUserOption,
-  LoyaltyCompanyOption,
   LoyaltyRedemptionRow,
   LoyaltyRewardRow,
+  LoyaltyScanHistoryRow,
   StationScanReport,
+  PaginatedMeta,
+  LoyaltyMemberRow,
+  CreateLoyaltyMemberPayload,
 } from '../../../services/loyalty.service';
+import { QrCameraScannerComponent } from '../qr-camera-scanner/qr-camera-scanner.component';
 import { ToastService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRoles } from '../../../models/user-roles';
+import {
+  TechnicalVisitReminderService,
+  TechnicalVisitReminderRow,
+  ReminderStatus,
+  PaginatedMeta as ReminderPaginatedMeta,
+} from '../../../services/technical-visit-reminder.service';
 
-type LoyaltyTab = 'accounts' | 'reports' | 'bootstrap' | 'activity' | 'redemptions' | 'rewards' | 'settings';
+type LoyaltyTab =
+  | 'accounts'
+  | 'reports'
+  | 'activity'
+  | 'redemptions'
+  | 'rewards'
+  | 'settings'
+  | 'stations'
+  | 'reminders'
+  | 'requests';
+
+import { StationListComponent } from '../station-list/station-list.component';
+import { MarketingBgPatternComponent } from '../../ui/marketing-bg-pattern/marketing-bg-pattern.component';
 
 @Component({
   selector: 'app-loyalty-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, CardGeneratorComponent],
+  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, StationListComponent, QrCameraScannerComponent, MarketingBgPatternComponent],
   templateUrl: './loyalty-dashboard.component.html',
   styles: [
     `
@@ -50,45 +70,90 @@ export class LoyaltyDashboardComponent implements OnInit {
   private toastService = inject(ToastService);
   private auth = inject(AuthService);
   private route = inject(ActivatedRoute);
+  private reminderService = inject(TechnicalVisitReminderService);
 
   tab = signal<LoyaltyTab>('accounts');
   accounts = signal<LoyaltyAccountRow[]>([]);
+  accountsMeta = signal<PaginatedMeta | null>(null);
   rewards = signal<LoyaltyRewardRow[]>([]);
+  rewardSearch = '';
+  rewardStatusFilter: 'all' | 'active' | 'inactive' = 'all';
   redemptions = signal<LoyaltyRedemptionRow[]>([]);
+  redemptionsMeta = signal<PaginatedMeta | null>(null);
+  pendingRedemptionsCount = signal(0);
+
+  // Demandes de carte SIRA en attente (fusionné depuis "Mes Clients")
+  memberRequests = signal<LoyaltyMemberRow[]>([]);
+
+  // Clients fidélité validés mais sans carte associée (affichés dans "Comptes Fidélité"
+  // en plus des vrais comptes, avec un bouton "Associer une carte" à la place des actions).
+  cardlessMembers = signal<LoyaltyMemberRow[]>([]);
+  loadingCardlessMembers = signal(false);
+  blankCardStock = signal<number | null>(null);
+  loadingMemberRequests = signal(false);
+  processingRequestId = signal<number | null>(null);
+
+  // Création d'un nouveau client fidélité
+  showCreateMemberModal = signal(false);
+  creatingMember = signal(false);
+  createMemberForm: CreateLoyaltyMemberPayload = this.emptyMemberForm();
+
+  // Associer une carte physique vierge à un client fidélité
+  assignCardTarget = signal<{ memberId: number; label: string; cardNumber: string | null } | null>(null);
+  assignCardPayload = '';
+  assigningCard = signal(false);
+  showAssignCardCamera = signal(false);
+
+  // Sélection d'une carte déjà imprimée et prête (alternative au scan)
+  showPickPrintedCard = signal(false);
+  printedCards = signal<LoyaltyAccountRow[]>([]);
+  loadingPrintedCards = signal(false);
+  pickingCardId = signal<number | null>(null);
   settings = signal<any[]>([]);
   activity = signal<any[]>([]);
-  referralStats = signal<{ total_referrals: number; top_referrers: { id: number; name: string; referrals_count: number }[] } | null>(null);
+  scanHistory = signal<LoyaltyScanHistoryRow[]>([]);
 
   loadingAccounts = signal(false);
   loadingActivity = signal(false);
   loadingSettings = signal(false);
   loadingRedemptions = signal(false);
+  loadingScanHistory = signal(false);
   reportLoading = signal(false);
-  bootstrapLoading = signal(false);
 
   accountSearchQuery = '';
   lastQrPayload = signal<string | null>(null);
   qrDataUrl = signal<string | null>(null);
   qrLoadingId = signal<number | null>(null);
-  showCardModal = signal(false);
-  printAccount = signal<LoyaltyAccountRow | null>(null);
-  
+
   selectedAccountDetail = signal<LoyaltyAccountRow | null>(null);
+
+  showEditModal = signal(false);
+  editAccount = signal<LoyaltyAccountRow | null>(null);
+  editForm = { subscriber_name: '', trade_register: '', subscriber_function: '' };
+  editSaving = signal(false);
+
+  showVehiclesModal = signal(false);
+  vehiclesAccount = signal<LoyaltyAccountRow | null>(null);
+
+  reminders = signal<TechnicalVisitReminderRow[]>([]);
+  remindersMeta = signal<ReminderPaginatedMeta | null>(null);
+  loadingReminders = signal(false);
+  reminderFilter: ReminderStatus | 'all' = 'pending';
+  reminderNotesDraft: Record<number, string> = {};
 
   reportDateFrom = '';
   reportDateTo = '';
   stationReport = signal<StationScanReport | null>(null);
   chartOptions: any;
 
-  bootstrapMode: 'company' | 'user' = 'company';
-  companySearch = '';
-  userSearch = '';
-  companyOptions = signal<LoyaltyCompanyOption[]>([]);
-  userOptions = signal<LoyaltyClientUserOption[]>([]);
-  selectedCompanyId: number | null = null;
-  selectedUserId: number | null = null;
-
   redemptionFilter = 'pending';
+  redemptionSearch = '';
+  redemptionFilters = [
+    { value: 'pending', label: 'En attente' },
+    { value: 'delivered', label: 'Livrés' },
+    { value: 'cancelled', label: 'Annulés' },
+    { value: 'all', label: 'Tous' },
+  ];
 
   showClaimModal = signal(false);
   claimAccount = signal<LoyaltyAccountRow | null>(null);
@@ -105,7 +170,6 @@ export class LoyaltyDashboardComponent implements OnInit {
   editingReward: LoyaltyRewardRow | null = null;
   rewardForm = { name: '', description: '', points_cost: 100, is_active: true, sort_order: 0 };
   rewardSaving = signal(false);
-  cardQrPayload = '';
 
   ngOnInit(): void {
     const td = this.todayInputDate();
@@ -115,13 +179,6 @@ export class LoyaltyDashboardComponent implements OnInit {
     this.reportDateTo = td;
 
     this.route.queryParams.subscribe((p) => {
-      const cid = p['company_id'];
-      if (cid) {
-        this.selectedCompanyId = Number(cid);
-        this.bootstrapMode = 'company';
-        this.switchTab('bootstrap');
-        this.searchCompanies();
-      }
       if (p['tab']) {
         this.switchTab(p['tab'] as LoyaltyTab);
       }
@@ -129,9 +186,21 @@ export class LoyaltyDashboardComponent implements OnInit {
 
     this.loadAccounts();
     this.loadRewards();
-    if (this.canManageLoyalty()) {
-      this.loadReferralStats();
-    }
+  }
+
+  pageTitle(): string {
+    const titles: Record<LoyaltyTab, string> = {
+      accounts: 'Comptes Fidélité',
+      reports: 'Analytics Marketing',
+      activity: 'Activité',
+      redemptions: 'Demandes de lots',
+      rewards: 'Catalogue Récompenses',
+      settings: 'Réglages Fidélité',
+      stations: 'Stations',
+      reminders: 'Rappels Visite Technique',
+      requests: 'Demandes de carte SIRA',
+    };
+    return titles[this.tab()] ?? 'Espace Fidélité';
   }
 
   switchTab(t: LoyaltyTab): void {
@@ -141,11 +210,51 @@ export class LoyaltyDashboardComponent implements OnInit {
     else if (t === 'settings') this.loadSettings();
     else if (t === 'redemptions') this.loadRedemptions();
     else if (t === 'rewards') this.loadRewards();
+    else if (t === 'reminders') this.loadReminders();
+    else if (t === 'requests') this.loadMemberRequests();
   }
 
-  loadAccounts(): void {
+  loadReminders(page = 1): void {
+    this.loadingReminders.set(true);
+    const status = this.reminderFilter === 'all' ? undefined : this.reminderFilter;
+    this.reminderService.list(status, page, 20).subscribe({
+      next: (res) => {
+        this.reminders.set(res.items);
+        this.remindersMeta.set(res.meta);
+        for (const r of res.items) {
+          if (this.reminderNotesDraft[r.id] === undefined) this.reminderNotesDraft[r.id] = r.notes || '';
+        }
+        this.loadingReminders.set(false);
+      },
+      error: () => {
+        this.loadingReminders.set(false);
+        this.toastService.error('Erreur chargement des rappels.');
+      },
+    });
+  }
+
+  setReminderStatus(r: TechnicalVisitReminderRow, status: ReminderStatus): void {
+    this.reminderService.update(r.id, { status, notes: this.reminderNotesDraft[r.id] }).subscribe({
+      next: () => {
+        this.toastService.success('Statut mis à jour.');
+        this.loadReminders();
+      },
+      error: () => this.toastService.error('Mise à jour impossible.'),
+    });
+  }
+
+  saveReminderNotes(r: TechnicalVisitReminderRow): void {
+    const notes = this.reminderNotesDraft[r.id];
+    if (notes === undefined) return;
+    this.reminderService.update(r.id, { notes }).subscribe({
+      next: () => this.toastService.success('Note enregistrée.'),
+      error: () => this.toastService.error('Enregistrement impossible.'),
+    });
+  }
+
+  loadAccounts(page = 1): void {
     this.loadingAccounts.set(true);
-    this.loyaltyService.listAccounts(1, 100).subscribe({
+    this.loyaltyService.listAccounts(page, 20).subscribe({
       next: (res) => {
         let items = res.items;
         if (this.accountSearchQuery) {
@@ -155,16 +264,42 @@ export class LoyaltyDashboardComponent implements OnInit {
               a.company?.name?.toLowerCase().includes(q) ||
               a.user?.first_name?.toLowerCase().includes(q) ||
               a.user?.last_name?.toLowerCase().includes(q) ||
-              a.holder_key.toLowerCase().includes(q),
+              a.member?.nom?.toLowerCase().includes(q) ||
+              a.member?.prenom?.toLowerCase().includes(q) ||
+              a.member?.nom_entreprise?.toLowerCase().includes(q) ||
+              a.holder_key.toLowerCase().includes(q) ||
+              a.card_number?.toLowerCase().includes(q),
           );
         }
         this.accounts.set(items);
+        this.accountsMeta.set(res.meta);
         this.loadingAccounts.set(false);
       },
       error: () => {
         this.loadingAccounts.set(false);
         this.toastService.error('Erreur chargement comptes.');
       },
+    });
+    this.loadCardlessMembers();
+    this.loadBlankCardStock();
+  }
+
+  loadCardlessMembers(): void {
+    this.loadingCardlessMembers.set(true);
+    this.loyaltyService.listMembers({ per_page: 100, search: this.accountSearchQuery.trim() || undefined }).subscribe({
+      next: (res) => {
+        this.cardlessMembers.set(res.items.filter((m) => !m.loyalty_account));
+        this.loadingCardlessMembers.set(false);
+      },
+      error: () => this.loadingCardlessMembers.set(false),
+    });
+  }
+
+  /** Nombre de cartes vierges disponibles en stock — désactive "Associer une carte" à 0. */
+  loadBlankCardStock(): void {
+    this.loyaltyService.listAccounts(1, 1, { holder_type: 'unassigned' }).subscribe({
+      next: (res) => this.blankCardStock.set(res.meta.total),
+      error: () => {},
     });
   }
 
@@ -215,20 +350,29 @@ export class LoyaltyDashboardComponent implements OnInit {
     });
   }
 
-  loadReferralStats(): void {
-    this.loyaltyService.referralStats().subscribe({
-      next: (data) => this.referralStats.set(data),
-      error: () => {},
+  loadScanHistory(accountId: number): void {
+    this.loadingScanHistory.set(true);
+    this.loyaltyService.getScanHistory(accountId).subscribe({
+      next: (res) => {
+        this.scanHistory.set(res.items);
+        this.loadingScanHistory.set(false);
+      },
+      error: () => {
+        this.scanHistory.set([]);
+        this.loadingScanHistory.set(false);
+      },
     });
   }
 
-  loadRedemptions(): void {
+  loadRedemptions(page = 1): void {
     this.loadingRedemptions.set(true);
     const status = this.redemptionFilter === 'all' ? undefined : this.redemptionFilter;
-    this.loyaltyService.listRedemptions(status).subscribe({
+    this.loyaltyService.listRedemptions(status, page, 20).subscribe({
       next: (res) => {
         this.redemptions.set(res.items);
+        this.redemptionsMeta.set(res.meta);
         this.loadingRedemptions.set(false);
+        if (this.redemptionFilter === 'pending') this.pendingRedemptionsCount.set(res.meta.total);
       },
       error: () => {
         this.loadingRedemptions.set(false);
@@ -239,50 +383,6 @@ export class LoyaltyDashboardComponent implements OnInit {
 
   loadRewards(): void {
     this.loyaltyService.listRewards(false).subscribe((r) => this.rewards.set(r));
-  }
-
-  searchCompanies(): void {
-    this.loyaltyService.searchCompanies(this.companySearch).subscribe((rows) => {
-      this.companyOptions.set(rows);
-      if (this.selectedCompanyId && !rows.find((c) => c.id === this.selectedCompanyId)) {
-        const pre = rows.find((c) => c.id === this.selectedCompanyId);
-        if (!pre && this.companySearch === '') {
-          this.loyaltyService.searchCompanies('').subscribe((all) => this.companyOptions.set(all));
-        }
-      }
-    });
-  }
-
-  searchUsers(): void {
-    this.loyaltyService.searchClientUsers(this.userSearch).subscribe((rows) => this.userOptions.set(rows));
-  }
-
-  runBootstrap(): void {
-    const opts =
-      this.bootstrapMode === 'company'
-        ? { company_id: this.selectedCompanyId ?? undefined, qr_payload: this.cardQrPayload.trim() || undefined }
-        : { user_id: this.selectedUserId ?? undefined, qr_payload: this.cardQrPayload.trim() || undefined };
-
-    if (!opts.company_id && !opts.user_id) {
-      this.toastService.error('Sélectionnez une société ou un client.');
-      return;
-    }
-
-    this.bootstrapLoading.set(true);
-    this.loyaltyService.bootstrapAccount(opts).subscribe({
-      next: async (res) => {
-        this.bootstrapLoading.set(false);
-        this.cardQrPayload = '';
-        await this.displayQr(res.qr_payload);
-        this.toastService.success('Carte fidélité créée ou récupérée.');
-        this.loadAccounts();
-        this.tab.set('accounts');
-      },
-      error: (err) => {
-        this.bootstrapLoading.set(false);
-        this.toastService.error(err?.error?.message || 'Échec création carte.');
-      },
-    });
   }
 
   refreshQrPayload(a: LoyaltyAccountRow, regenerate: boolean): void {
@@ -315,34 +415,95 @@ export class LoyaltyDashboardComponent implements OnInit {
     this.qrDataUrl.set(null);
   }
 
-  openCardModal(a: LoyaltyAccountRow): void {
-    this.printAccount.set(a);
-    this.loyaltyService.getQrPayload(a.id, false).subscribe({
-      next: (res) => {
-        this.lastQrPayload.set(res.qr_payload);
-        this.showCardModal.set(true);
-      },
-      error: () => this.toastService.error('Erreur chargement QR pour la carte.')
-    });
+  openVehiclesModal(a: LoyaltyAccountRow): void {
+    this.vehiclesAccount.set(a);
+    this.showVehiclesModal.set(true);
   }
 
-  closeCardModal(): void {
-    this.showCardModal.set(false);
-    this.printAccount.set(null);
-    this.lastQrPayload.set(null);
+  closeVehiclesModal(): void {
+    this.showVehiclesModal.set(false);
+    this.vehiclesAccount.set(null);
+  }
+
+  /** Regroupe l'historique des scans déjà chargé par véhicule (plaque). */
+  groupedVehicles(): { registration: string; brand: string | null; color: string | null; visits: string[]; totalPoints: number }[] {
+    const groups = new Map<string, { registration: string; brand: string | null; color: string | null; visits: string[]; totalPoints: number }>();
+    for (const s of this.scanHistory()) {
+      const plate = (s.vehicle_registration || '').trim();
+      if (!plate) continue;
+      if (!groups.has(plate)) {
+        groups.set(plate, { registration: plate, brand: s.vehicle_brand, color: s.vehicle_color, visits: [], totalPoints: 0 });
+      }
+      const g = groups.get(plate)!;
+      g.visits.push(s.created_at);
+      g.totalPoints += s.points_credited;
+      if (!g.brand && s.vehicle_brand) g.brand = s.vehicle_brand;
+      if (!g.color && s.vehicle_color) g.color = s.vehicle_color;
+    }
+    return Array.from(groups.values()).sort((a, b) => b.visits.length - a.visits.length);
   }
 
   openAccountDetail(a: LoyaltyAccountRow): void {
     this.selectedAccountDetail.set(a);
+    this.scanHistory.set([]);
+    this.loadScanHistory(a.id);
   }
 
   closeAccountDetail(): void {
     this.selectedAccountDetail.set(null);
+    this.scanHistory.set([]);
+  }
+
+  openEditModal(a: LoyaltyAccountRow): void {
+    this.editAccount.set(a);
+    this.editForm = {
+      subscriber_name: a.subscriber_name || '',
+      trade_register: a.trade_register || '',
+      subscriber_function: a.subscriber_function || '',
+    };
+    this.showEditModal.set(true);
+  }
+
+  closeEditModal(): void {
+    this.showEditModal.set(false);
+    this.editAccount.set(null);
+  }
+
+  saveEditAccount(): void {
+    const acc = this.editAccount();
+    if (!acc) return;
+    this.editSaving.set(true);
+    this.loyaltyService.updateAccount(acc.id, this.editForm).subscribe({
+      next: (updated) => {
+        this.editSaving.set(false);
+        this.toastService.success('Compte mis à jour.');
+        this.closeEditModal();
+        this.loadAccounts();
+        if (this.selectedAccountDetail()?.id === acc.id) this.selectedAccountDetail.set(updated);
+      },
+      error: () => {
+        this.editSaving.set(false);
+        this.toastService.error('Mise à jour impossible.');
+      },
+    });
+  }
+
+  toggleBlockAccount(a: LoyaltyAccountRow): void {
+    const blocked = !a.blocked_at;
+    if (!confirm(blocked ? `Bloquer le compte de ${this.holderLabel(a)} ?` : `Débloquer ce compte ?`)) return;
+    this.loyaltyService.updateAccount(a.id, { blocked }).subscribe({
+      next: (updated) => {
+        this.toastService.success(blocked ? 'Compte bloqué.' : 'Compte débloqué.');
+        this.loadAccounts();
+        if (this.selectedAccountDetail()?.id === a.id) this.selectedAccountDetail.set(updated);
+      },
+      error: () => this.toastService.error('Action impossible.'),
+    });
   }
 
   openClaimModal(a: LoyaltyAccountRow): void {
     this.claimAccount.set(a);
-    this.claimRewardId = this.rewards().find((r) => r.is_active)?.id ?? null;
+    this.claimRewardId = this.rewards().find((r) => r.is_active && r.points_cost <= a.points_balance)?.id ?? null;
     this.showClaimModal.set(true);
     this.loadRewards();
   }
@@ -425,12 +586,12 @@ export class LoyaltyDashboardComponent implements OnInit {
     this.editingReward = r ?? null;
     this.rewardForm = r
       ? {
-          name: r.name,
-          description: r.description || '',
-          points_cost: r.points_cost,
-          is_active: r.is_active,
-          sort_order: r.sort_order,
-        }
+        name: r.name,
+        description: r.description || '',
+        points_cost: r.points_cost,
+        is_active: r.is_active,
+        sort_order: r.sort_order,
+      }
       : { name: '', description: '', points_cost: 100, is_active: true, sort_order: 0 };
     this.showRewardForm.set(true);
   }
@@ -481,30 +642,82 @@ export class LoyaltyDashboardComponent implements OnInit {
     });
   }
 
+
+  toggleRewardActive(r: LoyaltyRewardRow): void {
+    this.loyaltyService.updateReward(r.id, { is_active: !r.is_active }).subscribe({
+      next: () => {
+        this.rewards.update((list) => list.map((x) => (x.id === r.id ? { ...x, is_active: !x.is_active } : x)));
+        this.toastService.success(r.is_active ? 'Récompense désactivée.' : 'Récompense activée.');
+      },
+      error: () => this.toastService.error('Erreur lors de la mise à jour.'),
+    });
+  }
+
+  filteredRewards(): LoyaltyRewardRow[] {
+    const q = this.rewardSearch.trim().toLowerCase();
+    let list = q ? this.rewards().filter((r) => r.name.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q)) : this.rewards();
+    if (this.rewardStatusFilter === 'active') list = list.filter((r) => r.is_active);
+    if (this.rewardStatusFilter === 'inactive') list = list.filter((r) => !r.is_active);
+    return [...list].sort((a, b) => a.sort_order - b.sort_order || a.points_cost - b.points_cost);
+  }
+
+  activeRewardsCount(): number {
+    return this.rewards().filter((r) => r.is_active).length;
+  }
+
   holderLabel(a: LoyaltyAccountRow): string {
     if (a.holder_type === 'company') return a.company?.name || 'Société';
+    if (a.holder_type === 'member') {
+      const m = a.member;
+      if (!m) return 'Client fidélité';
+      if (m.type === 'entreprise') return m.nom_entreprise || 'Entreprise';
+      return `${m.prenom ?? ''} ${m.nom ?? ''}`.trim() || 'Particulier';
+    }
+    if (a.holder_type === 'unassigned') return 'Carte vierge';
     return `${a.user?.first_name || ''} ${a.user?.last_name || ''}`.trim() || 'Particulier';
+  }
+
+  holderTypeBadge(a: LoyaltyAccountRow): string {
+    if (a.holder_type === 'company') return 'Entreprise';
+    if (a.holder_type === 'unassigned') return 'Vierge';
+    if (a.holder_type === 'member' && a.member?.type === 'entreprise') return 'Entreprise';
+    return 'Particulier';
   }
 
   filteredRewardsForClaim(): LoyaltyRewardRow[] {
     const acc = this.claimAccount();
     if (!acc) return [];
-    
-    let segment = 'particulier';
-    if (acc.holder_type === 'company' && acc.company) {
-      segment = acc.company.company_type || 'flotte';
-    }
-    
-    return this.rewards().filter(r => {
-      if (!r.client_segments || r.client_segments.length === 0) return true;
-      return r.client_segments.includes(segment);
-    });
+    return this.rewards().filter((r) => r.is_active && r.points_cost <= acc.points_balance);
+  }
+
+  canOfferReward(a: LoyaltyAccountRow): boolean {
+    return this.rewards().some((r) => r.is_active && r.points_cost <= a.points_balance);
+  }
+
+  nextReward(a: LoyaltyAccountRow): LoyaltyRewardRow | null {
+    const candidates = this.rewards()
+      .filter((r) => r.is_active && r.points_cost > a.points_balance)
+      .sort((x, y) => x.points_cost - y.points_cost);
+    return candidates[0] ?? null;
+  }
+
+  progressToNextReward(a: LoyaltyAccountRow): number {
+    const next = this.nextReward(a);
+    if (!next || next.points_cost === 0) return 100;
+    return Math.min(100, Math.round((a.points_balance / next.points_cost) * 100));
   }
 
   redemptionHolderLabel(r: LoyaltyRedemptionRow): string {
     const acc = r.account;
     if (!acc) return '—';
     return this.holderLabel(acc);
+  }
+
+  filteredRedemptions(): LoyaltyRedemptionRow[] {
+    const q = this.redemptionSearch.trim().toLowerCase();
+    if (!q) return this.redemptions();
+    return this.redemptions().filter((r) =>
+      this.redemptionHolderLabel(r).toLowerCase().includes(q) || (r.reward?.name ?? '').toLowerCase().includes(q));
   }
 
   updateChart(report: StationScanReport): void {
@@ -544,5 +757,207 @@ export class LoyaltyDashboardComponent implements OnInit {
   private formatDate(d: Date): string {
     const p = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  // ─── Demandes de carte SIRA (fusionné depuis "Mes Clients") ─────────────────
+
+  loadMemberRequests(): void {
+    this.loadingMemberRequests.set(true);
+    this.loyaltyService.listMemberRequests().subscribe({
+      next: (list) => {
+        this.memberRequests.set(list);
+        this.loadingMemberRequests.set(false);
+      },
+      error: () => this.loadingMemberRequests.set(false),
+    });
+  }
+
+  memberDisplayName(m: LoyaltyMemberRow): string {
+    if (m.type === 'entreprise') return m.nom_entreprise || 'Entreprise';
+    return `${m.prenom ?? ''} ${m.nom ?? ''}`.trim() || 'Particulier';
+  }
+
+  validateMemberRequestAction(m: LoyaltyMemberRow): void {
+    this.processingRequestId.set(m.id);
+    this.loyaltyService.validateMemberRequest(m.id).subscribe({
+      next: () => {
+        this.processingRequestId.set(null);
+        this.toastService.success('Demande validée, carte fidélité créée.');
+        this.memberRequests.update((list) => list.filter((r) => r.id !== m.id));
+        this.loadAccounts();
+      },
+      error: (err) => {
+        this.processingRequestId.set(null);
+        this.toastService.error(err?.error?.message || 'Erreur lors de la validation.');
+      },
+    });
+  }
+
+  rejectMemberRequestAction(m: LoyaltyMemberRow): void {
+    this.processingRequestId.set(m.id);
+    this.loyaltyService.rejectMemberRequest(m.id).subscribe({
+      next: () => {
+        this.processingRequestId.set(null);
+        this.toastService.success('Demande refusée.');
+        this.memberRequests.update((list) => list.filter((r) => r.id !== m.id));
+      },
+      error: (err) => {
+        this.processingRequestId.set(null);
+        this.toastService.error(err?.error?.message || 'Erreur lors du refus.');
+      },
+    });
+  }
+
+  // ─── Création d'un nouveau client fidélité ───────────────────────────────────
+
+  private emptyMemberForm(): CreateLoyaltyMemberPayload {
+    return { type: 'particulier', contact: '', email: '', nom: '', prenom: '', nom_entreprise: '', registre_commerce: '', nom_abonne: '', fonction: '' };
+  }
+
+  openCreateMemberModal(): void {
+    this.createMemberForm = this.emptyMemberForm();
+    this.showCreateMemberModal.set(true);
+  }
+
+  closeCreateMemberModal(): void {
+    this.showCreateMemberModal.set(false);
+  }
+
+  submitCreateMember(): void {
+    const f = this.createMemberForm;
+    if (!f.contact?.trim()) {
+      this.toastService.error('Le contact est obligatoire.');
+      return;
+    }
+    if (f.type === 'particulier' && (!f.nom?.trim() || !f.prenom?.trim())) {
+      this.toastService.error('Nom et prénom sont obligatoires.');
+      return;
+    }
+    if (f.type === 'entreprise' && !f.nom_entreprise?.trim()) {
+      this.toastService.error("Le nom de l'entreprise est obligatoire.");
+      return;
+    }
+
+    this.creatingMember.set(true);
+    this.loyaltyService.createMember(f).subscribe({
+      next: ({ member }) => {
+        this.creatingMember.set(false);
+        this.showCreateMemberModal.set(false);
+        this.toastService.success('Client créé. Scannez une carte vierge pour l\'associer.');
+        this.loadCardlessMembers();
+        this.openAssignCardModalForMember(member);
+      },
+      error: (err) => {
+        this.creatingMember.set(false);
+        this.toastService.error(err?.error?.message || 'Erreur lors de la création.');
+      },
+    });
+  }
+
+  // ─── Associer une carte physique vierge à un client fidélité ────────────────
+
+  openAssignCardModal(a: LoyaltyAccountRow): void {
+    if (!a.member) return;
+    this.assignCardTarget.set({ memberId: a.member.id, label: this.holderLabel(a), cardNumber: a.card_number });
+    this.assignCardPayload = '';
+    this.showAssignCardCamera.set(false);
+    this.showPickPrintedCard.set(false);
+  }
+
+  openAssignCardModalForMember(m: LoyaltyMemberRow): void {
+    this.assignCardTarget.set({ memberId: m.id, label: this.memberDisplayName(m), cardNumber: null });
+    this.assignCardPayload = '';
+    this.showAssignCardCamera.set(false);
+    this.showPickPrintedCard.set(false);
+  }
+
+  closeAssignCardModal(): void {
+    this.assignCardTarget.set(null);
+    this.assignCardPayload = '';
+    this.showAssignCardCamera.set(false);
+    this.showPickPrintedCard.set(false);
+  }
+
+  onAssignCardScanned(decodedText: string): void {
+    this.assignCardPayload = decodedText;
+    this.showAssignCardCamera.set(false);
+    this.submitAssignCard();
+  }
+
+  submitAssignCard(): void {
+    const target = this.assignCardTarget();
+    if (!target || !this.assignCardPayload.trim()) return;
+
+    this.assigningCard.set(true);
+    this.loyaltyService.assignCard(target.memberId, this.assignCardPayload.trim()).subscribe({
+      next: () => {
+        this.assigningCard.set(false);
+        this.toastService.success('Carte physique associée au client.');
+        this.closeAssignCardModal();
+        this.loadAccounts();
+      },
+      error: (err) => {
+        this.assigningCard.set(false);
+        this.toastService.error(err?.error?.message || "Erreur lors de l'association de la carte.");
+      },
+    });
+  }
+
+  // ─── Sélection d'une carte déjà imprimée et prête (sans scanner) ────────────
+
+  openPickPrintedCard(): void {
+    this.showPickPrintedCard.set(true);
+    this.showAssignCardCamera.set(false);
+    this.loadPrintedCards();
+  }
+
+  closePickPrintedCard(): void {
+    this.showPickPrintedCard.set(false);
+  }
+
+  loadPrintedCards(): void {
+    this.loadingPrintedCards.set(true);
+    this.loyaltyService.listAccounts(1, 50, { holder_type: 'unassigned', batch_status: 'printed' }).subscribe({
+      next: (res) => {
+        this.printedCards.set(res.items);
+        this.loadingPrintedCards.set(false);
+      },
+      error: () => this.loadingPrintedCards.set(false),
+    });
+  }
+
+  pickPrintedCard(card: LoyaltyAccountRow): void {
+    const target = this.assignCardTarget();
+    if (!target) return;
+
+    this.pickingCardId.set(card.id);
+    this.loyaltyService.getQrPayload(card.id).subscribe({
+      next: ({ qr_payload }) => {
+        this.pickingCardId.set(null);
+        if (!qr_payload) {
+          this.toastService.error('Impossible de récupérer le code de cette carte.');
+          return;
+        }
+        this.assignCardPayload = qr_payload;
+        this.showPickPrintedCard.set(false);
+        this.submitAssignCard();
+      },
+      error: () => {
+        this.pickingCardId.set(null);
+        this.toastService.error('Erreur lors de la récupération du code de cette carte.');
+      },
+    });
+  }
+
+  retryMemberProvisioning(a: LoyaltyAccountRow): void {
+    const memberId = a.member?.id;
+    if (!memberId) return;
+    this.loyaltyService.retryMemberSiraProvisioning(memberId).subscribe({
+      next: () => {
+        this.toastService.success('Nouvelle tentative de provisioning SIRA lancée.');
+        this.loadAccounts();
+      },
+      error: (err) => this.toastService.error(err?.error?.message || 'Erreur lors de la relance.'),
+    });
   }
 }

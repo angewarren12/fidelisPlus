@@ -140,6 +140,8 @@ class QuoteController extends Controller
             'items.*.description' => 'required|string',
             'items.*.price' => 'required|numeric',
             'items.*.quantity' => 'nullable|integer',
+            'appointment_date' => 'nullable|date',
+            'station_id' => 'nullable|exists:stations,id',
         ]);
 
         if ($validator->fails()) {
@@ -150,6 +152,23 @@ class QuoteController extends Controller
             $company = \App\Models\Company::find($request->company_id);
             if (!$company || (int) $company->commercial_id !== (int) $request->user()->id) {
                 return response()->json(['status' => 'error', 'message' => 'Opération refusée : Ce client ne fait pas partie de votre portefeuille.'], 403);
+            }
+        }
+
+        // Validate appointment slots
+        if ($request->filled('appointment_date') && $request->filled('station_id')) {
+            $station = \App\Models\Station::find($request->station_id);
+            if ($station) {
+                $existing = \App\Models\Appointment::where('station_id', $request->station_id)
+                    ->where('appointment_date', $request->appointment_date)
+                    ->count();
+                    
+                $globalCapacity = \App\Models\Setting::getValue('quote.appointment.global_capacity', 5);
+                $capacity = $station->express_capacity_per_slot > 0 ? $station->express_capacity_per_slot : (int) $globalCapacity;
+
+                if ($existing >= $capacity) {
+                    return response()->json(['status' => 'error', 'message' => 'Ce créneau a atteint le nombre maximum de rendez-vous pour cette station.'], 422);
+                }
             }
         }
 
@@ -175,8 +194,11 @@ class QuoteController extends Controller
 
             // Si c'est lié à une demande, on la marque comme "processed"
             if ($request->quote_request_id) {
-                $req = \App\Models\QuoteRequest::find($request->quote_request_id);
+                $req = \App\Models\QuoteRequest::lockForUpdate()->find($request->quote_request_id);
                 if ($req) {
+                    if ($req->status !== 'pending') {
+                        abort(422, 'Cette demande a déjà été traitée ou refusée.');
+                    }
                     $req->update(['status' => 'processed']);
                     // Si le devis n'avait pas de véhicules mais la demande en a un, on le lie
                     if (empty($request->vehicle_ids) && $req->vehicle_id) {
@@ -197,6 +219,31 @@ class QuoteController extends Controller
                     'price' => $price,
                     'quantity' => $qty,
                 ]);
+            }
+
+            if ($request->filled('appointment_date') && $request->filled('station_id')) {
+                $appointmentPrice = (float) \App\Models\Setting::getValue('quote.appointment.price', 0);
+                
+                $appointment = \App\Models\Appointment::create([
+                    'company_id' => $request->company_id,
+                    'station_id' => $request->station_id,
+                    'appointment_date' => $request->appointment_date,
+                    'status' => 'confirme',
+                ]);
+
+                if ($request->has('vehicle_ids') && is_array($request->vehicle_ids)) {
+                    $appointment->vehicles()->sync($request->vehicle_ids);
+                }
+
+                if ($appointmentPrice > 0) {
+                    $total += $appointmentPrice;
+                    QuoteItem::create([
+                        'quote_id' => $quote->id,
+                        'description' => 'Frais de prise de rendez-vous',
+                        'price' => $appointmentPrice,
+                        'quantity' => 1,
+                    ]);
+                }
             }
 
             $quote->update(['total_amount' => $total]);
@@ -365,6 +412,89 @@ class QuoteController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Statut du devis mis à jour.',
+            'data' => $quote
+        ]);
+    }
+    /**
+     * Upload du Bon pour Accord par le client ou le commercial.
+     */
+    public function uploadBonPourAccord(Request $request, $id)
+    {
+        $request->validate([
+            'bon_pour_accord' => 'required|file|mimes:pdf,jpeg,png,jpg|max:5120',
+        ]);
+
+        $quote = Quote::with('company')->findOrFail($id);
+
+        // Security check
+        $user = $request->user();
+        if ($user) {
+            if ($user->role === 'client' && (int) $quote->company_id !== (int) $user->company_id) {
+                return response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403);
+            }
+            if ($user->role === 'commercial' && (int) $quote->company->commercial_id !== (int) $user->id) {
+                return response()->json(['status' => 'error', 'message' => 'Opération refusée : Ce client ne fait pas partie de votre portefeuille.'], 403);
+            }
+        }
+
+        // Handle upload
+        if ($quote->bon_pour_accord_url) {
+            $oldFile = str_replace('/storage/', '', $quote->bon_pour_accord_url);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($oldFile);
+        }
+
+        $path = $request->file('bon_pour_accord')->store('quotes/accords', 'public');
+        
+        $oldStatus = $quote->status;
+        
+        $quote->update([
+            'bon_pour_accord_url' => $path,
+            'status' => 'accepted' // Automatically set status to accepted
+        ]);
+
+        // If the quote is linked to a request, mark the request as processed
+        if ($quote->quote_request_id) {
+            $req = \App\Models\QuoteRequest::find($quote->quote_request_id);
+            if ($req && (int) $req->company_id === (int) $quote->company_id) {
+                $req->update(['status' => 'processed']);
+            }
+        }
+
+        // NOTIFICATIONS
+        if ($oldStatus !== 'accepted') {
+            $contact = $quote->company?->contacts()->first()
+                ?? \App\Models\User::where('company_id', $quote->company_id)->first();
+
+            if ($contact) {
+                $title = 'Devis';
+                $body = "Votre devis ({$quote->quote_number}) a été accepté (Bon pour accord reçu).";
+
+                $this->notifs->notifyUser(
+                    $contact,
+                    $title,
+                    $body,
+                    type: 'quote_status',
+                    data: ['quote_id' => $quote->id, 'status' => 'accepted'],
+                    action: 'quote_detail',
+                    priority: 'high',
+                    channel: 'both',
+                );
+            }
+
+            event(new QuoteStatusChanged(
+                quoteId: (int) $quote->id,
+                companyId: (int) $quote->company_id,
+                quoteNumber: (string) $quote->quote_number,
+                status: 'accepted',
+            ));
+        }
+
+        // Return full URL
+        $quote->bon_pour_accord_url = asset('storage/' . $quote->bon_pour_accord_url);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Bon pour accord enregistré avec succès, devis accepté.',
             'data' => $quote
         ]);
     }

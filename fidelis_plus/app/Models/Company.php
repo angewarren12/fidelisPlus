@@ -16,6 +16,7 @@ class Company extends Model
         'type',
         'category',
         'company_type',
+        'created_via_marketing',
         'name',
         'email',
         'phone',
@@ -42,6 +43,7 @@ class Company extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'created_via_marketing' => 'boolean',
         'last_contact_date' => 'datetime',
         'converted_at' => 'datetime',
         'account_balance' => 'decimal:2',

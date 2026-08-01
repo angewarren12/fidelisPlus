@@ -39,216 +39,216 @@ class DatabaseSeeder extends Seeder
         if (User::query()->count() !== 0) {
             $this->command?->info('DatabaseSeeder: users non vides, seed core skip.');
         } else {
-        // 1. UTILISATEURS ÉQUIPE
-        $admin = User::create([
-            'first_name' => 'Admin',
-            'last_name' => 'Fidelis',
-            'email' => 'admin@fidelis.ci',
-            'login' => 'admin',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-        ]);
+            // 1. UTILISATEURS ÉQUIPE
+            $admin = User::create([
+                'first_name' => 'Admin',
+                'last_name' => 'Fidelis',
+                'email' => 'admin@fidelis.ci',
+                'login' => 'admin',
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+            ]);
 
-        $marketing = User::create([
-            'first_name' => 'Sarah',
-            'last_name' => 'Marketing',
-            'email' => 'marketing@fidelis.ci',
-            'login' => 'marketing',
-            'password' => Hash::make('password'),
-            'role' => 'marketing',
-        ]);
+            $marketing = User::create([
+                'first_name' => 'Sarah',
+                'last_name' => 'Marketing',
+                'email' => 'marketing@fidelis.ci',
+                'login' => 'marketing',
+                'password' => Hash::make('password'),
+                'role' => 'marketing',
+            ]);
 
-        $comm1 = User::create([
-            'first_name' => 'Jean',
-            'last_name' => 'Commercial',
-            'email' => 'jean@fidelis.ci',
-            'login' => 'jean',
-            'password' => Hash::make('password'),
-            'role' => 'commercial',
-        ]);
+            $comm1 = User::create([
+                'first_name' => 'Jean',
+                'last_name' => 'Commercial',
+                'email' => 'jean@fidelis.ci',
+                'login' => 'jean',
+                'password' => Hash::make('password'),
+                'role' => 'commercial',
+            ]);
 
-        $comm2 = User::create([
-            'first_name' => 'Marie',
-            'last_name' => 'Vente',
-            'email' => 'marie@fidelis.ci',
-            'login' => 'marie',
-            'password' => Hash::make('password'),
-            'role' => 'commercial',
-        ]);
+            $comm2 = User::create([
+                'first_name' => 'Marie',
+                'last_name' => 'Vente',
+                'email' => 'marie@fidelis.ci',
+                'login' => 'marie',
+                'password' => Hash::make('password'),
+                'role' => 'commercial',
+            ]);
 
-        // 2. CAISSIERS (STATIONS)
-        $caissier1 = User::create([
-            'first_name' => 'Bakary',
-            'last_name' => 'Station',
-            'email' => 'bakary@station.ci',
-            'login' => 'bakary',
-            'password' => Hash::make('password'),
-            'role' => 'caissier',
-        ]);
+            // 2. CAISSIERS (STATIONS)
+            $caissier1 = User::create([
+                'first_name' => 'Bakary',
+                'last_name' => 'Station',
+                'email' => 'bakary@station.ci',
+                'login' => 'bakary',
+                'password' => Hash::make('password'),
+                'role' => 'caissier',
+            ]);
 
-        // 3. STATIONS
-        $st1 = Station::create(['name' => 'Mayelia Cocody', 'location' => 'Boulevard de France', 'is_active' => true]);
-        $st2 = Station::create(['name' => 'Mayelia Marcory', 'location' => 'Zone 4', 'is_active' => true]);
-        $st3 = Station::create(['name' => 'Mayelia Yopougon', 'location' => 'Keneya', 'is_active' => true]);
+            // 3. STATIONS
+            $st1 = Station::create(['name' => 'Mayelia Cocody', 'location' => 'Boulevard de France', 'is_active' => true]);
+            $st2 = Station::create(['name' => 'Mayelia Marcory', 'location' => 'Zone 4', 'is_active' => true]);
+            $st3 = Station::create(['name' => 'Mayelia Yopougon', 'location' => 'Keneya', 'is_active' => true]);
 
-        // 5. RÉCOMPENSES
-        // Récompenses Particuliers
-        LoyaltyReward::create(['name' => 'Bon lavage 5 000F', 'points_cost' => 10, 'is_active' => true, 'client_segments' => ['particulier']]);
-        LoyaltyReward::create(['name' => 'Bon carburant 5 000F', 'points_cost' => 15, 'is_active' => true, 'client_segments' => ['particulier']]);
-        LoyaltyReward::create(['name' => 'Recharge téléphonique 1 000F', 'points_cost' => 2, 'is_active' => true, 'client_segments' => ['particulier']]);
-        LoyaltyReward::create(['name' => 'Diagnostic Technique Offert', 'points_cost' => 5, 'is_active' => true, 'client_segments' => ['particulier']]);
-        LoyaltyReward::create(['name' => 'Senteur Mayelia', 'points_cost' => 1, 'is_active' => true, 'client_segments' => ['particulier']]);
-        LoyaltyReward::create(['name' => 'Visite technique offerte (Fidélité 5 passages)', 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['particulier']]);
+            // 5. RÉCOMPENSES
+            // Récompenses Particuliers
+            LoyaltyReward::create(['name' => 'Bon lavage 5 000F', 'points_cost' => 10, 'is_active' => true, 'client_segments' => ['particulier']]);
+            LoyaltyReward::create(['name' => 'Bon carburant 5 000F', 'points_cost' => 15, 'is_active' => true, 'client_segments' => ['particulier']]);
+            LoyaltyReward::create(['name' => 'Recharge téléphonique 1 000F', 'points_cost' => 2, 'is_active' => true, 'client_segments' => ['particulier']]);
+            LoyaltyReward::create(['name' => 'Diagnostic Technique Offert', 'points_cost' => 5, 'is_active' => true, 'client_segments' => ['particulier']]);
+            LoyaltyReward::create(['name' => 'Senteur Mayelia', 'points_cost' => 1, 'is_active' => true, 'client_segments' => ['particulier']]);
+            LoyaltyReward::create(['name' => 'Visite technique offerte (Fidélité 5 passages)', 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['particulier']]);
 
-        // Récompenses Professionnels & Apporteurs (Paliers Automatiques et Catalogue)
-        LoyaltyReward::create(['name' => "Bon d'achat 10 000 FCFA (Palier 20)", 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => "Bon d'achat 15 000 FCFA (Palier 30)", 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => "Bon d'achat 25 000 FCFA + Visite technique offerte (Palier 50)", 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Diagnostic Technique Professionnel Offert', 'points_cost' => 50, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Visite Technique Offerte', 'points_cost' => 100, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Bons d\'achats Carburant 10 000F', 'points_cost' => 20, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Bons de vidange', 'points_cost' => 40, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Bons d\'achats lavage complet auto', 'points_cost' => 15, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Bons d\'achat Super Marché 20 000F', 'points_cost' => 45, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Bons entretiens véhicule', 'points_cost' => 60, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
-        LoyaltyReward::create(['name' => 'Jeux / Tombola', 'points_cost' => 5, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage', 'particulier']]);
+            // Récompenses Professionnels & Apporteurs (Paliers Automatiques et Catalogue)
+            LoyaltyReward::create(['name' => "Bon d'achat 10 000 FCFA (Palier 20)", 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => "Bon d'achat 15 000 FCFA (Palier 30)", 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => "Bon d'achat 25 000 FCFA + Visite technique offerte (Palier 50)", 'points_cost' => 0, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Diagnostic Technique Professionnel Offert', 'points_cost' => 50, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Visite Technique Offerte', 'points_cost' => 100, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Bons d\'achats Carburant 10 000F', 'points_cost' => 20, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Bons de vidange', 'points_cost' => 40, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Bons d\'achats lavage complet auto', 'points_cost' => 15, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Bons d\'achat Super Marché 20 000F', 'points_cost' => 45, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Bons entretiens véhicule', 'points_cost' => 60, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage']]);
+            LoyaltyReward::create(['name' => 'Jeux / Tombola', 'points_cost' => 5, 'is_active' => true, 'client_segments' => ['flotte', 'apporteur', 'garage', 'particulier']]);
 
-        // 6. PROSPECTS (COMMERCIAL 1)
-        $p1 = Company::create([
-            'commercial_id' => $comm1->id,
-            'name' => 'Transport Express SARL',
-            'category' => 'entreprise',
-            'company_type' => 'garage',
-            'kanban_stage' => 'nouveau_lead',
-            'temperature' => 'chaud',
-            'is_active' => false,
-        ]);
+            // 6. PROSPECTS (COMMERCIAL 1)
+            $p1 = Company::create([
+                'commercial_id' => $comm1->id,
+                'name' => 'Transport Express SARL',
+                'category' => 'entreprise',
+                'company_type' => 'garage',
+                'kanban_stage' => 'nouveau_lead',
+                'temperature' => 'chaud',
+                'is_active' => false,
+            ]);
 
-        $p2 = Company::create([
-            'commercial_id' => $comm1->id,
-            'name' => 'BTP Côte d\'Ivoire',
-            'category' => 'entreprise',
-            'company_type' => 'flotte',
-            'kanban_stage' => 'negociation',
-            'temperature' => 'tiede',
-            'is_active' => false,
-        ]);
+            $p2 = Company::create([
+                'commercial_id' => $comm1->id,
+                'name' => 'BTP Côte d\'Ivoire',
+                'category' => 'entreprise',
+                'company_type' => 'flotte',
+                'kanban_stage' => 'negociation',
+                'temperature' => 'tiede',
+                'is_active' => false,
+            ]);
 
-        // 7. CLIENTS ACTIFS (COMMERCIAL 2)
-        $c1 = Company::create([
-            'commercial_id' => $comm2->id,
-            'name' => 'Logistique Plus SA',
-            'category' => 'entreprise',
-            'company_type' => 'flotte',
-            'kanban_stage' => 'converti',
-            'is_active' => true,
-            'converted_at' => now()->subMonths(2),
-        ]);
+            // 7. CLIENTS ACTIFS (COMMERCIAL 2)
+            $c1 = Company::create([
+                'commercial_id' => $comm2->id,
+                'name' => 'Logistique Plus SA',
+                'category' => 'entreprise',
+                'company_type' => 'flotte',
+                'kanban_stage' => 'converti',
+                'is_active' => true,
+                'converted_at' => now()->subMonths(2),
+            ]);
 
-        $c2 = Company::create([
-            'commercial_id' => $comm2->id,
-            'name' => 'Boulangerie Moderne',
-            'category' => 'entreprise',
-            'company_type' => 'apporteur',
-            'kanban_stage' => 'converti',
-            'is_active' => true,
-            'converted_at' => now()->subMonth(),
-        ]);
+            $c2 = Company::create([
+                'commercial_id' => $comm2->id,
+                'name' => 'Boulangerie Moderne',
+                'category' => 'entreprise',
+                'company_type' => 'apporteur',
+                'kanban_stage' => 'converti',
+                'is_active' => true,
+                'converted_at' => now()->subMonth(),
+            ]);
 
-        // 8. VÉHICULES
-        Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'AA-123-BB', 'brand' => 'Toyota', 'model' => 'Hilux', 'status' => 'a_jour']);
-        Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'CC-456-DD', 'brand' => 'Mitsubishi', 'model' => 'L200', 'status' => 'a_jour']);
-        Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'GG-001-HH', 'brand' => 'Isuzu', 'model' => 'D-Max', 'status' => 'bientot']);
-        Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'II-002-JJ', 'brand' => 'Nissan', 'model' => 'Navara', 'status' => 'en_retard']);
-        Vehicle::create(['company_id' => $c2->id, 'license_plate' => 'EE-789-FF', 'brand' => 'Renault', 'model' => 'Kangoo', 'status' => 'a_jour']);
-        $transportExpressVehicle = Vehicle::create([
-            'company_id' => $p1->id,
-            'license_plate' => 'TX-101-SARL',
-            'brand' => 'Hyundai',
-            'model' => 'H1',
-            'status' => 'a_jour',
-        ]);
+            // 8. VÉHICULES
+            Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'AA-123-BB', 'brand' => 'Toyota', 'model' => 'Hilux', 'status' => 'a_jour']);
+            Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'CC-456-DD', 'brand' => 'Mitsubishi', 'model' => 'L200', 'status' => 'a_jour']);
+            Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'GG-001-HH', 'brand' => 'Isuzu', 'model' => 'D-Max', 'status' => 'bientot']);
+            Vehicle::create(['company_id' => $c1->id, 'license_plate' => 'II-002-JJ', 'brand' => 'Nissan', 'model' => 'Navara', 'status' => 'en_retard']);
+            Vehicle::create(['company_id' => $c2->id, 'license_plate' => 'EE-789-FF', 'brand' => 'Renault', 'model' => 'Kangoo', 'status' => 'a_jour']);
+            $transportExpressVehicle = Vehicle::create([
+                'company_id' => $p1->id,
+                'license_plate' => 'TX-101-SARL',
+                'brand' => 'Hyundai',
+                'model' => 'H1',
+                'status' => 'a_jour',
+            ]);
 
-        // 9. COMPTES FIDÉLITÉ
-        $acc1 = LoyaltyAccount::create([
-            'holder_type' => 'company',
-            'company_id' => $c1->id,
-            'holder_key' => 'LOGPLUS-FID',
-            'public_uuid' => (string) Str::uuid(),
-            'points_balance' => 1250,
-        ]);
+            // 9. COMPTES FIDÉLITÉ
+            $acc1 = LoyaltyAccount::create([
+                'holder_type' => 'company',
+                'company_id' => $c1->id,
+                'holder_key' => 'LOGPLUS-FID',
+                'public_uuid' => (string) Str::uuid(),
+                'points_balance' => 1250,
+            ]);
 
-        $acc2 = LoyaltyAccount::create([
-            'holder_type' => 'company',
-            'company_id' => $c2->id,
-            'holder_key' => 'BOULMOD-FID',
-            'public_uuid' => (string) Str::uuid(),
-            'points_balance' => 45,
-        ]);
+            $acc2 = LoyaltyAccount::create([
+                'holder_type' => 'company',
+                'company_id' => $c2->id,
+                'holder_key' => 'BOULMOD-FID',
+                'public_uuid' => (string) Str::uuid(),
+                'points_balance' => 45,
+            ]);
 
-        // Particulier
-        $clientUser = User::create([
-            'first_name' => 'Amadou',
-            'last_name' => 'Kone',
-            'email' => 'amadou@gmail.com',
-            'login' => 'amadou',
-            'password' => Hash::make('password'),
-            'role' => 'client',
-        ]);
+            // Particulier
+            $clientUser = User::create([
+                'first_name' => 'Amadou',
+                'last_name' => 'Kone',
+                'email' => 'amadou@gmail.com',
+                'login' => 'amadou',
+                'password' => Hash::make('password'),
+                'role' => 'client',
+            ]);
 
-        $acc3 = LoyaltyAccount::create([
-            'holder_type' => 'user',
-            'user_id' => $clientUser->id,
-            'holder_key' => 'AMADOU-K',
-            'public_uuid' => (string) Str::uuid(),
-            'points_balance' => 120,
-        ]);
+            $acc3 = LoyaltyAccount::create([
+                'holder_type' => 'user',
+                'user_id' => $clientUser->id,
+                'holder_key' => 'AMADOU-K',
+                'public_uuid' => (string) Str::uuid(),
+                'points_balance' => 120,
+            ]);
 
-        // 10. HISTORIQUE DE SCANS
-        LoyaltyPosScanEvent::create([
-            'idempotency_key' => Str::random(32),
-            'qr_jti' => Str::random(16),
-            'loyalty_account_id' => $acc1->id,
-            'cashier_user_id' => $caissier1->id,
-            'station_id' => $st1->id,
-            'points_credited' => 25, // Grande Flotte
-            'payload_hash' => hash('sha256', 'dummy1'),
-            'created_at' => now()->subDay(),
-        ]);
+            // 10. HISTORIQUE DE SCANS
+            LoyaltyPosScanEvent::create([
+                'idempotency_key' => Str::random(32),
+                'qr_jti' => Str::random(16),
+                'loyalty_account_id' => $acc1->id,
+                'cashier_user_id' => $caissier1->id,
+                'station_id' => $st1->id,
+                'points_credited' => 25, // Grande Flotte
+                'payload_hash' => hash('sha256', 'dummy1'),
+                'created_at' => now()->subDay(),
+            ]);
 
-        LoyaltyPosScanEvent::create([
-            'idempotency_key' => Str::random(32),
-            'qr_jti' => Str::random(16),
-            'loyalty_account_id' => $acc3->id,
-            'cashier_user_id' => $caissier1->id,
-            'station_id' => $st2->id,
-            'points_credited' => 5, // Particulier
-            'payload_hash' => hash('sha256', 'dummy2'),
-            'created_at' => now()->subHours(2),
-        ]);
+            LoyaltyPosScanEvent::create([
+                'idempotency_key' => Str::random(32),
+                'qr_jti' => Str::random(16),
+                'loyalty_account_id' => $acc3->id,
+                'cashier_user_id' => $caissier1->id,
+                'station_id' => $st2->id,
+                'points_credited' => 5, // Particulier
+                'payload_hash' => hash('sha256', 'dummy2'),
+                'created_at' => now()->subHours(2),
+            ]);
 
-        // 10.b Demande de devis dédiée : Transport Express SARL (1 seul véhicule)
-        $transportClientUser = User::create([
-            'first_name' => 'Moussa',
-            'last_name' => 'Traore',
-            'email' => 'transport.express.client@fidelis.ci',
-            'login' => 'transport.express',
-            'password' => Hash::make('password'),
-            'role' => 'client',
-            'company_id' => $p1->id,
-        ]);
+            // 10.b Demande de devis dédiée : Transport Express SARL (1 seul véhicule)
+            $transportClientUser = User::create([
+                'first_name' => 'Moussa',
+                'last_name' => 'Traore',
+                'email' => 'transport.express.client@fidelis.ci',
+                'login' => 'transport.express',
+                'password' => Hash::make('password'),
+                'role' => 'client',
+                'company_id' => $p1->id,
+            ]);
 
-        QuoteRequest::create([
-            'user_id' => $transportClientUser->id,
-            'company_id' => $p1->id,
-            'vehicle_id' => $transportExpressVehicle->id,
-            'registration_image' => '/seed/quote/transport-express-registration.jpg',
-            'vignette_image' => '/seed/quote/transport-express-vignette.jpg',
-            'status' => 'pending',
-            'notes' => 'Demande de devis initiale Transport Express SARL',
-            'created_at' => now()->subHours(6),
-            'updated_at' => now()->subHours(6),
-        ]);
+            QuoteRequest::create([
+                'user_id' => $transportClientUser->id,
+                'company_id' => $p1->id,
+                'vehicle_id' => $transportExpressVehicle->id,
+                'registration_image' => '/seed/quote/transport-express-registration.jpg',
+                'vignette_image' => '/seed/quote/transport-express-vignette.jpg',
+                'status' => 'pending',
+                'notes' => 'Demande de devis initiale Transport Express SARL',
+                'created_at' => now()->subHours(6),
+                'updated_at' => now()->subHours(6),
+            ]);
 
         } // end core seed (users empty)
 
@@ -447,7 +447,7 @@ class DatabaseSeeder extends Seeder
                 'delta_points' => 10,
                 'balance_after' => $startPoints + 10,
                 'source' => 'seed',
-                'idempotency_key' => 'seed-'.Str::random(16),
+                'idempotency_key' => 'seed-' . Str::random(16),
                 'meta' => ['seed' => true],
                 'created_by' => $anyHandler?->id,
             ]);

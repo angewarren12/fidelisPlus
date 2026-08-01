@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class QuoteRequest extends Model
 {
@@ -30,5 +31,24 @@ class QuoteRequest extends Model
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);
+    }
+
+    public function vehicles()
+    {
+        return $this->belongsToMany(Vehicle::class, 'quote_request_vehicle');
+    }
+
+    protected static function booted()
+    {
+        static::deleting(function ($quoteRequest) {
+            if ($quoteRequest->registration_image) {
+                $fileName = str_replace('/storage/', '', $quoteRequest->registration_image);
+                Storage::disk('public')->delete($fileName);
+            }
+            if ($quoteRequest->vignette_image) {
+                $fileName = str_replace('/storage/', '', $quoteRequest->vignette_image);
+                Storage::disk('public')->delete($fileName);
+            }
+        });
     }
 }

@@ -6,7 +6,7 @@ export type KanbanStage = 'nouveau_lead' | 'contact_effectue' | 'proposition' | 
 export interface Prospect {
   id: number;
   name: string;
-  siret?: string;
+  rccm?: string;
   type: 'prospect' | 'client';
   category: 'entreprise' | 'particulier';
   company_type?: 'flotte' | 'apporteur' | 'garage';
@@ -30,7 +30,7 @@ export interface Prospect {
 
 export interface CreateProspectDto {
   name: string;
-  siret?: string;
+  rccm?: string;
   sector?: string;
   address?: string;
   city?: string;

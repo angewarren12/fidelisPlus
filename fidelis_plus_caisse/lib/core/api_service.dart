@@ -74,7 +74,14 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
-  Future<Map<String, dynamic>> scanLoyalty(String qrPayload, int stationId, String idempotencyKey) async {
+  Future<Map<String, dynamic>> scanLoyalty(
+    String qrPayload,
+    int stationId,
+    String idempotencyKey, {
+    String? vehicleRegistration,
+    String? vehicleBrand,
+    String? vehicleColor,
+  }) async {
     final headers = await _headers();
     headers['Idempotency-Key'] = idempotencyKey;
 
@@ -86,6 +93,10 @@ class ApiService {
         'station_id': stationId,
         'device_id': 'caisse-mobile-v1',
         'occurred_at': DateTime.now().toUtc().toIso8601String(),
+        'visit_type': 'visite_technique',
+        if (vehicleRegistration != null && vehicleRegistration.isNotEmpty) 'vehicle_registration': vehicleRegistration,
+        if (vehicleBrand != null && vehicleBrand.isNotEmpty) 'vehicle_brand': vehicleBrand,
+        if (vehicleColor != null && vehicleColor.isNotEmpty) 'vehicle_color': vehicleColor,
       }),
     );
     return jsonDecode(res.body);

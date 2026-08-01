@@ -8,7 +8,7 @@ import { Router } from '@angular/router';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#1b1932]/60 backdrop-blur-xl animate-fade-in">
+    <div class="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-4 py-10 sm:p-6 bg-[#1b1932]/60 backdrop-blur-xl animate-fade-in">
       <div class="bg-white w-full max-w-5xl max-h-[90vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative border border-white/20">
         
         <!-- HEADER -->

@@ -25,7 +25,7 @@ class AppointmentStoreTest extends TestCase
         ]);
 
         $response = $this->actingAs($user, 'sanctum')->postJson('/api/v1/appointments', [
-            'vehicle_id' => $vehicle->id,
+            'vehicle_ids' => [$vehicle->id],
             'station_id' => $station->id,
             'appointment_date' => now()->addDay()->format('Y-m-d') . ' 10:30:00',
         ]);
@@ -47,7 +47,7 @@ class AppointmentStoreTest extends TestCase
         ]);
 
         $response = $this->actingAs($userA, 'sanctum')->postJson('/api/v1/appointments', [
-            'vehicle_id' => $vehicleB->id,
+            'vehicle_ids' => [$vehicleB->id],
             'station_id' => $station->id,
             'appointment_date' => now()->addDay()->format('Y-m-d') . ' 10:30:00',
         ]);
@@ -68,7 +68,7 @@ class AppointmentStoreTest extends TestCase
         ]);
 
         $response = $this->actingAs($user, 'sanctum')->postJson('/api/v1/appointments', [
-            'vehicle_id' => $vehicle->id,
+            'vehicle_ids' => [$vehicle->id],
             'station_id' => $station->id,
             'appointment_date' => now()->addDays(2)->format('Y-m-d') . ' 08:30:00',
         ]);

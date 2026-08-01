@@ -1,34 +1,11 @@
-<div class="max-w-7xl mx-auto px-6 md:px-10 py-10 animate-fade-in pb-24 space-y-10">
+<app-marketing-bg-pattern></app-marketing-bg-pattern>
+<div class="max-w-7xl mx-auto px-6 md:px-10 py-10 animate-fade-in pb-24 space-y-10 relative z-[1]">
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-6">
     <div>
-      <h1 class="text-3xl md:text-4xl font-headline font-black text-on-surface tracking-tight">Espace Fidélité V2</h1>
+      <h1 class="text-3xl md:text-4xl font-headline font-black text-on-surface tracking-tight">{{ pageTitle() }}</h1>
       <p class="text-sm text-outline font-medium mt-2 max-w-xl">
-        Comptes, récompenses, parrainages et analytics — programme fidélité Mayelia.
+        Programme fidélité Mayelia — navigation disponible dans le menu de gauche.
       </p>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <button type="button" (click)="switchTab('accounts')" [class.bg-primary]="tab()==='accounts'"
-        [class.text-white]="tab()==='accounts'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-xs font-black uppercase tracking-widest transition-all">Comptes</button>
-      <button type="button" (click)="switchTab('reports')" [class.bg-primary]="tab()==='reports'"
-        [class.text-white]="tab()==='reports'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-xs font-black uppercase tracking-widest transition-all">Analytics</button>
-      <button type="button" (click)="switchTab('activity')" [class.bg-primary]="tab()==='activity'"
-        [class.text-white]="tab()==='activity'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-xs font-black uppercase tracking-widest transition-all">Activité</button>
-      <button *ngIf="canManageLoyalty()" type="button" (click)="switchTab('rewards')"
-        [class.bg-primary]="tab()==='rewards'" [class.text-white]="tab()==='rewards'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-xs font-black uppercase tracking-widest transition-all">Récompenses</button>
-      <button *ngIf="canManageLoyalty()" type="button" (click)="switchTab('redemptions')"
-        [class.bg-primary]="tab()==='redemptions'" [class.text-white]="tab()==='redemptions'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-xs font-black uppercase tracking-widest transition-all">Lots</button>
-      <button *ngIf="isAdmin()" type="button" (click)="switchTab('settings')" [class.bg-primary]="tab()==='settings'"
-        [class.text-white]="tab()==='settings'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-xs font-black uppercase tracking-widest transition-all">Réglages</button>
-      <button *ngIf="canEmitLoyaltyCard()" type="button" (click)="switchTab('bootstrap')"
-        [class.bg-primary]="tab()==='bootstrap'" [class.text-white]="tab()==='bootstrap'"
-        class="h-11 px-5 rounded-2xl border border-outline-variant/15 text-[10px] font-black uppercase tracking-widest transition-all bg-surface-container-low text-primary">+
-        Nouvelle Carte</button>
     </div>
   </header>
 
@@ -48,9 +25,56 @@
           class="h-11 px-4 rounded-2xl bg-white border border-outline-variant/15 shadow-sm text-outline hover:text-primary transition-colors flex items-center gap-2">
           <span class="material-symbols-outlined text-sm" [class.animate-spin]="loadingAccounts()">refresh</span>
         </button>
+        <button *ngIf="canManageLoyalty()" type="button" (click)="openCreateMemberModal()"
+          class="h-11 px-5 rounded-2xl bg-[#1b1932] text-white text-xs font-black uppercase tracking-widest flex items-center gap-2 shadow-sm">
+          <span class="material-symbols-outlined text-sm">person_add</span>
+          Nouveau client
+        </button>
       </div>
       <div class="text-xs font-black uppercase tracking-widest text-outline">
         {{ accounts().length }} compte{{ accounts().length > 1 ? 's' : '' }}
+      </div>
+    </div>
+
+    <!-- Clients sans carte associée -->
+    <div *ngIf="!loadingCardlessMembers() && cardlessMembers().length > 0" class="space-y-3">
+      <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-sm">credit_card_off</span>
+        {{ cardlessMembers().length }} client(s) sans carte associée
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div *ngFor="let m of cardlessMembers()"
+          class="relative bg-white rounded-[1.75rem] border-2 border-dashed border-amber-300 shadow-sm overflow-hidden">
+          <div class="p-6 space-y-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shrink-0 bg-gradient-to-br from-amber-400 to-amber-600">
+                  {{ memberDisplayName(m).substring(0, 2).toUpperCase() }}
+                </div>
+                <div class="min-w-0">
+                  <h3 class="font-black text-on-surface text-sm truncate">{{ memberDisplayName(m) }}</h3>
+                  <p class="text-[10px] text-outline truncate">{{ m.contact }}</p>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-1 shrink-0">
+                <span class="px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest"
+                      [class]="m.type === 'entreprise' ? 'bg-teal-50 text-teal-700' : 'bg-violet-50 text-violet-700'">
+                  {{ m.type === 'entreprise' ? 'Entreprise' : 'Particulier' }}
+                </span>
+                <span class="px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700">
+                  Sans carte
+                </span>
+              </div>
+            </div>
+            <button type="button" (click)="openAssignCardModalForMember(m)" [disabled]="blankCardStock() === 0"
+              [title]="blankCardStock() === 0 ? 'Aucune carte vierge en stock — générez-en depuis le Studio Carte.' : ''"
+              class="w-full h-11 rounded-xl bg-[#1b1932] text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+              <span class="material-symbols-outlined text-sm">qr_code_scanner</span>
+              Associer une carte
+            </button>
+            <p *ngIf="blankCardStock() === 0" class="text-[10px] text-error text-center font-bold">Aucune carte vierge en stock</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -81,15 +105,32 @@
               </div>
               <div class="min-w-0">
                 <h3 class="font-black text-on-surface text-sm truncate">{{ holderLabel(a) }}</h3>
-                <p class="text-[10px] font-mono text-outline truncate">{{ a.holder_key }}</p>
+                <p class="text-[10px] font-mono text-outline truncate">Carte {{ a.card_number }}</p>
               </div>
             </div>
             <!-- Type badge -->
-            <span class="shrink-0 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest" [class]="a.holder_type === 'company'
-                ? 'bg-teal-50 text-teal-700'
-                : 'bg-violet-50 text-violet-700'">
-              {{ a.holder_type === 'company' ? (a.company?.company_type || 'Société') : 'Particulier' }}
-            </span>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest"
+                [class]="a.holder_type === 'unassigned' ? 'bg-amber-50 text-amber-700' : holderTypeBadge(a) === 'Entreprise' ? 'bg-teal-50 text-teal-700' : 'bg-violet-50 text-violet-700'">
+                {{ holderTypeBadge(a) }}
+              </span>
+              <span *ngIf="a.company?.created_via_marketing"
+                class="px-2 py-0.5 rounded-lg bg-violet-100 text-violet-700 text-[8px] font-black uppercase tracking-widest">
+                Créé par marketing
+              </span>
+              <span *ngIf="a.holder_type === 'member' && a.member" class="px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest"
+                [class]="a.member.sira_provisioning_status === 'provisioned' ? 'bg-primary/10 text-primary' : a.member.sira_provisioning_status === 'pending' ? 'bg-amber-100 text-amber-700' : a.member.sira_provisioning_status === 'failed' ? 'bg-error/10 text-error' : 'bg-surface-container-low text-outline'">
+                {{ a.member.sira_provisioning_status === 'provisioned' ? 'SIRA lié' : a.member.sira_provisioning_status === 'pending' ? 'SIRA en cours' : a.member.sira_provisioning_status === 'failed' ? 'Échec SIRA' : 'SIRA n/a' }}
+              </span>
+              <button *ngIf="a.holder_type === 'member' && a.member?.sira_provisioning_status === 'failed'"
+                (click)="$event.stopPropagation(); retryMemberProvisioning(a)"
+                class="text-[8px] font-black text-primary underline">Réessayer</button>
+            </div>
+          </div>
+
+          <!-- Blocked indicator -->
+          <div *ngIf="a.blocked_at" class="flex items-center gap-1.5 text-[10px] font-black uppercase text-red-600">
+            <span class="material-symbols-outlined text-sm">block</span> Compte bloqué
           </div>
 
           <!-- Points balance -->
@@ -111,21 +152,16 @@
             </div>
           </div>
 
-          <!-- Milestones chips (if any reached) -->
-          <div *ngIf="a.milestone_flotte_20_reached_at || a.milestone_apporteur_50_reached_at"
-            class="flex flex-wrap gap-1.5">
-            <span *ngIf="a.milestone_flotte_20_reached_at"
-              class="px-2 py-0.5 rounded-lg bg-green-50 text-green-700 text-[9px] font-black uppercase">
-              🎁 Lavage offert
-            </span>
-            <span *ngIf="a.milestone_flotte_50_reached_at"
-              class="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 text-[9px] font-black uppercase">
-              🎁 Pack complet
-            </span>
-            <span *ngIf="a.milestone_apporteur_50_reached_at"
-              class="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[9px] font-black uppercase">
-              🏆 VT Offerte
-            </span>
+          <!-- Progress toward next reward -->
+          <div *ngIf="nextReward(a)" class="space-y-1.5">
+            <div class="flex items-center justify-between text-[10px] font-bold text-outline">
+              <span class="truncate">Prochain lot : {{ nextReward(a)!.name }}</span>
+              <span class="shrink-0 ml-2">{{ a.points_balance }}/{{ nextReward(a)!.points_cost }}</span>
+            </div>
+            <div class="w-full bg-surface-container-low rounded-full h-1.5">
+              <div class="bg-primary h-1.5 rounded-full transition-all duration-500"
+                [style.width.%]="progressToNextReward(a)"></div>
+            </div>
           </div>
 
           <!-- Action buttons -->
@@ -136,15 +172,17 @@
                 class="h-8 px-3 rounded-xl bg-surface-container-low text-[10px] font-black uppercase tracking-widest text-outline hover:text-primary hover:bg-primary/5 transition-all">
                 Ajuster
               </button>
-              <button *ngIf="canManageLoyalty()" (click)="openClaimModal(a)"
-                class="h-8 px-3 rounded-xl bg-surface-container-low text-[10px] font-black uppercase tracking-widest text-outline hover:text-secondary hover:bg-secondary/5 transition-all">
+              <button *ngIf="canManageLoyalty()" (click)="openClaimModal(a)" [disabled]="!canOfferReward(a)"
+                [title]="!canOfferReward(a) ? 'Solde insuffisant pour le plus petit lot disponible' : ''"
+                class="h-8 px-3 rounded-xl bg-surface-container-low text-[10px] font-black uppercase tracking-widest text-outline hover:text-secondary hover:bg-secondary/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low disabled:hover:text-outline">
                 Lot
               </button>
             </div>
             <div class="flex gap-1">
-              <button *ngIf="canEmitLoyaltyCard()" (click)="openCardModal(a)" title="Imprimer PVC"
-                class="h-8 w-8 rounded-xl bg-teal-50 text-teal-600 hover:bg-teal-100 transition-all flex items-center justify-center">
-                <span class="material-symbols-outlined text-sm">badge</span>
+              <button *ngIf="a.holder_type === 'member'" (click)="openAssignCardModal(a)" [disabled]="blankCardStock() === 0"
+                [title]="blankCardStock() === 0 ? 'Aucune carte vierge en stock' : 'Remplacer la carte physique (carte perdue/abîmée)'"
+                class="h-8 w-8 rounded-xl bg-violet-50 text-violet-600 hover:bg-violet-100 transition-all flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-violet-50">
+                <span class="material-symbols-outlined text-sm">sync_alt</span>
               </button>
               <button (click)="refreshQrPayload(a, false)" [disabled]="qrLoadingId() === a.id" title="QR Code"
                 class="h-8 w-8 rounded-xl bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all flex items-center justify-center disabled:opacity-30">
@@ -163,10 +201,74 @@
       <div *ngIf="accounts().length === 0" class="col-span-full py-20 flex flex-col items-center gap-4 text-outline">
         <span class="material-symbols-outlined text-5xl opacity-30">loyalty</span>
         <p class="text-sm font-medium">Aucun compte fidélité trouvé.</p>
-        <button *ngIf="canEmitLoyaltyCard()" (click)="switchTab('bootstrap')"
+        <button *ngIf="canManageLoyalty()" (click)="openCreateMemberModal()"
           class="h-10 px-5 rounded-2xl bg-primary text-white text-xs font-black uppercase tracking-widest">
-          + Créer une carte
+          + Nouveau client
         </button>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div *ngIf="!loadingAccounts() && accountsMeta() && accountsMeta()!.last_page > 1" class="flex items-center justify-center gap-3 pt-2">
+      <button type="button" (click)="loadAccounts(accountsMeta()!.current_page - 1)" [disabled]="accountsMeta()!.current_page <= 1"
+              class="h-9 px-4 rounded-xl bg-white border border-outline-variant/15 text-xs font-bold text-outline disabled:opacity-40 hover:text-primary transition-colors">Précédent</button>
+      <span class="text-xs font-bold text-outline">Page {{ accountsMeta()!.current_page }} / {{ accountsMeta()!.last_page }}</span>
+      <button type="button" (click)="loadAccounts(accountsMeta()!.current_page + 1)" [disabled]="accountsMeta()!.current_page >= accountsMeta()!.last_page"
+              class="h-9 px-4 rounded-xl bg-white border border-outline-variant/15 text-xs font-bold text-outline disabled:opacity-40 hover:text-primary transition-colors">Suivant</button>
+    </div>
+  </section>
+
+  <!-- DEMANDES DE CARTE SIRA -->
+  <section *ngIf="tab() === 'requests' && canManageLoyalty()" class="space-y-6">
+    <p class="text-xs text-outline -mt-2">Demandes de carte soumises depuis l'app SIRA, en attente de validation.</p>
+
+    <div *ngIf="loadingMemberRequests()" class="py-24 flex flex-col items-center justify-center text-outline">
+      <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
+    </div>
+    <div *ngIf="!loadingMemberRequests() && memberRequests().length === 0" class="py-24 flex flex-col items-center justify-center bg-surface-container-low rounded-[2rem] border-2 border-dashed border-outline-variant/20 text-outline">
+      <span class="material-symbols-outlined text-5xl mb-3 opacity-30">inbox</span>
+      <p class="font-bold opacity-40 text-sm">Aucune demande en attente.</p>
+    </div>
+
+    <div *ngIf="!loadingMemberRequests() && memberRequests().length > 0" class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-surface-container-low border-b border-outline-variant/10">
+              <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Client</th>
+              <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Type</th>
+              <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Contact</th>
+              <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Demandé le</th>
+              <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-outline-variant/10">
+            <tr *ngFor="let m of memberRequests()" class="hover:bg-surface-container-low/50 transition-colors">
+              <td class="px-6 py-4 text-sm font-bold text-on-surface">{{ memberDisplayName(m) }}</td>
+              <td class="px-6 py-4">
+                <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest"
+                      [class.bg-primary/10]="m.type === 'particulier'" [class.text-primary]="m.type === 'particulier'"
+                      [class.bg-secondary/10]="m.type === 'entreprise'" [class.text-secondary]="m.type === 'entreprise'">
+                  {{ m.type }}
+                </span>
+              </td>
+              <td class="px-6 py-4 text-sm text-outline">{{ m.contact }}</td>
+              <td class="px-6 py-4 text-xs text-outline">{{ m.requested_at ? (m.requested_at | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td class="px-6 py-4 text-right">
+                <div class="flex justify-end gap-2">
+                  <button type="button" (click)="rejectMemberRequestAction(m)" [disabled]="processingRequestId() === m.id"
+                          class="px-4 py-2 rounded-xl bg-error/10 text-error text-[10px] font-black uppercase tracking-widest hover:bg-error/20 transition-colors disabled:opacity-50">
+                    Refuser
+                  </button>
+                  <button type="button" (click)="validateMemberRequestAction(m)" [disabled]="processingRequestId() === m.id"
+                          class="px-4 py-2 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-colors disabled:opacity-50">
+                    Valider
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -188,21 +290,6 @@
         <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Stations actives</p>
         <h3 class="text-4xl font-headline font-black text-on-surface">{{ stationReport()?.by_station?.length || 0 }}
         </h3>
-      </div>
-    </div>
-
-    <div *ngIf="canManageLoyalty() && referralStats()"
-      class="bg-white p-8 rounded-[2rem] border border-outline-variant/10 shadow-sm">
-      <h2 class="text-lg font-headline font-black text-on-surface mb-4">Parrainage</h2>
-      <p class="text-3xl font-black text-primary mb-6">{{ referralStats()!.total_referrals }} <span
-          class="text-sm text-outline font-medium">filleuls enregistrés</span></p>
-      <div class="space-y-2" *ngIf="referralStats()!.top_referrers.length">
-        <p class="text-[10px] font-black uppercase text-outline tracking-widest">Top parrains</p>
-        <div *ngFor="let ref of referralStats()!.top_referrers"
-          class="flex justify-between text-sm py-2 border-b border-outline-variant/10">
-          <span class="font-bold">{{ ref.name }}</span>
-          <span class="text-primary font-black">{{ ref.referrals_count }}</span>
-        </div>
       </div>
     </div>
 
@@ -249,7 +336,16 @@
             <span class="text-[10px] font-black text-outline uppercase">{{ item.created_at | date:'HH:mm' }}</span>
           </div>
           <p class="text-sm text-outline mb-2">{{ item.description }} — <strong>{{ item.caissier }}</strong> — {{
-            item.holder_name }}</p>
+            item.holder_name }} <span *ngIf="item.card_number" class="font-mono">(Carte {{ item.card_number }})</span></p>
+          <div *ngIf="item.vehicle_registration || item.vehicle_brand || item.vehicle_color"
+            class="flex flex-wrap gap-1.5 mb-2">
+            <span *ngIf="item.vehicle_registration"
+              class="px-2 py-0.5 rounded-lg bg-surface-container-low text-outline text-[10px] font-bold">{{ item.vehicle_registration }}</span>
+            <span *ngIf="item.vehicle_brand"
+              class="px-2 py-0.5 rounded-lg bg-surface-container-low text-outline text-[10px] font-bold">{{ item.vehicle_brand }}</span>
+            <span *ngIf="item.vehicle_color"
+              class="px-2 py-0.5 rounded-lg bg-surface-container-low text-outline text-[10px] font-bold">{{ item.vehicle_color }}</span>
+          </div>
           <span class="px-3 py-1 rounded-full bg-secondary/10 text-secondary text-[10px] font-black uppercase">+{{
             item.points }} pts</span>
         </div>
@@ -258,150 +354,168 @@
     </div>
   </section>
 
-  <!-- BOOTSTRAP -->
-  <section *ngIf="tab() === 'bootstrap' && canEmitLoyaltyCard()"
-    class="max-w-2xl mx-auto bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm p-8 space-y-8">
-    <div>
-      <h2 class="text-xl font-headline font-black text-on-surface">Émettre une carte fidélité</h2>
-      <p class="text-xs text-outline mt-1">Crée le compte et génère le QR pour impression ou puce.</p>
-    </div>
-    <div class="flex gap-2">
-      <button type="button" (click)="bootstrapMode='company'" [class.bg-primary]="bootstrapMode==='company'"
-        [class.text-white]="bootstrapMode==='company'"
-        class="flex-1 h-11 rounded-xl border text-xs font-black uppercase tracking-widest">Société</button>
-      <button type="button" (click)="bootstrapMode='user'" [class.bg-primary]="bootstrapMode==='user'"
-        [class.text-white]="bootstrapMode==='user'"
-        class="flex-1 h-11 rounded-xl border text-xs font-black uppercase tracking-widest">Particulier</button>
-    </div>
-
-    <div *ngIf="bootstrapMode === 'company'" class="space-y-3">
-      <label class="text-[10px] font-black uppercase text-outline tracking-widest">Rechercher une société
-        cliente</label>
-      <input type="text" [(ngModel)]="companySearch" (ngModelChange)="searchCompanies()" (focus)="searchCompanies()"
-        placeholder="Nom société..."
-        class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-outline-variant/10 text-sm font-bold outline-none" />
-      <select [(ngModel)]="selectedCompanyId"
-        class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-outline-variant/10 text-sm font-bold">
-        <option [ngValue]="null">— Choisir —</option>
-        <option *ngFor="let c of companyOptions()" [ngValue]="c.id">{{ c.name }} ({{ c.company_type || 'client' }})
-        </option>
-      </select>
-    </div>
-
-    <div *ngIf="bootstrapMode === 'user'" class="space-y-3">
-      <label class="text-[10px] font-black uppercase text-outline tracking-widest">Rechercher un utilisateur
-        client</label>
-      <input type="text" [(ngModel)]="userSearch" (ngModelChange)="searchUsers()" (focus)="searchUsers()"
-        placeholder="Nom, email, téléphone..."
-        class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-outline-variant/10 text-sm font-bold outline-none" />
-      <select [(ngModel)]="selectedUserId"
-        class="w-full h-12 px-4 rounded-xl bg-surface-container-low border border-outline-variant/10 text-sm font-bold">
-        <option [ngValue]="null">— Choisir —</option>
-        <option *ngFor="let u of userOptions()" [ngValue]="u.id">{{ u.first_name }} {{ u.last_name }} — {{ u.email ||
-          u.phone }}</option>
-      </select>
-    </div>
-
-    <!-- Association carte physique pré-fabriquée -->
-    <div class="space-y-3 pt-4 border-t border-outline-variant/10">
-      <label class="text-[10px] font-black uppercase text-outline tracking-widest block ml-0.5">Associer une carte
-        physique pré-fabriquée (Scannez le QR)</label>
-      <div class="relative">
-        <span class="material-symbols-outlined ab
-        solute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">qr_code_scanner</span>
-        <input type="text" [(ngModel)]="cardQrPayload"
-          placeholder="Scannez ou collez le code QR de la carte physique..."
-          class="w-full h-12 pl-12 pr-4 rounded-xl bg-surface-container-low border border-outline-variant/10 text-sm font-semibold outline-none focus:border-primary/50 shadow-sm transition-all" />
-      </div>
-      <p class="text-[10px] text-outline italic">Laissez vide pour générer automatiquement une carte virtuelle.</p>
-    </div>
-
-    <button type="button" (click)="runBootstrap()" [disabled]="bootstrapLoading()"
-      class="w-full h-14 rounded-2xl bg-[#1b1932] text-white text-xs font-black uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
-      <span *ngIf="bootstrapLoading()" class="material-symbols-outlined animate-spin text-sm">sync</span>
-      Associer et activer la carte fidélité
-    </button>
-  </section>
-
   <!-- REDEMPTIONS -->
-  <section *ngIf="tab() === 'redemptions' && canManageLoyalty()"
-    class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
-    <div class="p-6 border-b border-outline-variant/10 flex flex-wrap items-center justify-between gap-4">
-      <h2 class="text-lg font-headline font-black">Demandes de lots</h2>
-      <select [(ngModel)]="redemptionFilter" (ngModelChange)="loadRedemptions()"
-        class="h-10 px-4 rounded-xl bg-surface-container-low border text-xs font-bold">
-        <option value="pending">En attente</option>
-        <option value="delivered">Livrés</option>
-        <option value="cancelled">Annulés</option>
-        <option value="all">Tous</option>
-      </select>
+  <section *ngIf="tab() === 'redemptions' && canManageLoyalty()" class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-headline font-black text-on-surface">Demandes de lots</h2>
+        <p class="text-xs text-outline mt-1">Suivi des récompenses réclamées par les clients.</p>
+      </div>
+      <div class="relative">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+        <input type="text" [(ngModel)]="redemptionSearch" placeholder="Client ou lot..."
+               class="pl-9 pr-4 py-2.5 rounded-xl bg-surface-container-low border-none text-sm outline-none focus:ring-2 focus:ring-primary/20 w-56">
+      </div>
     </div>
-    <div *ngIf="loadingRedemptions()" class="p-16 text-center"><span
-        class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span></div>
-    <div *ngIf="!loadingRedemptions()" class="overflow-x-auto">
-      <table class="w-full text-sm text-left">
-        <thead class="bg-surface-container-low text-[10px] font-black uppercase text-outline">
-          <tr>
-            <th class="px-6 py-3">Client</th>
-            <th class="px-6 py-3">Lot</th>
-            <th class="px-6 py-3">Points</th>
-            <th class="px-6 py-3">Statut</th>
-            <th class="px-6 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-outline-variant/10">
-          <tr *ngFor="let r of redemptions()">
-            <td class="px-6 py-4 font-bold">{{ redemptionHolderLabel(r) }}</td>
-            <td class="px-6 py-4">{{ r.reward?.name || '—' }}</td>
-            <td class="px-6 py-4 font-mono">{{ r.points_cost }}</td>
-            <td class="px-6 py-4"><span class="text-[10px] font-black uppercase">{{ r.status }}</span></td>
-            <td class="px-6 py-4 text-right space-x-2" *ngIf="r.status === 'pending'">
+
+    <!-- Filtres statut sous forme d'onglets avec compteurs -->
+    <div class="flex flex-wrap gap-2">
+      <button *ngFor="let f of redemptionFilters" type="button"
+              (click)="redemptionFilter = f.value; loadRedemptions()"
+              [class]="'px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ' + (redemptionFilter === f.value ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-low text-outline hover:text-on-surface')">
+        {{ f.label }}
+        <span *ngIf="f.value === 'pending' && pendingRedemptionsCount() > 0"
+              class="w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center"
+              [class]="redemptionFilter === f.value ? 'bg-white/25' : 'bg-error text-white'">{{ pendingRedemptionsCount() }}</span>
+      </button>
+    </div>
+
+    <div class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
+      <div *ngIf="loadingRedemptions()" class="p-16 text-center"><span
+          class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span></div>
+
+      <div *ngIf="!loadingRedemptions()" class="divide-y divide-outline-variant/10">
+        <div *ngFor="let r of filteredRedemptions()" class="p-5 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-4 min-w-0">
+            <div class="w-11 h-11 rounded-2xl bg-surface-container flex items-center justify-center text-on-surface font-black shrink-0">
+              {{ redemptionHolderLabel(r).charAt(0) }}
+            </div>
+            <div class="min-w-0">
+              <p class="font-bold text-on-surface truncate">{{ redemptionHolderLabel(r) }}</p>
+              <p class="text-xs text-outline truncate">{{ r.reward?.name || '—' }} · <span class="font-mono">{{ r.points_cost }} pts</span></p>
+              <p class="text-[10px] text-outline/70 mt-0.5">Demandé le {{ r.created_at | date:'dd/MM/yyyy HH:mm' }}</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 shrink-0">
+            <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest"
+                  [class]="r.status === 'pending' ? 'bg-amber-100 text-amber-700' : r.status === 'delivered' ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'">
+              {{ r.status === 'pending' ? 'En attente' : r.status === 'delivered' ? 'Livré' : 'Annulé' }}
+            </span>
+            <div *ngIf="r.status === 'pending'" class="flex items-center gap-2">
               <button (click)="setRedemptionStatus(r, 'delivered')"
-                class="text-[10px] font-black uppercase text-secondary">Livré</button>
+                class="h-9 px-4 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all">Livré</button>
               <button (click)="setRedemptionStatus(r, 'cancelled')"
-                class="text-[10px] font-black uppercase text-outline">Annuler</button>
-            </td>
-            <td class="px-6 py-4 text-right" *ngIf="r.status !== 'pending'">—</td>
-          </tr>
-        </tbody>
-      </table>
-      <div *ngIf="redemptions().length === 0" class="p-12 text-center text-outline">Aucune demande.</div>
+                class="h-9 px-4 rounded-xl bg-surface-container-low text-outline text-[10px] font-black uppercase tracking-widest hover:text-error transition-colors">Annuler</button>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="filteredRedemptions().length === 0" class="p-16 flex flex-col items-center justify-center text-outline">
+          <span class="material-symbols-outlined text-5xl mb-3 opacity-30">inbox</span>
+          <p class="font-bold opacity-40 text-sm">Aucune demande pour ces critères.</p>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div *ngIf="!loadingRedemptions() && redemptionsMeta() && redemptionsMeta()!.last_page > 1"
+           class="flex items-center justify-center gap-3 p-4 border-t border-outline-variant/10">
+        <button type="button" (click)="loadRedemptions(redemptionsMeta()!.current_page - 1)" [disabled]="redemptionsMeta()!.current_page <= 1"
+                class="h-9 px-4 rounded-xl bg-surface-container-low text-xs font-bold text-outline disabled:opacity-40 hover:text-primary transition-colors">Précédent</button>
+        <span class="text-xs font-bold text-outline">Page {{ redemptionsMeta()!.current_page }} / {{ redemptionsMeta()!.last_page }}</span>
+        <button type="button" (click)="loadRedemptions(redemptionsMeta()!.current_page + 1)" [disabled]="redemptionsMeta()!.current_page >= redemptionsMeta()!.last_page"
+                class="h-9 px-4 rounded-xl bg-surface-container-low text-xs font-bold text-outline disabled:opacity-40 hover:text-primary transition-colors">Suivant</button>
+      </div>
     </div>
   </section>
 
   <!-- REWARDS -->
-  <section *ngIf="tab() === 'rewards' && canManageLoyalty()"
-    class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
-    <div class="p-6 border-b flex justify-between items-center">
-      <h2 class="text-lg font-headline font-black">Catalogue récompenses</h2>
-      <button (click)="openRewardForm()"
-        class="h-10 px-5 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest">+
-        Ajouter</button>
+  <section *ngIf="tab() === 'rewards' && canManageLoyalty()" class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-headline font-black text-on-surface">Catalogue récompenses</h2>
+        <p class="text-xs text-outline mt-1">{{ rewards().length }} récompense(s) — {{ activeRewardsCount() }} active(s)</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1 bg-surface-container-low rounded-xl p-1">
+          <button type="button" (click)="rewardStatusFilter = 'all'"
+                  [class]="'px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ' + (rewardStatusFilter === 'all' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            Toutes
+          </button>
+          <button type="button" (click)="rewardStatusFilter = 'active'"
+                  [class]="'px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ' + (rewardStatusFilter === 'active' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            Actives
+          </button>
+          <button type="button" (click)="rewardStatusFilter = 'inactive'"
+                  [class]="'px-3.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ' + (rewardStatusFilter === 'inactive' ? 'bg-white text-primary shadow-sm' : 'text-outline hover:text-on-surface')">
+            Inactives
+          </button>
+        </div>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+          <input type="text" [(ngModel)]="rewardSearch" placeholder="Rechercher un lot..."
+                 class="pl-9 pr-4 py-2.5 rounded-xl bg-surface-container-low border-none text-sm outline-none focus:ring-2 focus:ring-primary/20 w-56">
+        </div>
+        <button (click)="openRewardForm()"
+          class="h-10 px-5 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">add</span>
+          Ajouter
+        </button>
+      </div>
     </div>
-    <table class="w-full text-sm">
-      <thead class="bg-surface-container-low text-[10px] font-black uppercase text-outline">
-        <tr>
-          <th class="px-6 py-3 text-left">Nom</th>
-          <th class="px-6 py-3 text-right">Coût pts</th>
-          <th class="px-6 py-3">Actif</th>
-          <th class="px-6 py-3 text-right">Actions</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-outline-variant/10">
-        <tr *ngFor="let r of rewards()">
-          <td class="px-6 py-4 font-bold">{{ r.name }}<p class="text-xs text-outline font-normal">{{ r.description }}
-            </p>
-          </td>
-          <td class="px-6 py-4 text-right font-black">{{ r.points_cost }}</td>
-          <td class="px-6 py-4">{{ r.is_active ? 'Oui' : 'Non' }}</td>
-          <td class="px-6 py-4 text-right gap-2">
-            <button (click)="openRewardForm(r)"
-              class="text-[10px] font-black uppercase text-primary mr-3">Modifier</button>
-            <button (click)="deleteReward(r)" class="text-[10px] font-black uppercase text-outline">Suppr.</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+
+    <div *ngIf="filteredRewards().length === 0" class="py-20 flex flex-col items-center justify-center bg-surface-container-low rounded-[2rem] border-2 border-dashed border-outline-variant/20 text-outline">
+      <span class="material-symbols-outlined text-5xl mb-3 opacity-30">card_giftcard</span>
+      <p class="font-bold opacity-40 text-sm">Aucune récompense pour ces critères.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+      <div *ngFor="let r of filteredRewards()"
+           class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm p-6 flex flex-col gap-4"
+           [class.opacity-60]="!r.is_active">
+        <div class="flex items-start justify-between gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-xl">card_giftcard</span>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shrink-0"
+                [class.bg-primary/10]="r.is_active" [class.text-primary]="r.is_active"
+                [class.bg-surface-container-low]="!r.is_active" [class.text-outline]="!r.is_active">
+            {{ r.is_active ? 'Active' : 'Inactive' }}
+          </span>
+        </div>
+
+        <div class="flex-1">
+          <h3 class="font-headline font-black text-on-surface leading-snug">{{ r.name }}</h3>
+          <p *ngIf="r.description" class="text-xs text-outline mt-1.5 line-clamp-3">{{ r.description }}</p>
+        </div>
+
+        <div *ngIf="r.client_segments?.length" class="flex flex-wrap gap-1.5">
+          <span *ngFor="let s of r.client_segments" class="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-[9px] font-bold uppercase">{{ s }}</span>
+        </div>
+
+        <div class="flex items-center justify-between pt-3 border-t border-outline-variant/10">
+          <div class="flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-amber-500 text-lg">star</span>
+            <span class="font-black text-on-surface text-lg">{{ r.points_cost }}</span>
+            <span class="text-[10px] text-outline uppercase font-bold">pts</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button (click)="toggleRewardActive(r)" [title]="r.is_active ? 'Désactiver' : 'Activer'"
+                    class="w-8 h-8 rounded-lg bg-surface-container-low text-outline hover:text-primary flex items-center justify-center transition-colors">
+              <span class="material-symbols-outlined text-lg">{{ r.is_active ? 'toggle_on' : 'toggle_off' }}</span>
+            </button>
+            <button (click)="openRewardForm(r)" title="Modifier"
+                    class="w-8 h-8 rounded-lg bg-surface-container-low text-outline hover:text-primary flex items-center justify-center transition-colors">
+              <span class="material-symbols-outlined text-lg">edit</span>
+            </button>
+            <button (click)="deleteReward(r)" title="Supprimer"
+                    class="w-8 h-8 rounded-lg bg-surface-container-low text-outline hover:text-error flex items-center justify-center transition-colors">
+              <span class="material-symbols-outlined text-lg">delete</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- SETTINGS -->
@@ -425,68 +539,136 @@
       </div>
     </div>
   </section>
+
+  <!-- REMINDERS (Call center marketing) -->
+  <section *ngIf="tab() === 'reminders' && canManageLoyalty()"
+    class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
+    <div class="p-6 border-b border-outline-variant/10 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-headline font-black">Rappels visite technique</h2>
+        <p class="text-xs text-outline mt-1">Demandes soumises via le QR code "Fidelis Plus" en station.</p>
+      </div>
+      <select [(ngModel)]="reminderFilter" (ngModelChange)="loadReminders()"
+        class="h-10 px-4 rounded-xl bg-surface-container-low border text-xs font-bold">
+        <option value="pending">À traiter</option>
+        <option value="contacted">Contactés</option>
+        <option value="done">Terminés</option>
+        <option value="all">Tous</option>
+      </select>
+    </div>
+
+    <div *ngIf="loadingReminders()" class="p-16 text-center">
+      <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
+    </div>
+
+    <div *ngIf="!loadingReminders()" class="divide-y divide-outline-variant/10">
+      <div *ngFor="let r of reminders()" class="p-6 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="font-black text-on-surface">{{ r.full_name }}</p>
+            <p class="text-xs text-outline">{{ r.contact }} — préfère être relancé par <strong>{{ r.contact_method }}</strong>
+              ({{ r.alert_period.replace('_', ' ') }})</p>
+            <p class="text-[10px] text-outline mt-1">Station : {{ r.station?.name || '—' }} · Reçu le {{ r.created_at |
+              date:'dd/MM/yy HH:mm' }}</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest"
+            [class]="r.status === 'pending' ? 'bg-amber-50 text-amber-700' : r.status === 'contacted' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'">
+            {{ r.status === 'pending' ? 'À traiter' : r.status === 'contacted' ? 'Contacté' : 'Terminé' }}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <span *ngFor="let v of r.vehicles"
+            class="px-3 py-1.5 rounded-xl bg-surface-container-low text-[11px] font-bold text-outline border border-outline-variant/10">
+            {{ v.registration }} — expire le {{ v.visit_expiration_date | date:'dd/MM/yyyy' }}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="text" [(ngModel)]="reminderNotesDraft[r.id]"
+            placeholder="Note call center..."
+            class="flex-1 min-w-[180px] h-10 px-3 rounded-xl bg-surface-container-low border border-outline-variant/10 text-xs font-medium outline-none" />
+          <button (click)="saveReminderNotes(r)"
+            class="h-10 px-3 rounded-xl bg-surface-container-low text-[10px] font-black uppercase text-outline hover:text-primary">Noter</button>
+          <button *ngIf="r.status !== 'contacted'" (click)="setReminderStatus(r, 'contacted')"
+            class="h-10 px-3 rounded-xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase hover:bg-blue-100">Contacté</button>
+          <button *ngIf="r.status !== 'done'" (click)="setReminderStatus(r, 'done')"
+            class="h-10 px-3 rounded-xl bg-green-50 text-green-700 text-[10px] font-black uppercase hover:bg-green-100">Terminé</button>
+        </div>
+      </div>
+
+      <div *ngIf="reminders().length === 0" class="p-12 text-center text-outline italic">Aucun rappel.</div>
+    </div>
+
+    <!-- Pagination -->
+    <div *ngIf="!loadingReminders() && remindersMeta() && remindersMeta()!.last_page > 1"
+         class="flex items-center justify-center gap-3 p-4 border-t border-outline-variant/10">
+      <button type="button" (click)="loadReminders(remindersMeta()!.current_page - 1)" [disabled]="remindersMeta()!.current_page <= 1"
+              class="h-9 px-4 rounded-xl bg-surface-container-low text-xs font-bold text-outline disabled:opacity-40 hover:text-primary transition-colors">Précédent</button>
+      <span class="text-xs font-bold text-outline">Page {{ remindersMeta()!.current_page }} / {{ remindersMeta()!.last_page }}</span>
+      <button type="button" (click)="loadReminders(remindersMeta()!.current_page + 1)" [disabled]="remindersMeta()!.current_page >= remindersMeta()!.last_page"
+              class="h-9 px-4 rounded-xl bg-surface-container-low text-xs font-bold text-outline disabled:opacity-40 hover:text-primary transition-colors">Suivant</button>
+    </div>
+  </section>
+
+  <!-- STATIONS -->
+  <section *ngIf="tab() === 'stations' && canManageLoyalty()" class="animate-fade-in -mx-6 md:-mx-10">
+    <app-station-list></app-station-list>
+  </section>
 </div>
 
 <!-- QR MODAL -->
-<div *ngIf="lastQrPayload() && !showCardModal()" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
+<div *ngIf="lastQrPayload()" class="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-6 py-10">
   <div class="absolute inset-0 bg-on-surface/60 backdrop-blur-md" (click)="closeQrModal()"></div>
-  <div class="relative w-full max-w-sm bg-white rounded-[3rem] shadow-2xl p-10 flex flex-col items-center gap-6">
-    <h3 class="text-xl font-headline font-black">QR Code Fidelis</h3>
-    <img *ngIf="qrDataUrl()" [src]="qrDataUrl()!" alt="QR fidélité" class="w-64 h-64 rounded-2xl border" />
-    <p class="text-[9px] font-mono text-outline break-all text-center max-h-16 overflow-auto">{{ lastQrPayload() }}</p>
-    <button (click)="closeQrModal()"
-      class="w-full h-14 rounded-2xl bg-[#1b1932] text-white text-xs font-black uppercase">Fermer</button>
-  </div>
-</div>
-
-<!-- CARD PRINT MODAL -->
-<div *ngIf="showCardModal()"
-  class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-on-surface/60 backdrop-blur-md">
-  <div class="absolute inset-0" (click)="closeCardModal()"></div>
-  <div class="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-8 flex flex-col items-center gap-6"
-    style="z-index: 101;">
-    <div class="w-full flex justify-between items-center mb-4">
-      <h3 class="text-xl font-headline font-black">Studio Carte PVC</h3>
-      <button (click)="closeCardModal()"
-        class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-outline-variant/20"><span
-          class="material-symbols-outlined text-sm">close</span></button>
+  <div class="relative w-full max-w-sm bg-white rounded-[3rem] shadow-2xl overflow-hidden flex flex-col items-center gap-6">
+    <div class="w-full bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-10 pt-10 pb-8 flex justify-center">
+      <h3 class="text-xl font-headline font-black text-white">QR Code Fidelis</h3>
     </div>
-
-    <app-card-generator *ngIf="printAccount() && lastQrPayload()" [publicUuid]="printAccount()!.public_uuid"
-      [holderName]="holderLabel(printAccount()!)"
-      [holderType]="printAccount()!.holder_type === 'company' ? (printAccount()!.company?.company_type || 'Société') : 'Particulier'"
-      [qrPayload]="lastQrPayload()!">
-    </app-card-generator>
+    <div class="px-10 pb-10 flex flex-col items-center gap-6 w-full">
+      <img *ngIf="qrDataUrl()" [src]="qrDataUrl()!" alt="QR fidélité" class="w-64 h-64 rounded-2xl border" />
+      <p class="text-[9px] font-mono text-outline break-all text-center max-h-16 overflow-auto">{{ lastQrPayload() }}</p>
+      <button (click)="closeQrModal()"
+        class="w-full h-14 rounded-2xl bg-[#1b1932] text-white text-xs font-black uppercase">Fermer</button>
+    </div>
   </div>
 </div>
 
 <!-- CLAIM MODAL -->
-<div *ngIf="showClaimModal()" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
+<div *ngIf="showClaimModal()" class="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-6 py-10">
   <div class="absolute inset-0 bg-on-surface/50 backdrop-blur-sm" (click)="closeClaimModal()"></div>
-  <div class="relative bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl space-y-6">
-    <h3 class="text-lg font-headline font-black">Offrir un lot</h3>
+  <div class="relative bg-white rounded-[2rem] max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6">
+      <h3 class="text-lg font-headline font-black text-white">Offrir un lot</h3>
+    </div>
+    <div class="p-8 space-y-6">
     <p class="text-sm text-outline">Compte : <strong>{{ holderLabel(claimAccount()!) }}</strong> ({{
       claimAccount()?.points_balance }} pts)</p>
-    <select [(ngModel)]="claimRewardId" class="w-full h-12 px-4 rounded-xl border bg-surface-container-low font-bold">
+    <select *ngIf="filteredRewardsForClaim().length" [(ngModel)]="claimRewardId"
+      class="w-full h-12 px-4 rounded-xl border bg-surface-container-low font-bold">
       <option [ngValue]="null">— Récompense —</option>
-      <option *ngFor="let r of filteredRewardsForClaim()" [ngValue]="r.id"
-        [disabled]="!r.is_active || r.points_cost > claimAccount()!.points_balance">{{ r.name }} ({{ r.points_cost }}
-        pts)</option>
+      <option *ngFor="let r of filteredRewardsForClaim()" [ngValue]="r.id">{{ r.name }} ({{ r.points_cost }} pts)</option>
     </select>
+    <p *ngIf="!filteredRewardsForClaim().length" class="text-sm text-outline italic py-4 text-center">
+      Aucun lot accessible avec le solde actuel.
+    </p>
     <div class="flex gap-3 justify-end">
       <button (click)="closeClaimModal()"
         class="px-6 py-3 rounded-xl bg-surface-container text-xs font-black uppercase">Annuler</button>
-      <button (click)="submitClaim()" [disabled]="claimSaving()"
-        class="px-6 py-3 rounded-xl bg-primary text-white text-xs font-black uppercase">Confirmer</button>
+      <button (click)="submitClaim()" [disabled]="claimSaving() || !filteredRewardsForClaim().length"
+        class="px-6 py-3 rounded-xl bg-primary text-white text-xs font-black uppercase disabled:opacity-40">Confirmer</button>
+    </div>
     </div>
   </div>
 </div>
 
 <!-- ADJUST MODAL -->
-<div *ngIf="showAdjustModal()" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
+<div *ngIf="showAdjustModal()" class="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-6 py-10">
   <div class="absolute inset-0 bg-on-surface/50 backdrop-blur-sm" (click)="closeAdjustModal()"></div>
-  <div class="relative bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl space-y-6">
-    <h3 class="text-lg font-headline font-black">Ajustement de points</h3>
+  <div class="relative bg-white rounded-[2rem] max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6">
+      <h3 class="text-lg font-headline font-black text-white">Ajustement de points</h3>
+    </div>
+    <div class="p-8 space-y-6">
     <p class="text-sm text-outline">{{ holderLabel(adjustAccount()!) }} — solde actuel {{
       adjustAccount()?.points_balance }} pts</p>
     <input type="number" [(ngModel)]="adjustDelta" placeholder="Delta (+/-)"
@@ -499,26 +681,27 @@
       <button (click)="submitAdjust()" [disabled]="adjustSaving()"
         class="px-6 py-3 rounded-xl bg-primary text-white text-xs font-black uppercase">Appliquer</button>
     </div>
+    </div>
   </div>
 </div>
 
 <!-- REWARD FORM MODAL -->
-<div *ngIf="showRewardForm()" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+<div *ngIf="showRewardForm()" class="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-4 py-10">
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" (click)="closeRewardForm()"></div>
 
   <div
     class="relative bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-fade-in">
     <!-- Header with decorative icon and gradient -->
     <div
-      class="bg-gradient-to-r from-primary/10 to-secondary/10 px-8 py-6 border-b border-outline-variant/10 flex items-center gap-4">
+      class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6 flex items-center gap-4">
       <div
-        class="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0 shadow-inner">
+        class="w-12 h-12 rounded-2xl bg-white/15 text-white flex items-center justify-center shrink-0 shadow-inner">
         <span class="material-symbols-outlined text-2xl">featured_seasonal_and_gifts</span>
       </div>
       <div>
-        <h3 class="text-xl font-headline font-black text-[#1a1831]">{{ editingReward ? 'Modifier la' : 'Nouvelle' }}
+        <h3 class="text-xl font-headline font-black text-white">{{ editingReward ? 'Modifier la' : 'Nouvelle' }}
           Récompense</h3>
-        <p class="text-xs text-outline font-medium">Configurez un lot du catalogue fidélité Mayelia</p>
+        <p class="text-xs text-white/80 font-medium">Configurez un lot du catalogue fidélité Mayelia</p>
       </div>
     </div>
 
@@ -609,6 +792,74 @@
   </div>
 </div>
 
+<!-- VEHICLES MODAL -->
+<div *ngIf="showVehiclesModal()" class="fixed inset-0 z-[210] overflow-y-auto flex items-start justify-center p-6 py-10">
+  <div class="absolute inset-0 bg-on-surface/50 backdrop-blur-sm" (click)="closeVehiclesModal()"></div>
+  <div class="relative bg-white rounded-[2rem] w-full max-w-lg shadow-2xl max-h-[80vh] overflow-y-auto">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6 flex items-center justify-between sticky top-0 z-10">
+      <h3 class="text-lg font-headline font-black text-white">Véhicules du client</h3>
+      <button (click)="closeVehiclesModal()"
+        class="w-8 h-8 rounded-full bg-white/15 text-white flex items-center justify-center hover:bg-white/25">
+        <span class="material-symbols-outlined text-sm">close</span>
+      </button>
+    </div>
+    <div class="p-8 space-y-6">
+    <p class="text-sm text-outline">{{ holderLabel(vehiclesAccount()!) }} — Carte {{ vehiclesAccount()?.card_number }}</p>
+
+    <div *ngIf="!groupedVehicles().length" class="text-sm text-outline italic py-8 text-center">
+      Aucun véhicule scanné pour ce compte.
+    </div>
+
+    <div class="space-y-3">
+      <div *ngFor="let v of groupedVehicles()" class="p-4 rounded-2xl border border-outline-variant/10 bg-surface-container-low/40">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-amber-600">directions_car</span>
+            <span class="font-black text-on-surface">{{ v.registration }}</span>
+            <span *ngIf="v.brand" class="text-xs text-outline font-bold">{{ v.brand }}</span>
+            <span *ngIf="v.color" class="text-xs text-outline">{{ v.color }}</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-[10px] font-black uppercase">{{ v.totalPoints }} pts</span>
+        </div>
+        <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Visites techniques ({{ v.visits.length }})</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span *ngFor="let date of v.visits" class="px-2 py-0.5 rounded-lg bg-white border border-outline-variant/10 text-[10px] font-bold text-outline">
+            {{ date | date:'dd/MM/yy' }}
+          </span>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT ACCOUNT MODAL -->
+<div *ngIf="showEditModal()" class="fixed inset-0 z-[210] overflow-y-auto flex items-start justify-center p-6 py-10">
+  <div class="absolute inset-0 bg-on-surface/50 backdrop-blur-sm" (click)="closeEditModal()"></div>
+  <div class="relative bg-white rounded-[2rem] max-w-md w-full shadow-2xl overflow-hidden">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6">
+      <h3 class="text-lg font-headline font-black text-white">Modifier le compte</h3>
+    </div>
+    <div class="p-8 space-y-6">
+    <p class="text-sm text-outline">{{ holderLabel(editAccount()!) }} — Carte {{ editAccount()?.card_number }}</p>
+    <div class="space-y-3">
+      <input type="text" [(ngModel)]="editForm.subscriber_name" placeholder="Nom de l'abonné"
+        class="w-full h-12 px-4 rounded-xl border bg-surface-container-low font-bold outline-none" />
+      <input type="text" [(ngModel)]="editForm.trade_register" placeholder="Registre de commerce"
+        class="w-full h-12 px-4 rounded-xl border bg-surface-container-low font-bold outline-none" />
+      <input type="text" [(ngModel)]="editForm.subscriber_function" placeholder="Fonction de l'abonné"
+        class="w-full h-12 px-4 rounded-xl border bg-surface-container-low font-bold outline-none" />
+    </div>
+    <div class="flex gap-3 justify-end">
+      <button (click)="closeEditModal()"
+        class="px-6 py-3 rounded-xl bg-surface-container text-xs font-black uppercase">Annuler</button>
+      <button (click)="saveEditAccount()" [disabled]="editSaving()"
+        class="px-6 py-3 rounded-xl bg-primary text-white text-xs font-black uppercase">Enregistrer</button>
+    </div>
+    </div>
+  </div>
+</div>
+
 <!-- ACCOUNT DETAIL SLIDEOVER -->
 <div *ngIf="selectedAccountDetail()" class="fixed inset-0 z-[200] flex">
   <!-- Backdrop -->
@@ -618,9 +869,7 @@
   <div class="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-full animate-slide-in-right">
 
     <!-- Panel header with gradient -->
-    <div class="relative overflow-hidden shrink-0" [class]="selectedAccountDetail()!.holder_type === 'company'
-        ? 'bg-gradient-to-br from-[#0f766e] via-[#15b9a3] to-[#0891b2]'
-        : 'bg-gradient-to-br from-violet-700 via-violet-500 to-purple-500'">
+    <div class="relative overflow-hidden shrink-0 bg-gradient-to-br from-[#15b9a3] to-[#006b5d]">
       <!-- Close button -->
       <button (click)="closeAccountDetail()"
         class="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all z-10">
@@ -636,13 +885,16 @@
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-1 flex-wrap">
             <span class="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[9px] font-black uppercase tracking-widest">
-              {{ selectedAccountDetail()!.holder_type === 'company' ? (selectedAccountDetail()!.company?.company_type ||
-              'Société') : 'Particulier' }}
+              {{ selectedAccountDetail()!.holder_type === 'company' ? 'Entreprise' : 'Particulier' }}
             </span>
+            <span *ngIf="selectedAccountDetail()!.blocked_at"
+              class="px-2 py-0.5 rounded-lg bg-red-500/80 text-white text-[9px] font-black uppercase tracking-widest">Bloqué</span>
+            <span *ngIf="selectedAccountDetail()!.company?.created_via_marketing"
+              class="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[9px] font-black uppercase tracking-widest">Créé par marketing</span>
           </div>
           <h2 class="text-xl font-black text-white leading-tight truncate">{{ holderLabel(selectedAccountDetail()!) }}
           </h2>
-          <p class="text-white/70 font-mono text-[11px] mt-1 break-all">{{ selectedAccountDetail()!.holder_key }}</p>
+          <p class="text-white/70 font-mono text-[11px] mt-1 break-all">Carte {{ selectedAccountDetail()!.card_number }}</p>
         </div>
       </div>
     </div>
@@ -670,100 +922,41 @@
         </div>
       </div>
 
-      <!-- Milestones section -->
-      <div>
-        <p class="text-[10px] font-black uppercase tracking-widest text-outline mb-3">Paliers de Récompenses</p>
-
-        <!-- Corporate Clients (Company) Milestones -->
-        <div *ngIf="selectedAccountDetail()!.holder_type === 'company'" class="space-y-2">
-          <!-- Palier 20 -->
-          <div class="flex items-center gap-3 p-3 rounded-xl border"
-            [class]="selectedAccountDetail()!.milestone_flotte_20_reached_at || selectedAccountDetail()!.total_vehicles_referred >= 20 ? 'border-green-200 bg-green-50' : 'border-outline-variant/10 bg-surface-container-low/50 opacity-55'">
-            <span class="material-symbols-outlined text-xl"
-              [class]="selectedAccountDetail()!.milestone_flotte_20_reached_at || selectedAccountDetail()!.total_vehicles_referred >= 20 ? 'text-green-500' : 'text-outline'">payments</span>
-            <div class="flex-1">
-              <p class="text-xs font-black text-on-surface">Palier 20 véhicules — Bon d'achat 10 000 FCFA</p>
-              <p class="text-[10px] text-outline">
-                {{ selectedAccountDetail()!.milestone_flotte_20_reached_at
-                ? ('Atteint le ' + (selectedAccountDetail()!.milestone_flotte_20_reached_at | date:'dd/MM/yyyy'))
-                : (selectedAccountDetail()!.total_vehicles_referred >= 20 ? 'Atteint' : 'Non atteint (' +
-                (selectedAccountDetail()!.total_vehicles_referred || 0) + '/20)') }}
-              </p>
-            </div>
-            <span
-              *ngIf="selectedAccountDetail()!.milestone_flotte_20_reached_at || selectedAccountDetail()!.total_vehicles_referred >= 20"
-              class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
-          </div>
-
-          <!-- Palier 30 -->
-          <div class="flex items-center gap-3 p-3 rounded-xl border"
-            [class]="selectedAccountDetail()!.total_vehicles_referred >= 30 ? 'border-green-200 bg-green-50' : 'border-outline-variant/10 bg-surface-container-low/50 opacity-55'">
-            <span class="material-symbols-outlined text-xl"
-              [class]="selectedAccountDetail()!.total_vehicles_referred >= 30 ? 'text-green-500' : 'text-outline'">payments</span>
-            <div class="flex-1">
-              <p class="text-xs font-black text-on-surface">Palier 30 véhicules — Bon d'achat 15 000 FCFA</p>
-              <p class="text-[10px] text-outline">
-                {{ selectedAccountDetail()!.total_vehicles_referred >= 30 ? 'Atteint' : 'Non atteint (' +
-                (selectedAccountDetail()!.total_vehicles_referred || 0) + '/30)' }}
-              </p>
-            </div>
-            <span *ngIf="selectedAccountDetail()!.total_vehicles_referred >= 30"
-              class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
-          </div>
-
-          <!-- Palier 50 -->
-          <div class="flex items-center gap-3 p-3 rounded-xl border"
-            [class]="selectedAccountDetail()!.milestone_flotte_50_reached_at || selectedAccountDetail()!.total_vehicles_referred >= 50 ? 'border-teal-200 bg-teal-50' : 'border-outline-variant/10 bg-surface-container-low/50 opacity-55'">
-            <span class="material-symbols-outlined text-xl"
-              [class]="selectedAccountDetail()!.milestone_flotte_50_reached_at || selectedAccountDetail()!.total_vehicles_referred >= 50 ? 'text-teal-600' : 'text-outline'">card_giftcard</span>
-            <div class="flex-1">
-              <p class="text-xs font-black text-on-surface">Palier 50 véhicules — Bon 25 000F + Visite Offerte</p>
-              <p class="text-[10px] text-outline">
-                {{ selectedAccountDetail()!.milestone_flotte_50_reached_at
-                ? ('Atteint le ' + (selectedAccountDetail()!.milestone_flotte_50_reached_at | date:'dd/MM/yyyy'))
-                : (selectedAccountDetail()!.total_vehicles_referred >= 50 ? 'Atteint' : 'Non atteint (' +
-                (selectedAccountDetail()!.total_vehicles_referred || 0) + '/50)') }}
-              </p>
-            </div>
-            <span
-              *ngIf="selectedAccountDetail()!.milestone_flotte_50_reached_at || selectedAccountDetail()!.total_vehicles_referred >= 50"
-              class="material-symbols-outlined text-teal-600 text-sm">check_circle</span>
-          </div>
-        </div>
-
-        <!-- Individual Clients (User) Milestones -->
-        <div *ngIf="selectedAccountDetail()!.holder_type === 'user'" class="space-y-4">
-          <div class="p-4 rounded-xl bg-violet-50 border border-violet-100 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-black text-violet-800">Visite technique offerte</span>
-              <span class="text-xs font-bold text-violet-700">{{ (selectedAccountDetail()!.total_vehicles_referred || 0)
-                % 5 }}/5 passages</span>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="w-full bg-violet-200/50 rounded-full h-2">
-              <div class="bg-violet-600 h-2 rounded-full transition-all duration-500"
-                [style.width.%]="((selectedAccountDetail()!.total_vehicles_referred || 0) % 5) * 20"></div>
-            </div>
-
-            <p class="text-[11px] text-violet-600 font-semibold leading-relaxed">
-              Pour les particuliers, profitez d'une visite technique 100% offerte tous les 5 passages (scans) validés.
-              <span class="block mt-1 font-bold text-violet-800">
-                {{ 5 - ((selectedAccountDetail()!.total_vehicles_referred || 0) % 5) }} passage(s) restant(s) avant la
-                visite offerte.
-              </span>
-            </p>
-          </div>
-        </div>
+      <!-- Subscriber info (entreprise) -->
+      <div *ngIf="selectedAccountDetail()!.holder_type === 'company' && (selectedAccountDetail()!.subscriber_name || selectedAccountDetail()!.trade_register || selectedAccountDetail()!.subscriber_function)"
+        class="rounded-2xl bg-surface-container-low border border-outline-variant/10 p-4 space-y-2">
+        <p class="text-[9px] font-black uppercase tracking-widest text-outline">Informations abonné</p>
+        <p *ngIf="selectedAccountDetail()!.subscriber_name" class="text-xs font-bold text-on-surface">{{ selectedAccountDetail()!.subscriber_name }} <span *ngIf="selectedAccountDetail()!.subscriber_function" class="text-outline font-medium">— {{ selectedAccountDetail()!.subscriber_function }}</span></p>
+        <p *ngIf="selectedAccountDetail()!.trade_register" class="text-[11px] text-outline">RCCM : {{ selectedAccountDetail()!.trade_register }}</p>
       </div>
 
-      <!-- Info: vehicles referred -->
-      <div *ngIf="selectedAccountDetail()!.total_vehicles_referred"
-        class="flex items-center gap-3 p-4 rounded-2xl bg-surface-container-low border border-outline-variant/10">
-        <span class="material-symbols-outlined text-2xl text-primary">directions_car</span>
-        <div>
-          <p class="text-[9px] font-black uppercase tracking-widest text-outline">Véhicules apportés</p>
-          <p class="text-2xl font-black text-on-surface">{{ selectedAccountDetail()!.total_vehicles_referred }}</p>
+      <!-- Scan history timeline -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[10px] font-black uppercase tracking-widest text-outline">Historique des passages</p>
+          <span class="material-symbols-outlined text-sm text-outline" [class.animate-spin]="loadingScanHistory()">sync</span>
+        </div>
+
+        <div *ngIf="!loadingScanHistory() && scanHistory().length === 0" class="text-xs text-outline italic py-6 text-center">
+          Aucun passage enregistré.
+        </div>
+
+        <div class="space-y-3">
+          <div *ngFor="let s of scanHistory()" class="flex items-start gap-3 p-3 rounded-xl border border-outline-variant/10 bg-surface-container-low/40">
+            <span class="material-symbols-outlined text-primary text-lg shrink-0">qr_code_scanner</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs font-black text-on-surface">{{ s.station?.name || 'Station #' + s.id }}</p>
+                <p class="text-[10px] font-bold text-outline shrink-0">{{ s.created_at | date:'dd/MM/yy HH:mm' }}</p>
+              </div>
+              <div *ngIf="s.vehicle_registration || s.vehicle_brand || s.vehicle_color" class="flex flex-wrap gap-1.5 mt-1.5">
+                <span *ngIf="s.vehicle_registration" class="px-2 py-0.5 rounded-lg bg-white text-outline text-[10px] font-bold border border-outline-variant/10">{{ s.vehicle_registration }}</span>
+                <span *ngIf="s.vehicle_brand" class="px-2 py-0.5 rounded-lg bg-white text-outline text-[10px] font-bold border border-outline-variant/10">{{ s.vehicle_brand }}</span>
+                <span *ngIf="s.vehicle_color" class="px-2 py-0.5 rounded-lg bg-white text-outline text-[10px] font-bold border border-outline-variant/10">{{ s.vehicle_color }}</span>
+              </div>
+              <span class="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-[10px] font-black uppercase">+{{ s.points_credited }} pts</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -775,19 +968,222 @@
         Ajuster pts
       </button>
       <button *ngIf="canManageLoyalty()" (click)="openClaimModal(selectedAccountDetail()!); closeAccountDetail()"
-        class="flex-1 h-11 rounded-xl bg-surface-container-low text-xs font-black uppercase tracking-widest text-on-surface hover:bg-secondary/10 hover:text-secondary transition-all">
+        [disabled]="!canOfferReward(selectedAccountDetail()!)"
+        [title]="!canOfferReward(selectedAccountDetail()!) ? 'Solde insuffisant pour le plus petit lot disponible' : ''"
+        class="flex-1 h-11 rounded-xl bg-surface-container-low text-xs font-black uppercase tracking-widest text-on-surface hover:bg-secondary/10 hover:text-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low disabled:hover:text-on-surface">
         Offrir lot
       </button>
-      <button *ngIf="canEmitLoyaltyCard()" (click)="openCardModal(selectedAccountDetail()!); closeAccountDetail()"
-        class="h-11 px-4 rounded-xl bg-teal-500 text-white text-xs font-black uppercase tracking-widest hover:bg-teal-600 transition-all flex items-center gap-2">
-        <span class="material-symbols-outlined text-sm">badge</span>
-        Carte PVC
+      <button *ngIf="canManageLoyalty()" (click)="openEditModal(selectedAccountDetail()!)"
+        class="h-11 px-4 rounded-xl bg-surface-container-low text-xs font-black uppercase tracking-widest text-on-surface hover:bg-primary/10 hover:text-primary transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">edit</span>
+      </button>
+      <button *ngIf="canManageLoyalty()" (click)="toggleBlockAccount(selectedAccountDetail()!)"
+        class="h-11 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2"
+        [class]="selectedAccountDetail()!.blocked_at ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-red-50 text-red-700 hover:bg-red-100'">
+        <span class="material-symbols-outlined text-sm">{{ selectedAccountDetail()!.blocked_at ? 'lock_open' : 'block' }}</span>
+      </button>
+      <button (click)="openVehiclesModal(selectedAccountDetail()!)"
+        class="h-11 px-4 rounded-xl bg-amber-50 text-amber-700 text-xs font-black uppercase tracking-widest hover:bg-amber-100 transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">directions_car</span>
+        Véhicules
       </button>
       <button (click)="refreshQrPayload(selectedAccountDetail()!, false); closeAccountDetail()"
         class="h-11 px-4 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">qr_code_2</span>
         QR
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE MEMBER MODAL -->
+<div *ngIf="showCreateMemberModal()" class="fixed inset-0 z-[210] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-sm">
+  <div class="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl overflow-hidden">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6 flex justify-between items-center">
+      <h3 class="font-headline font-black text-lg text-white">Nouveau client fidélité</h3>
+      <button type="button" (click)="closeCreateMemberModal()" class="text-white/80 hover:text-white p-1">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="p-8">
+
+    <div class="flex gap-2 mb-6 bg-surface-container-low rounded-2xl p-1">
+      <button type="button" (click)="createMemberForm.type = 'particulier'"
+              [class]="'flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ' + (createMemberForm.type === 'particulier' ? 'bg-white text-primary shadow-sm' : 'text-outline')">
+        Particulier
+      </button>
+      <button type="button" (click)="createMemberForm.type = 'entreprise'"
+              [class]="'flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ' + (createMemberForm.type === 'entreprise' ? 'bg-white text-primary shadow-sm' : 'text-outline')">
+        Entreprise
+      </button>
+    </div>
+
+    <form (ngSubmit)="submitCreateMember()" class="space-y-4">
+      <ng-container *ngIf="createMemberForm.type === 'particulier'">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Prénom</label>
+            <input type="text" [(ngModel)]="createMemberForm.prenom" name="prenom" required
+                   class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Nom</label>
+            <input type="text" [(ngModel)]="createMemberForm.nom" name="nom" required
+                   class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+          </div>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="createMemberForm.type === 'entreprise'">
+        <div>
+          <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Nom de l'entreprise</label>
+          <input type="text" [(ngModel)]="createMemberForm.nom_entreprise" name="nom_entreprise" required
+                 class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Registre de commerce</label>
+            <input type="text" [(ngModel)]="createMemberForm.registre_commerce" name="registre_commerce"
+                   class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Fonction de l'abonné</label>
+            <input type="text" [(ngModel)]="createMemberForm.fonction" name="fonction"
+                   class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Nom de l'abonné</label>
+          <input type="text" [(ngModel)]="createMemberForm.nom_abonne" name="nom_abonne"
+                 class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+        </div>
+      </ng-container>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Contact <span class="text-error">*</span></label>
+          <input type="text" [(ngModel)]="createMemberForm.contact" name="contact" required placeholder="0700000000"
+                 class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-outline uppercase tracking-wider mb-1.5">Email (optionnel)</label>
+          <input type="email" [(ngModel)]="createMemberForm.email" name="email"
+                 class="w-full px-4 py-2.5 bg-surface-container rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-primary/20">
+        </div>
+      </div>
+
+      <p class="text-[11px] text-outline/70">
+        L'adhésion est gratuite. Aucune carte n'est créée automatiquement — vous scannerez une carte
+        vierge déjà imprimée juste après pour l'associer à ce client.
+      </p>
+
+      <div class="pt-4 flex items-center justify-end gap-3">
+        <button type="button" (click)="closeCreateMemberModal()" class="px-5 py-2.5 border border-slate-200 text-outline hover:text-on-surface font-bold text-xs rounded-lg transition-colors">
+          Annuler
+        </button>
+        <button type="submit" [disabled]="creatingMember()"
+                class="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-lg shadow-md shadow-primary/10 hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-2">
+          <span *ngIf="creatingMember()" class="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+          {{ creatingMember() ? 'Création...' : 'Créer et émettre la carte' }}
+        </button>
+      </div>
+    </form>
+    </div>
+  </div>
+</div>
+
+<!-- ASSIGN CARD MODAL (carte vierge -> client fidélité) -->
+<div *ngIf="assignCardTarget()" class="fixed inset-0 z-[210] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-sm">
+  <div class="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6 flex justify-between items-center">
+      <div>
+        <h3 class="font-headline font-black text-lg text-white">{{ assignCardTarget()!.cardNumber ? 'Remplacer la carte physique' : 'Associer une carte physique' }}</h3>
+        <p class="text-xs text-white/80 mt-0.5">
+          {{ assignCardTarget()!.label }}
+          <span *ngIf="assignCardTarget()!.cardNumber"> — Carte {{ assignCardTarget()!.cardNumber }}</span>
+          <span *ngIf="!assignCardTarget()!.cardNumber" class="italic"> — pas encore de carte</span>
+        </p>
+      </div>
+      <button type="button" (click)="closeAssignCardModal()" class="text-white/80 hover:text-white p-1">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="p-8 space-y-5">
+
+    <p class="text-xs text-outline">
+      Scannez le QR d'une carte vierge déjà imprimée (lecteur USB ou caméra) pour la remplacer sur ce compte.
+    </p>
+
+    <div>
+      <label class="block text-[10px] font-black uppercase text-outline tracking-[0.2em] mb-1.5 ml-1">Code scanné / collé</label>
+      <input type="text" [(ngModel)]="assignCardPayload" (keydown.enter)="submitAssignCard()"
+             placeholder="Scannez avec un lecteur USB, ou collez le code..."
+             autofocus
+             class="w-full px-4 py-3 rounded-2xl bg-surface-container-low border-none text-sm outline-none focus:ring-2 focus:ring-primary/25">
+    </div>
+
+    <div class="flex items-center gap-4 flex-wrap">
+      <button type="button" (click)="showAssignCardCamera.set(!showAssignCardCamera())"
+              class="text-xs font-bold text-primary underline">
+        {{ showAssignCardCamera() ? 'Masquer la caméra' : 'Utiliser la caméra à la place' }}
+      </button>
+      <button type="button" (click)="openPickPrintedCard()"
+              class="text-xs font-bold text-primary underline">
+        Choisir une carte déjà imprimée
+      </button>
+      <div *ngIf="showAssignCardCamera()" class="w-full mt-1 rounded-2xl overflow-hidden">
+        <app-qr-camera-scanner (decoded)="onAssignCardScanned($event)"></app-qr-camera-scanner>
+      </div>
+    </div>
+
+    <div class="pt-2 flex items-center justify-end gap-3">
+      <button type="button" (click)="closeAssignCardModal()" class="px-5 py-2.5 border border-slate-200 text-outline hover:text-on-surface font-bold text-xs rounded-lg transition-colors">
+        Annuler
+      </button>
+      <button type="button" (click)="submitAssignCard()" [disabled]="!assignCardPayload.trim() || assigningCard()"
+              class="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-lg shadow-md shadow-primary/10 hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all">
+        {{ assigningCard() ? 'Association...' : 'Associer' }}
+      </button>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sélection d'une carte déjà imprimée et prête (alternative au scan) -->
+<div *ngIf="showPickPrintedCard()" class="fixed inset-0 z-[220] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-sm">
+  <div class="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl overflow-hidden">
+    <div class="bg-gradient-to-br from-[#15b9a3] to-[#006b5d] px-8 py-6 flex justify-between items-center">
+      <div>
+        <h3 class="font-headline font-black text-lg text-white">Choisir une carte imprimée</h3>
+        <p class="text-xs text-white/80 mt-0.5">Cartes vierges dont le lot est marqué "imprimé et prêt", pas encore associées.</p>
+      </div>
+      <button type="button" (click)="closePickPrintedCard()" class="text-white/80 hover:text-white p-1">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="p-8 space-y-4">
+
+      <div *ngIf="loadingPrintedCards()" class="p-10 text-center">
+        <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
+      </div>
+
+      <div *ngIf="!loadingPrintedCards()" class="max-h-[400px] overflow-y-auto divide-y divide-outline-variant/10 -mx-8 px-8">
+        <button type="button" *ngFor="let c of printedCards()" (click)="pickPrintedCard(c)" [disabled]="pickingCardId() === c.id"
+                class="w-full py-3.5 flex items-center justify-between gap-3 text-left hover:bg-surface-container-low transition-colors disabled:opacity-50 rounded-xl px-2">
+          <span class="font-mono text-sm font-bold text-on-surface">{{ c.card_number }}</span>
+          <span *ngIf="pickingCardId() !== c.id" class="material-symbols-outlined text-outline text-lg">chevron_right</span>
+          <span *ngIf="pickingCardId() === c.id" class="w-4 h-4 rounded-full border-2 border-outline/30 border-t-primary animate-spin"></span>
+        </button>
+        <p *ngIf="printedCards().length === 0" class="p-10 text-center text-outline italic text-sm">
+          Aucune carte imprimée disponible. Générez un lot dans le Studio Carte puis marquez-le comme imprimé.
+        </p>
+      </div>
+
+      <div class="pt-2 flex items-center justify-end">
+        <button type="button" (click)="closePickPrintedCard()" class="px-5 py-2.5 border border-slate-200 text-outline hover:text-on-surface font-bold text-xs rounded-lg transition-colors">
+          Annuler
+        </button>
+      </div>
     </div>
   </div>
 </div>

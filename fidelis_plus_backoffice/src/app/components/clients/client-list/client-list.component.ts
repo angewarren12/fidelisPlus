@@ -1,6 +1,7 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { AccountService } from '../../../services/account.service';
 import { ToastService } from '../../../services/toast.service';
 import { downloadCsv } from '../../../utils/csv-download';
@@ -9,45 +10,31 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
 @Component({
   selector: 'app-client-list',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, FormsModule],
   template: `
     <div class="animate-fade-in-up">
       <!-- Filter Bar -->
       <section class="mb-8 bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-4 flex flex-wrap items-center gap-4 border border-surface-container/30">
-        <div class="flex-1 min-w-[200px]">
+        <div class="flex-1 min-w-[220px]">
+          <label for="search-clients" class="sr-only">Rechercher un client</label>
           <div class="relative">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">filter_list</span>
-            <select class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium appearance-none">
-              <option>Statut: Tous</option>
-              <option>Nouveau</option>
-              <option>Ancien</option>
-              <option>Inactif</option>
-            </select>
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]" aria-hidden="true">search</span>
+            <input id="search-clients" type="text" [(ngModel)]="searchQuery"
+                   placeholder="Rechercher par entreprise, contact, email, secteur..."
+                   class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20">
           </div>
         </div>
-        <div class="flex-1 min-w-[200px]">
-          <select class="w-full px-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium appearance-none">
-            <option>Nombre de véhicules</option>
-            <option>1-5</option>
-            <option>6-20</option>
-            <option>20+</option>
-          </select>
-        </div>
-        <div class="flex-1 min-w-[200px]">
-          <select class="w-full px-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium appearance-none">
-            <option>Station d'inspection</option>
-            <option>Abidjan Nord</option>
-            <option>Abidjan Sud</option>
-            <option>Yamoussoukro</option>
-          </select>
-        </div>
-        <div class="flex-1 min-w-[200px]">
-          <select class="w-full px-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium appearance-none">
-            <option>Dernière activité</option>
-            <option>Aujourd'hui</option>
-            <option>Cette semaine</option>
-            <option>Ce mois</option>
-          </select>
+        <div class="min-w-[200px]">
+          <label for="filter-vehicle-count" class="sr-only">Filtrer par nombre de véhicules</label>
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]" aria-hidden="true">filter_list</span>
+            <select id="filter-vehicle-count" [(ngModel)]="vehicleCountFilter" class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium appearance-none">
+              <option value="all">Tous les véhicules</option>
+              <option value="1-5">1 à 5 véhicules</option>
+              <option value="6-20">6 à 20 véhicules</option>
+              <option value="20+">Plus de 20 véhicules</option>
+            </select>
+          </div>
         </div>
         <div class="flex items-center gap-3 ml-auto">
           <button type="button" (click)="exportClientsCsv()" class="px-5 py-2 border-2 border-outline-variant text-on-surface font-bold text-sm rounded-xl hover:bg-surface-container transition-colors flex items-center gap-2">
@@ -74,11 +61,7 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
               </div>
               <div>
                 <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Nouveaux (Mois)</p>
-                <p class="text-3xl font-headline font-extrabold">+1</p>
-              </div>
-              <div>
-                <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Taux de Visite</p>
-                <p class="text-3xl font-headline font-extrabold">87%</p>
+                <p class="text-3xl font-headline font-extrabold">+{{ newThisMonthCount() }}</p>
               </div>
             </div>
           </div>
@@ -93,11 +76,8 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
             <h3 class="text-sm font-bold text-outline uppercase tracking-wider">Alerte Inactivité</h3>
             <span class="material-symbols-outlined text-secondary">trending_down</span>
           </div>
-          <p class="text-3xl font-headline font-extrabold text-on-background mb-1">0</p>
-          <p class="text-xs text-outline mb-4">Clients n'ont pas visité depuis 6+ mois</p>
-          <button class="w-full py-2 bg-secondary-container/30 text-secondary text-xs font-bold rounded-lg hover:bg-secondary-container/50 transition-colors">
-            Lancer une campagne de rappel
-          </button>
+          <p class="text-3xl font-headline font-extrabold text-on-background mb-1">{{ inactiveSixMonthsCount() }}</p>
+          <p class="text-xs text-outline">Clients sans contact depuis 6+ mois</p>
         </div>
       </div>
 
@@ -110,13 +90,12 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Nom entreprise</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Correspondant</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-center">Flotte</th>
-                <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Dernière visite</th>
+                <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Secteur</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Statut</th>
-                <th class="px-6 py-4"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-outline-variant/10">
-              <tr *ngFor="let c of clients()" [routerLink]="['/clients', c.id]" class="hover:bg-surface-container-low/50 transition-colors group cursor-pointer">
+              <tr *ngFor="let c of filteredClients()" [routerLink]="['/clients', c.id]" class="hover:bg-surface-container-low/50 transition-colors group cursor-pointer">
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface font-bold">
@@ -137,33 +116,43 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
                       <ng-template #noContact><span class="text-xs text-outline italic">Aucun contact</span></ng-template>
                     </p>
                     <p class="text-xs text-outline mt-0.5">{{ c.phone || c.contacts?.[0]?.phone || '—' }}</p>
-                    <p class="text-[10px] text-outline/60 mt-0.5">{{ c.email || '—' }}</p>
+                    <p class="text-xs text-outline mt-0.5">{{ c.email || '—' }}</p>
                   </div>
                 </td>
                 <td class="px-6 py-4 text-center">
                   <span class="px-2.5 py-1 bg-surface-container text-on-surface-variant rounded-full text-xs font-bold">{{ c.vehicles_count || 0 }}</span>
                 </td>
-                <td class="px-6 py-4 text-sm font-medium">{{ (c.last_contact || c.created_at) | date:'shortDate' }}</td>
+                <td class="px-6 py-4 text-sm text-outline">{{ c.sector || '—' }}</td>
                 <td class="px-6 py-4">
-                  <span class="px-3 py-1 bg-primary-container/20 text-primary rounded-full text-[11px] font-bold uppercase tracking-wider">Actif</span>
-                </td>
-                <td class="px-6 py-4 text-right">
-                  <button class="p-2 text-outline hover:text-primary transition-colors opacity-0 group-hover:opacity-100">
-                    <span class="material-symbols-outlined">more_vert</span>
-                  </button>
+                  <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
+                        [ngClass]="c.is_active ? 'bg-primary-container/20 text-primary' : 'bg-slate-100 text-slate-500'">
+                    {{ c.is_active ? 'Actif' : 'Inactif' }}
+                  </span>
                 </td>
               </tr>
-              
+
               <!-- Loading -->
               <tr *ngIf="loading()">
-                <td colspan="6" class="px-6 py-16 text-center">
+                <td colspan="4" class="px-6 py-16 text-center">
                   <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
                   <p class="text-outline font-medium mt-2">Chargement des clients...</p>
                 </td>
               </tr>
+              <!-- Error -->
+              <tr *ngIf="!loading() && error()">
+                <td colspan="4" class="px-6 py-20 text-center">
+                  <span class="material-symbols-outlined text-6xl text-error/40 block mb-3">cloud_off</span>
+                  <p class="text-on-surface font-bold text-lg mb-1">Impossible de charger les clients</p>
+                  <p class="text-outline text-sm mb-6">Une erreur réseau est survenue. Vérifiez votre connexion et réessayez.</p>
+                  <button (click)="loadClients()" class="px-6 py-2 bg-primary text-white font-bold text-sm rounded-xl hover:brightness-110 transition-all inline-flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">refresh</span>
+                    Réessayer
+                  </button>
+                </td>
+              </tr>
               <!-- Empty -->
-              <tr *ngIf="!loading() && clients().length === 0">
-                <td colspan="6" class="px-6 py-20 text-center">
+              <tr *ngIf="!loading() && !error() && filteredClients().length === 0">
+                <td colspan="4" class="px-6 py-20 text-center">
                   <span class="material-symbols-outlined text-6xl text-outline/30 block mb-3">group_off</span>
                   <p class="text-on-surface font-bold text-lg mb-1">Aucun client trouvé</p>
                   <p class="text-outline text-sm mb-6">Convertissez un prospect chaud ou créez un client directement.</p>
@@ -184,9 +173,59 @@ export class ClientListComponent implements OnInit {
   // Angular Signals — requis en mode zoneless (Angular 21 sans zone.js)
   clients = signal<any[]>([]);
   loading = signal(true);
+  error = signal(false);
+  vehicleCountFilter = signal<'all' | '1-5' | '6-20' | '20+'>('all');
+  searchQuery = signal('');
 
   private accountService = inject(AccountService);
   private toastService = inject(ToastService);
+
+  filteredClients = computed(() => {
+    const filter = this.vehicleCountFilter();
+    let list = this.clients();
+
+    if (filter !== 'all') {
+      list = list.filter((c: any) => {
+        const count = c.vehicles_count || 0;
+        if (filter === '1-5') return count >= 1 && count <= 5;
+        if (filter === '6-20') return count >= 6 && count <= 20;
+        return count > 20;
+      });
+    }
+
+    const q = this.searchQuery().trim().toLowerCase();
+    if (q) {
+      list = list.filter((c: any) => {
+        const contact = c.contacts?.[0];
+        const haystack = [
+          c.name, c.sector, c.email, c.phone,
+          contact?.first_name, contact?.last_name, contact?.email, contact?.phone,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    return list;
+  });
+
+  newThisMonthCount = computed(() => {
+    const now = new Date();
+    return this.clients().filter((c: any) => {
+      if (!c.created_at) return false;
+      const created = new Date(c.created_at);
+      return created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth();
+    }).length;
+  });
+
+  inactiveSixMonthsCount = computed(() => {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 6);
+    return this.clients().filter((c: any) => {
+      const lastContact = c.last_contact || c.created_at;
+      if (!lastContact) return true;
+      return new Date(lastContact) < cutoff;
+    }).length;
+  });
 
   exportClientsCsv(): void {
     const list = this.clients();
@@ -240,14 +279,20 @@ export class ClientListComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.loadClients();
+  }
+
+  loadClients() {
+    this.loading.set(true);
+    this.error.set(false);
     this.accountService.getClients().subscribe({
       next: (data) => {
         this.clients.set(data);
         this.loading.set(false);
-        console.log('[Clients] Données reçues:', data);
       },
       error: (err) => {
         this.loading.set(false);
+        this.error.set(true);
         console.error('[Clients] Erreur:', err);
       }
     });

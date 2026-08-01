@@ -36,8 +36,8 @@ import { CreateProspectDto } from '../../../models/prospect.model';
             </div>
             
             <div class="space-y-2">
-              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">SIRET</label>
-              <input type="text" formControlName="siret" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="123 456 789 00012">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Numéro Registre de Commerce (RCCM)</label>
+              <input type="text" formControlName="rccm" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="CI-ABJ-2026-A-12345">
             </div>
 
             <div class="space-y-2">
@@ -79,15 +79,9 @@ import { CreateProspectDto } from '../../../models/prospect.model';
               <input type="text" formControlName="address" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="15 Avenue des Champs-Élysées">
             </div>
             
-            <div class="grid grid-cols-3 gap-4 col-span-2">
-              <div class="col-span-2 space-y-2">
-                <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Ville</label>
-                <input type="text" formControlName="city" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Paris">
-              </div>
-              <div class="space-y-2">
-                <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Code postal</label>
-                <input type="text" formControlName="zip_code" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="75008">
-              </div>
+            <div class="col-span-2 space-y-2">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Ville</label>
+              <input type="text" formControlName="city" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Paris">
             </div>
 
             <div class="space-y-2">
@@ -171,23 +165,7 @@ import { CreateProspectDto } from '../../../models/prospect.model';
           </div>
           
           <div class="grid grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Source du lead</label>
-              <div class="space-y-2">
-                <select formControlName="lead_source" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
-                  <option *ngFor="let source of leadSources" [value]="source">{{ source }}</option>
-                  <option value="NEW_SOURCE">+ Ajouter une nouvelle source...</option>
-                </select>
-                
-                <input *ngIf="prospectForm.get('lead_source')?.value === 'NEW_SOURCE'"
-                       type="text"
-                       formControlName="newLeadSource"
-                       class="w-full bg-surface-container-low border-2 border-primary/30 rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none animate-fade-in-up"
-                       placeholder="Saisissez la nouvelle source">
-              </div>
-            </div>
-            
-            <div class="space-y-2">
+            <div class="col-span-2 space-y-2">
               <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Commercial assigné</label>
               <div class="relative flex items-center">
                 <div class="absolute left-3 w-7 h-7 rounded-full overflow-hidden bg-primary-container/20 flex items-center justify-center text-[10px] font-bold">ME</div>
@@ -195,16 +173,6 @@ import { CreateProspectDto } from '../../../models/prospect.model';
                   <option>Moi-même</option>
                 </select>
               </div>
-            </div>
-            
-            <div class="col-span-2 space-y-2">
-              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Besoins identifiés</label>
-              <textarea formControlName="needs" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none h-32" placeholder="Détaillez les attentes spécifiques du prospect..."></textarea>
-            </div>
-            
-            <div class="space-y-2">
-              <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Décision estimée</label>
-              <input type="date" formControlName="estimated_decision_date" class="w-full bg-surface-container-low border-none rounded-lg p-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
             </div>
           </div>
         </section>
@@ -231,7 +199,6 @@ export class ProspectFormComponent implements OnInit {
   prospectForm!: FormGroup;
   loading = false;
   sectors: string[] = ['Logistique & Transport', 'Automobile', 'Construction'];
-  leadSources: string[] = ['Recommandation', 'Site Web', 'Prospection active', 'Salon professionnel'];
 
   constructor(
     private fb: FormBuilder,
@@ -244,31 +211,25 @@ export class ProspectFormComponent implements OnInit {
   ngOnInit(): void {
     this.initForm();
     this.loadSectors();
-    this.loadLeadSources();
   }
 
   initForm(): void {
     const currentUser = this.authService.getCurrentUser();
-    
+
     this.prospectForm = this.fb.group({
       name: ['', Validators.required],
-      siret: [''],
+      rccm: [''],
       sector: ['Logistique & Transport', Validators.required],
       newSector: [''],
       address: [''],
       city: [''],
-      zip_code: [''],
       phone: [''],
       email: ['', Validators.email],
       temperature: ['tiede', Validators.required],
       commercial_id: [currentUser?.id, Validators.required],
-      estimated_decision_date: [''],
-      needs: [''],
-      lead_source: ['Prospection active', Validators.required],
-      newLeadSource: [''],
       category: ['entreprise', Validators.required],
       company_type: [null],
-      
+
       // Correspondant
       contact_first_name: ['', Validators.required],
       contact_last_name: ['', Validators.required],
@@ -290,18 +251,6 @@ export class ProspectFormComponent implements OnInit {
     });
   }
 
-  loadLeadSources(): void {
-    this.prospectService.getLeadSources().subscribe({
-      next: (data) => {
-        if (data && data.length > 0) {
-          const defaults = ['Recommandation', 'Site Web', 'Prospection active', 'Salon professionnel'];
-          this.leadSources = Array.from(new Set([...defaults, ...data]));
-        }
-      },
-      error: (err) => console.error('Erreur chargement sources', err)
-    });
-  }
-
   setTemperature(temp: string): void {
     this.prospectForm.get('temperature')?.setValue(temp);
   }
@@ -313,12 +262,10 @@ export class ProspectFormComponent implements OnInit {
       
       // Logique pour les champs dynamiques
       const sector = formValue.sector === 'NEW_SECTOR' ? formValue.newSector : formValue.sector;
-      const lead_source = formValue.lead_source === 'NEW_SOURCE' ? formValue.newLeadSource : formValue.lead_source;
-      
+
       const data: CreateProspectDto = {
         ...formValue,
         sector: sector,
-        lead_source: lead_source
       };
       
       this.prospectService.createProspect(data).subscribe({

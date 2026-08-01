@@ -15,19 +15,39 @@ export interface FleetStatsPayload {
   by_status: Record<string, number>;
 }
 
+export interface VehicleDocument {
+  id: number;
+  name: string;
+  type: string;
+  path: string;
+}
+
 export interface Vehicle {
   id: number;
   company_id: number;
   license_plate: string;
   brand: string;
   model: string;
+  vehicle_type?: string | null;
+  ptac_kg?: number | null;
+  seats?: number | null;
+  registration_date?: string | null;
+  fiscal_power_cv?: number | null;
+  ct_amount_ht?: number | null;
+  ct_vat_amount?: number | null;
+  ct_amount_ttc?: number | null;
+  vignette_amount?: number | null;
+  penalty_amount?: number | null;
   year: number | null;
   fuel_type: string | null;
   registration_doc_url?: string;
   vignette_doc_url?: string;
   last_visit: string | null;
-  status: 'a_jour' | 'en_retard' | 'bientot' | string;
-  has_all_docs?: boolean;
+  status: 'jamais_controle' | 'a_jour' | 'en_retard' | 'bientot' | string;
+  has_required_doc?: boolean;
+  documents?: VehicleDocument[];
+  carte_grise?: { id: number; path: string } | null;
+  vignette?: { id: number; path: string } | null;
   company?: any;
 }
 
@@ -127,6 +147,16 @@ export class VehicleService {
     year?: number | null;
     fuel_type?: string | null;
     last_visit_date?: string | null;
+    vehicle_type?: string | null;
+    ptac_kg?: number | null;
+    seats?: number | null;
+    registration_date?: string | null;
+    fiscal_power_cv?: number | null;
+    ct_amount_ht?: number | null;
+    ct_vat_amount?: number | null;
+    ct_amount_ttc?: number | null;
+    vignette_amount?: number | null;
+    penalty_amount?: number | null;
   }): Observable<Vehicle> {
     return this.http.post<any>(this.API_URL, data).pipe(
       map(res => res?.data ?? res)
@@ -143,6 +173,16 @@ export class VehicleService {
       year?: number | null;
       fuel_type?: string | null;
       last_visit_date?: string | null;
+      vehicle_type?: string | null;
+      ptac_kg?: number | null;
+      seats?: number | null;
+      registration_date?: string | null;
+      fiscal_power_cv?: number | null;
+      ct_amount_ht?: number | null;
+      ct_vat_amount?: number | null;
+      ct_amount_ttc?: number | null;
+      vignette_amount?: number | null;
+      penalty_amount?: number | null;
     }
   ): Observable<Vehicle> {
     return this.http.put<any>(`${this.API_URL}/${id}`, data).pipe(
@@ -189,5 +229,37 @@ export class VehicleService {
       map(res => res?.data ?? res)
     );
   }
+
+  // Télécharge le modèle Excel d'import de flotte
+  downloadImportTemplate(): Observable<Blob> {
+    return this.http.get(`${this.API_URL}/import/template`, { responseType: 'blob' });
+  }
+
+  // Import en masse de véhicules depuis un fichier Excel, pour un client existant (companyId)
+  // ou un nouveau client à créer (companyName, si companyId omis).
+  importFromExcel(target: { companyId?: number; companyName?: string }, file: File): Observable<VehicleImportResult> {
+    const formData = new FormData();
+    if (target.companyId != null) formData.append('company_id', String(target.companyId));
+    else if (target.companyName) formData.append('company_name', target.companyName);
+    formData.append('file', file);
+
+    return this.http.post<any>(`${this.API_URL}/import`, formData).pipe(
+      map(res => res?.data ?? res)
+    );
+  }
+}
+
+export interface VehicleImportError {
+  row: number;
+  license_plate: string | null;
+  message: string;
+}
+
+export interface VehicleImportResult {
+  company_id: number;
+  company_name: string;
+  created: number;
+  errors_count: number;
+  errors: VehicleImportError[];
 }
 

@@ -14,7 +14,7 @@ class AppointmentResource extends JsonResource
             'date' => $this->appointment_date->toIso8601String(),
             'is_express' => (bool) $this->is_pass_express,
             'status' => $this->status,
-            'vehicle' => new VehicleResource($this->whenLoaded('vehicle')),
+            'vehicles' => VehicleResource::collection($this->whenLoaded('vehicles')),
             'station' => $this->whenLoaded('station'),
         ];
     }

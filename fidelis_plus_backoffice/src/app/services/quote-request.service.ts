@@ -18,6 +18,8 @@ export interface QuoteRequest {
   user?: any;
   company?: any;
   vehicle?: any;
+  /** Tous les véhicules concernés par la demande (une demande peut en couvrir plusieurs). */
+  vehicles?: any[];
 }
 
 @Injectable({
