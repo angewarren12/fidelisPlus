@@ -69,6 +69,17 @@ class TechnicalVisitReminderController extends Controller
             $q->where('status', $request->string('status')->toString());
         }
 
+        if ($request->filled('visit_date_from') || $request->filled('visit_date_to')) {
+            $q->whereHas('vehicles', function ($vq) use ($request) {
+                if ($request->filled('visit_date_from')) {
+                    $vq->whereDate('visit_expiration_date', '>=', $request->string('visit_date_from')->toString());
+                }
+                if ($request->filled('visit_date_to')) {
+                    $vq->whereDate('visit_expiration_date', '<=', $request->string('visit_date_to')->toString());
+                }
+            });
+        }
+
         $paginator = $q->paginate($perPage);
 
         return response()->json([

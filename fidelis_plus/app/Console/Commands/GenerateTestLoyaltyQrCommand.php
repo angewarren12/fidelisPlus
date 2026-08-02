@@ -30,7 +30,7 @@ class GenerateTestLoyaltyQrCommand extends Command
         $days = max(1, (int) $this->option('days'));
 
         $payload = $qr->encode([
-            'loyalty_account_id' => $account->id,
+            'account_uuid' => $account->public_uuid,
             'jti' => (string) Str::uuid(),
             'exp' => now()->addDays($days)->getTimestamp(),
             'points_per_scan' => $points,

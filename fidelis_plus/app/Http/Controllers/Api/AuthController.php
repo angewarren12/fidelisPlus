@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -139,6 +140,71 @@ class AuthController extends Controller
             'status' => 'error',
             'message' => $message,
         ], $code);
+    }
+
+    /**
+     * Changement de mot de passe par l'utilisateur connecté.
+     * Utilisé notamment lors du changement obligatoire de première connexion.
+     */
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required',
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Le mot de passe actuel est incorrect.',
+            ], 422);
+        }
+
+        $user->forceFill([
+            'password' => $request->password,
+            'must_change_password' => false,
+        ])->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Mot de passe mis à jour avec succès.',
+            'data' => $user,
+        ]);
+    }
+
+    /**
+     * Mise à jour du profil personnel par l'utilisateur connecté (self-service).
+     * Volontairement restreint à first_name/last_name/phone/email : aucun champ
+     * de gestion commerciale (role, company_id, status...) n'est modifiable ici.
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $validator = Validator::make($request->all(), [
+            'first_name' => 'sometimes|required|string|max:255',
+            'last_name' => 'sometimes|required|string|max:255',
+            'phone' => 'sometimes|nullable|string|max:255',
+            'email' => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $user->update($validator->validated());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Profil mis à jour avec succès.',
+            'data' => $user->fresh(),
+        ]);
     }
 
     /**

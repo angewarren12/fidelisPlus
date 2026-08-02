@@ -17,8 +17,11 @@ class LoyaltyAccount extends Model
         'holder_key',
         'card_number',
         'holder_type',
+        'blank_card_type',
+        'loyalty_card_batch_id',
         'company_id',
         'user_id',
+        'loyalty_member_id',
         'public_uuid',
         'points_balance',
         'subscriber_name',
@@ -62,16 +65,46 @@ class LoyaltyAccount extends Model
                 $account->public_uuid = (string) Str::uuid();
             }
             if (empty($account->card_number)) {
-                $account->card_number = static::nextCardNumber();
+                $account->card_number = static::nextCardNumber(static::resolveCardPrefix($account));
             }
         });
     }
 
-    public static function nextCardNumber(): string
+    /**
+     * ENT- pour les comptes entreprise (société, membre "entreprise", carte vierge imprimée
+     * depuis un modèle "entreprise"), FID- pour tout le reste (particulier).
+     */
+    public static function resolveCardPrefix(self $account): string
     {
-        $lastId = (int) (static::max('id') ?? 0);
+        if ($account->holder_type === 'company') {
+            return 'ENT';
+        }
 
-        return str_pad((string) ($lastId + 1), 4, '0', STR_PAD_LEFT);
+        if ($account->holder_type === 'unassigned') {
+            return $account->blank_card_type === 'entreprise' ? 'ENT' : 'FID';
+        }
+
+        if ($account->holder_type === 'member' && $account->loyalty_member_id) {
+            $memberType = LoyaltyMember::query()->find($account->loyalty_member_id)?->type;
+
+            return $memberType === 'entreprise' ? 'ENT' : 'FID';
+        }
+
+        return 'FID';
+    }
+
+    public static function nextCardNumber(string $prefix = 'FID'): string
+    {
+        // lockForUpdate() sérialise les générations concurrentes par préfixe (ex : deux lots
+        // de cartes lancés en parallèle) tant que l'appelant est dans une transaction —
+        // sinon deux requêtes pourraient calculer le même dernier numéro et se percuter.
+        $lastNumber = (int) (static::query()
+            ->where('card_number', 'like', $prefix.'-%')
+            ->lockForUpdate()
+            ->selectRaw('MAX(CAST(SUBSTRING(card_number, ?) AS UNSIGNED)) as max_number', [strlen($prefix) + 2])
+            ->value('max_number') ?? 0);
+
+        return $prefix.'-'.str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 
     public function scanEvents(): HasMany
@@ -87,6 +120,16 @@ class LoyaltyAccount extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function member(): BelongsTo
+    {
+        return $this->belongsTo(LoyaltyMember::class, 'loyalty_member_id');
+    }
+
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(LoyaltyCardBatch::class, 'loyalty_card_batch_id');
     }
 
     public function ledgerEntries(): HasMany

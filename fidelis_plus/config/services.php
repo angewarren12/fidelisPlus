@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    // Jeton de service partagé avec l'app mobile client SIRA pour l'intégration fidélité
+    // (inscription à la carte + consultation QR/solde/historique). Voir routes/api.php.
+    // outbound_base_url/outbound_token : sens inverse, utilisés par Fidelis pour appeler
+    // l'API de SIRA (vérification/provisioning de compte). Voir app/Services/Sira/SiraClient.php.
+    'sira' => [
+        'token' => env('SIRA_API_TOKEN', ''),
+        'outbound_base_url' => env('SIRA_OUTBOUND_BASE_URL', ''),
+        'outbound_token' => env('SIRA_OUTBOUND_TOKEN', ''),
+    ],
+
 ];

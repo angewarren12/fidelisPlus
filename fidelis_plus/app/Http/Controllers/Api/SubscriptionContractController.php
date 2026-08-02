@@ -18,6 +18,12 @@ class SubscriptionContractController extends Controller
     public function show(int $companyId): JsonResponse
     {
         $company = Company::findOrFail($companyId);
+
+        $user = request()->user();
+        if ($user && $user->role === 'commercial' && (int) $company->commercial_id !== (int) $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403);
+        }
+
         $contract = $company->subscriptionContract;
 
         return response()->json([
@@ -32,6 +38,11 @@ class SubscriptionContractController extends Controller
     public function store(Request $request, int $companyId): JsonResponse
     {
         $company = Company::findOrFail($companyId);
+
+        $user = $request->user();
+        if ($user && $user->role === 'commercial' && (int) $company->commercial_id !== (int) $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403);
+        }
 
         $validator = Validator::make($request->all(), [
             'subscriber_name' => 'required|string|max:255',

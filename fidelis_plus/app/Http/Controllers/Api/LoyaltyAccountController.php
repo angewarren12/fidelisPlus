@@ -21,8 +21,15 @@ class LoyaltyAccountController extends Controller
         $perPage = min(100, max(5, (int) $request->get('per_page', 20)));
 
         $q = LoyaltyAccount::query()
-            ->with(['company:id,name,type,category,created_via_marketing', 'user:id,first_name,last_name,email,company_id'])
-            ->orderByDesc('updated_at');
+            ->with(['company:id,name,type,category,created_via_marketing', 'user:id,first_name,last_name,email,company_id', 'member', 'batch:id,status'])
+            ->orderByDesc('updated_at')
+            // Par défaut, les cartes vierges (pas encore associées à un client) sont exclues
+            // de la liste des comptes fidélité — elles ne sont visibles que via le stock du
+            // Studio Carte (holder_type=unassigned explicitement demandé).
+            ->when($request->filled('holder_type'), fn ($qq) => $qq->where('holder_type', $request->input('holder_type')))
+            ->when(! $request->filled('holder_type'), fn ($qq) => $qq->where('holder_type', '!=', 'unassigned'))
+            ->when($request->filled('batch_status'), fn ($qq) => $qq->whereHas('batch', fn ($b) => $b->where('status', $request->input('batch_status'))))
+            ->when($request->filled('search'), fn ($qq) => $qq->where('card_number', 'like', '%'.$request->input('search').'%'));
         LoyaltyCommercialVisibility::scopeLoyaltyAccounts($q, $request->user());
         $paginator = $q->paginate($perPage);
 
@@ -40,7 +47,7 @@ class LoyaltyAccountController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $q = LoyaltyAccount::query()->with(['company', 'user'])->whereKey($id);
+        $q = LoyaltyAccount::query()->with(['company', 'user', 'member', 'batch:id,status'])->whereKey($id);
         LoyaltyCommercialVisibility::scopeLoyaltyAccounts($q, $request->user());
         $account = $q->firstOrFail();
 
@@ -150,9 +157,12 @@ class LoyaltyAccountController extends Controller
     }
 
     /**
-     * Associe un code QR / carte physique à un compte fidélité déjà créé.
+     * Associe une carte physique vierge (générée en masse depuis le Studio Carte) à un
+     * compte fidélité existant déjà créé. Logique déléguée à LoyaltyCardAssignmentService,
+     * partagée avec le flux marketing "Mes Clients" — mêmes règles de sécurité partout
+     * (carte vierge uniquement, pas de remplacement d'un compte qui a déjà un historique).
      */
-    public function associateCard(Request $request, int $id): JsonResponse
+    public function associateCard(Request $request, int $id, \App\Services\Loyalty\LoyaltyCardAssignmentService $assignmentService): JsonResponse
     {
         $request->validate([
             'qr_payload' => 'required|string',
@@ -161,55 +171,43 @@ class LoyaltyAccountController extends Controller
         $account = LoyaltyAccount::query()->findOrFail($id);
 
         try {
-            [$publicUuid, $qr] = $this->parsePhysicalQrPayload(trim($request->input('qr_payload')));
+            $updated = $assignmentService->assignBlankCard($account, trim($request->input('qr_payload')));
         } catch (\InvalidArgumentException $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
         }
 
-        $collision = LoyaltyAccount::where('public_uuid', $publicUuid)
-            ->where('id', '!=', $account->id)
-            ->exists();
-        if ($collision) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Ce code QR ou carte physique est déjà associé à un autre compte fidélité.',
-            ], 422);
-        }
-
-        $account->update(['public_uuid' => $publicUuid]);
+        $qr = app(SignedLoyaltyQrService::class)->encode([
+            'account_uuid' => $updated->public_uuid,
+            'jti' => bin2hex(random_bytes(8)),
+            'exp' => 0,
+            'points_per_scan' => app(LoyaltyRulesService::class)->getPointsPerScan($updated),
+        ]);
 
         return response()->json([
             'status' => 'success',
             'data' => [
-                'loyalty_account' => $account->fresh(['company', 'user']),
+                'loyalty_account' => $updated->fresh(['company', 'user']),
                 'qr_payload' => $qr,
             ],
         ]);
     }
 
     /**
-     * Décode un payload QR (signé "x.y" ou code brut de carte physique imprimée)
-     * et retourne [public_uuid, qr_payload_a_renvoyer].
+     * Décode un payload QR chiffré (toute carte physique doit porter un QR généré par
+     * SignedLoyaltyQrService — plus de mode "code brut" accepté sans vérification) et
+     * retourne [public_uuid, qr_payload_a_renvoyer].
      *
      * @return array{0: string, 1: string}
      */
     private function parsePhysicalQrPayload(string $qrPayload): array
     {
-        if (str_contains($qrPayload, '.')) {
-            try {
-                $claims = app(SignedLoyaltyQrService::class)->decodeAndVerify($qrPayload);
-            } catch (\Exception $e) {
-                throw new \InvalidArgumentException('Code QR signé invalide ou signature corrompue : ' . $e->getMessage());
-            }
-
-            return [$claims['account_uuid'], $qrPayload];
+        try {
+            $claims = app(SignedLoyaltyQrService::class)->decodeAndVerify($qrPayload);
+        } catch (\Exception $e) {
+            throw new \InvalidArgumentException('Code QR invalide ou carte falsifiée : ' . $e->getMessage());
         }
 
-        if (!preg_match('/^[a-zA-Z0-9\-]{6,100}$/', $qrPayload)) {
-            throw new \InvalidArgumentException('Format de code QR physique brut invalide (doit être alphanumérique, entre 6 et 100 caractères).');
-        }
-
-        return [$qrPayload, $qrPayload];
+        return [$claims['account_uuid'], $qrPayload];
     }
 
     public function qrPayload(Request $request, int $id): JsonResponse
@@ -262,7 +260,7 @@ class LoyaltyAccountController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $account->fresh(['company', 'user']),
+            'data' => $account->fresh(['company', 'user', 'member', 'batch:id,status']),
         ]);
     }
 

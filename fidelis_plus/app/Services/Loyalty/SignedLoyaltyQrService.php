@@ -4,22 +4,35 @@ namespace App\Services\Loyalty;
 
 use Illuminate\Support\Facades\Config;
 
+/**
+ * Chiffrement réel (AES-256-GCM) du contenu du QR fidélité : le payload n'est plus
+ * lisible sans la clé (contrairement à l'ancien format signé-mais-clair "payload.signature"),
+ * et il n'existe plus de mode "code brut" accepté sans vérification cryptographique — toute
+ * carte physique doit porter un QR généré par ce service.
+ */
 class SignedLoyaltyQrService
 {
+    private const CIPHER = 'aes-256-gcm';
+    private const IV_LENGTH = 12;
+    private const TAG_LENGTH = 16;
+
     /**
-     * Encode un payload signé : base64url(json).base64url(hmac_sha256(secret, payload_b64)).
-     *
      * @param  array{account_uuid:string,jti:string,exp:int,points_per_scan?:int}  $claims
      */
     public function encode(array $claims): string
     {
-        $secret = $this->secret();
+        $key = $this->key();
         ksort($claims);
         $json = json_encode($claims, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-        $payloadB64 = $this->base64UrlEncode($json);
-        $sig = hash_hmac('sha256', $payloadB64, $secret, true);
 
-        return $payloadB64.'.'.$this->base64UrlEncode($sig);
+        $iv = random_bytes(self::IV_LENGTH);
+        $tag = '';
+        $cipherText = openssl_encrypt($json, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv, $tag);
+        if ($cipherText === false) {
+            throw new \RuntimeException('Échec du chiffrement du QR fidélité.');
+        }
+
+        return $this->base64UrlEncode($iv.$tag.$cipherText);
     }
 
     /**
@@ -30,53 +43,44 @@ class SignedLoyaltyQrService
     public function decodeAndVerify(string $qrPayload): array
     {
         $qrPayload = trim($qrPayload);
-        
-        // Si c'est un code QR physique brut (sans signature JWT/HMAC ".")
-        if (!str_contains($qrPayload, '.')) {
-            if (preg_match('/^[a-zA-Z0-9\-]{6,100}$/', $qrPayload)) {
-                return [
-                    'account_uuid' => $qrPayload,
-                    'jti' => 'raw-' . $qrPayload . '-' . bin2hex(random_bytes(5)),
-                    'exp' => 0,
-                    'points_per_scan' => 10, // Valeur par défaut, recalculée par le POS via RulesService
-                ];
-            }
-            throw new \InvalidArgumentException('QR physique invalide : format alphanumérique attendu (6-100 caractères).');
+        if ($qrPayload === '') {
+            throw new \InvalidArgumentException('QR invalide : payload vide.');
         }
 
-        $secret = $this->secret();
-        $parts = explode('.', $qrPayload, 2);
-        if (count($parts) !== 2) {
-            throw new \InvalidArgumentException('QR invalide : format attendu payload.signature');
+        $raw = $this->base64UrlDecode($qrPayload);
+        if ($raw === false || strlen($raw) <= self::IV_LENGTH + self::TAG_LENGTH) {
+            throw new \InvalidArgumentException('QR invalide : format illisible.');
         }
-        [$payloadB64, $sigB64] = $parts;
-        $expectedSig = hash_hmac('sha256', $payloadB64, $secret, true);
-        $sig = $this->base64UrlDecode($sigB64);
-        if ($sig === false || ! hash_equals($expectedSig, $sig)) {
-            throw new \InvalidArgumentException('QR invalide : signature incorrecte');
-        }
-        $json = $this->base64UrlDecode($payloadB64);
+
+        $iv = substr($raw, 0, self::IV_LENGTH);
+        $tag = substr($raw, self::IV_LENGTH, self::TAG_LENGTH);
+        $cipherText = substr($raw, self::IV_LENGTH + self::TAG_LENGTH);
+
+        $json = openssl_decrypt($cipherText, self::CIPHER, $this->key(), OPENSSL_RAW_DATA, $iv, $tag);
         if ($json === false) {
-            throw new \InvalidArgumentException('QR invalide : payload illisible');
+            // Déchiffrement échoué = mauvaise clé, QR falsifié, ou QR d'un autre format (ancien/étranger).
+            throw new \InvalidArgumentException('QR invalide : déchiffrement impossible (carte falsifiée ou inconnue).');
         }
+
         /** @var mixed $data */
         $data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         if (! is_array($data)) {
-            throw new \InvalidArgumentException('QR invalide');
+            throw new \InvalidArgumentException('QR invalide.');
         }
+
         $accountUuid = isset($data['account_uuid']) ? (string) $data['account_uuid'] : '';
         $jti = isset($data['jti']) ? (string) $data['jti'] : '';
         $exp = isset($data['exp']) ? (int) $data['exp'] : 0;
         $points = isset($data['points_per_scan']) ? max(0, (int) $data['points_per_scan']) : 1;
 
         if ($accountUuid === '' || $jti === '') {
-            throw new \InvalidArgumentException('QR invalide : données obligatoires manquantes');
+            throw new \InvalidArgumentException('QR invalide : données obligatoires manquantes.');
         }
 
-        // Pour les cartes physiques permanentes (sans date d'expiration),
-        // on génère un jti unique par scan pour éviter la contrainte d'unicité en base de données.
+        // Cartes physiques permanentes (sans date d'expiration) : un jti unique est régénéré
+        // à chaque scan pour éviter la contrainte d'unicité en base de données.
         if ($exp === 0) {
-            $jti = 'perm-' . $accountUuid . '-' . bin2hex(random_bytes(5));
+            $jti = 'perm-'.$accountUuid.'-'.bin2hex(random_bytes(5));
         }
 
         return [
@@ -89,7 +93,10 @@ class SignedLoyaltyQrService
 
     public function isExpired(int $expUnix): bool
     {
-        if ($expUnix === 0) return false; // Permanent
+        if ($expUnix === 0) {
+            return false; // Permanent
+        }
+
         return time() > $expUnix;
     }
 
@@ -98,14 +105,18 @@ class SignedLoyaltyQrService
         return hash('sha256', $qrPayload);
     }
 
-    private function secret(): string
+    /**
+     * Dérive une clé AES-256 (32 octets) à partir du secret configuré. `hash(..., true)`
+     * garantit toujours 32 octets quelle que soit la longueur du secret fourni en config.
+     */
+    private function key(): string
     {
-        $secret = (string) Config::get('loyalty.qr_secret');
+        $secret = (string) Config::get('loyalty.qr_key');
         if ($secret === '') {
-            throw new \RuntimeException('LOYALTY_QR_SECRET n\'est pas configuré.');
+            throw new \RuntimeException('LOYALTY_QR_KEY n\'est pas configuré.');
         }
 
-        return $secret;
+        return hash('sha256', $secret, true);
     }
 
     private function base64UrlEncode(string $raw): string

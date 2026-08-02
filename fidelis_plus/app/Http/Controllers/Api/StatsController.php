@@ -8,7 +8,6 @@ use App\Models\Quote;
 use App\Models\Vehicle;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Http\Resources\AppointmentResource;
 
 class StatsController extends Controller
 {
@@ -48,6 +47,7 @@ class StatsController extends Controller
         $totalRevenue = (clone $quotesQuery)->where('status', 'accepted')->sum('total_amount');
         $pipelineValue = (clone $quotesQuery)->whereIn('status', ['sent', 'draft'])->sum('total_amount');
         $newQuotesCount = (clone $quotesQuery)->where('status', 'sent')->count();
+        $totalQuotesCount = (clone $quotesQuery)->count();
 
         // 3. Comptes (Clients vs Prospects)
         $companyQuery = Company::query();
@@ -77,20 +77,6 @@ class StatsController extends Controller
 
         $overdueCount = (clone $fleetQuery)->where('status', 'en_retard')->count();
 
-        // 5. Rendez-vous du jour
-        $appointmentsQuery = \App\Models\Appointment::with(['company', 'vehicles', 'station'])
-            ->whereDate('appointment_date', today());
-            
-        if ($isClient) {
-            $appointmentsQuery->where('company_id', $companyId);
-        } elseif ($filterCommercialId !== null) {
-            $appointmentsQuery->whereHas('company', function ($q) use ($filterCommercialId) {
-                $q->where('commercial_id', $filterCommercialId);
-            });
-        }
-
-        $todayAppointments = $appointmentsQuery->orderBy('appointment_date', 'asc')->get();
-
         $quoteRequestsQuery = \App\Models\QuoteRequest::where('status', 'pending');
         if ($isClient) {
             $quoteRequestsQuery->where('company_id', $companyId);
@@ -114,24 +100,14 @@ class StatsController extends Controller
         // Devis récents
         $recentQuotes = (clone $quotesQuery)->orderBy('created_at', 'desc')->take(5)->get();
 
-        // Volume d'inspections sur la semaine en cours (Lundi à Dimanche)
-        $visitsQuery = \App\Models\Visit::query();
-        if ($isClient) {
-            $visitsQuery->whereHas('vehicle', function ($q) use ($companyId) {
-                $q->where('company_id', $companyId);
-            });
-        } elseif ($filterCommercialId !== null) {
-            $visitsQuery->whereHas('vehicle.company', function ($q) use ($filterCommercialId) {
-                $q->where('commercial_id', $filterCommercialId);
-            });
-        }
-
+        // Performance commerciale : devis créés par jour sur la semaine en cours (Lundi à Dimanche),
+        // scopée sur le portefeuille du commercial connecté (ou l'entreprise du client).
         $startOfWeek = now()->startOfWeek();
-        $weeklyInspections = [];
+        $weeklyQuotes = [];
         for ($i = 0; $i < 7; $i++) {
             $day = (clone $startOfWeek)->addDays($i);
-            $weeklyInspections[] = (clone $visitsQuery)
-                ->whereDate('visit_date', $day->toDateString())
+            $weeklyQuotes[] = (clone $quotesQuery)
+                ->whereDate('created_at', $day->toDateString())
                 ->count();
         }
 
@@ -147,7 +123,8 @@ class StatsController extends Controller
                 ],
                 'revenue' => [
                     'total_accepted' => (float) $totalRevenue,
-                    'new_quotes_count' => $newQuotesCount
+                    'new_quotes_count' => $newQuotesCount,
+                    'total_quotes_count' => $totalQuotesCount,
                 ],
                 'crm' => [
                     'total_prospects' => $prospectsCount,
@@ -155,11 +132,11 @@ class StatsController extends Controller
                     'conversion_rate' => round($conversionRate, 2),
                 ],
                 'fleet' => [
+                    'jamais_controle' => $fleetStats['jamais_controle'] ?? 0,
                     'a_jour' => $fleetStats['a_jour'] ?? 0,
                     'bientot' => $fleetStats['bientot'] ?? 0,
                     'en_retard' => $overdueCount,
                 ],
-                'agenda' => AppointmentResource::collection($todayAppointments),
                 'alerts' => [
                     'overdue_vehicles' => $overdueCount,
                     'pending_quotes' => $newQuotesCount,
@@ -167,7 +144,7 @@ class StatsController extends Controller
                 ],
                 'recent_vehicles' => \App\Http\Resources\VehicleResource::collection($recentVehicles),
                 'recent_quotes' => $recentQuotes,
-                'inspections_weekly' => $weeklyInspections,
+                'quotes_weekly' => $weeklyQuotes,
             ]
         ]);
     }

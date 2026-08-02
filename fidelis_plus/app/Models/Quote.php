@@ -8,12 +8,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Quote extends Model
 {
-    protected $fillable = ['company_id', 'quote_request_id', 'quote_number', 'status', 'total_amount', 'valid_until', 'bon_pour_accord_url'];
+    protected $fillable = ['company_id', 'quote_request_id', 'quote_number', 'status', 'total_amount', 'valid_until', 'bon_de_commande_url'];
 
     protected $casts = [
         'valid_until' => 'date',
         'total_amount' => 'decimal:2',
     ];
+
+    public function getBonDeCommandeUrlAttribute($value)
+    {
+        if (empty($value)) return null;
+        if (str_starts_with($value, 'http')) return $value;
+        return url(\Illuminate\Support\Facades\Storage::url($value));
+    }
 
     public function company(): BelongsTo
     {

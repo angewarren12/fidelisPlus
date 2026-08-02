@@ -8,7 +8,6 @@ use App\Models\LoyaltyAccount;
 use App\Models\LoyaltyReward;
 use App\Services\Loyalty\LoyaltyPointsService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class LoyaltyRedemptionController extends Controller
 {
@@ -25,6 +24,16 @@ class LoyaltyRedemptionController extends Controller
         $account = LoyaltyAccount::findOrFail($request->loyalty_account_id);
         $reward = LoyaltyReward::findOrFail($request->loyalty_reward_id);
 
+        $requester = $request->user();
+        if ($requester && $requester->role === 'client') {
+            $ownsAccount = ((int) $account->user_id === (int) $requester->id)
+                || ($requester->company_id !== null && (int) $account->company_id === (int) $requester->company_id);
+
+            if (!$ownsAccount) {
+                return response()->json(['status' => 'error', 'message' => 'Ce compte fidélité ne vous appartient pas.'], 403);
+            }
+        }
+
         if (!$reward->is_active) {
             return response()->json(['status' => 'error', 'message' => 'Cette récompense n\'est plus active.'], 400);
         }
@@ -33,31 +42,22 @@ class LoyaltyRedemptionController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Solde de points insuffisant.'], 400);
         }
 
-        $user = $request->user();
+        // On ne débite rien à la réclamation : le compteur n'est remis à zéro qu'à la
+        // livraison effective du lot (cf. update()), conformément au cahier des charges
+        // ("après l'attribution du lot, le compteur est remis à zéro").
+        $redemption = LoyaltyRedemption::create([
+            'loyalty_account_id' => $account->id,
+            'loyalty_reward_id' => $reward->id,
+            'points_cost' => $reward->points_cost,
+            'status' => 'pending',
+            'handled_by' => null,
+        ]);
 
-        // Transaction
-        return DB::transaction(function () use ($account, $reward, $user) {
-            $service = app(LoyaltyPointsService::class);
-            $result = $service->adjust($account, -$reward->points_cost, 'Échange: ' . $reward->name, $user);
-
-            if (!$result['success']) {
-                return response()->json($result, 400);
-            }
-
-            $redemption = LoyaltyRedemption::create([
-                'loyalty_account_id' => $account->id,
-                'loyalty_reward_id' => $reward->id,
-                'points_cost' => $reward->points_cost,
-                'status' => 'pending',
-                'handled_by' => null,
-            ]);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Récompense réclamée avec succès.',
-                'data' => $redemption->load(['account', 'reward']),
-            ]);
-        });
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Récompense réclamée avec succès.',
+            'data' => $redemption->load(['account', 'reward']),
+        ]);
     }
 
     /**
@@ -94,13 +94,24 @@ class LoyaltyRedemptionController extends Controller
             'notes' => 'nullable|string'
         ]);
 
-        $redemption = LoyaltyRedemption::findOrFail($id);
-        
+        $redemption = LoyaltyRedemption::with('account', 'reward')->findOrFail($id);
+        $wasDelivered = $redemption->status === 'delivered';
+
         $redemption->update([
             'status' => $request->status,
             'notes' => $request->notes ?? $redemption->notes,
             'handled_by' => $request->user()->id,
         ]);
+
+        // Nouveau cycle de fidélité : le compteur de points repart à zéro dès que le lot
+        // est effectivement livré (une seule fois, pas à chaque re-sauvegarde du statut).
+        if ($request->status === 'delivered' && ! $wasDelivered && $redemption->account) {
+            app(LoyaltyPointsService::class)->resetToZero(
+                $redemption->account,
+                'Nouveau cycle après attribution du lot : ' . ($redemption->reward->name ?? ''),
+                $request->user(),
+            );
+        }
 
         return response()->json([
             'status' => 'success',

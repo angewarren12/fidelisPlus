@@ -171,7 +171,7 @@ class ProspectController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'siret' => 'nullable|string|max:20',
+            'rccm' => 'nullable|string|max:20',
             'sector' => 'nullable|string',
             'address' => 'nullable|string',
             'city' => 'nullable|string',
@@ -220,24 +220,29 @@ class ProspectController extends Controller
                 $company = Company::create([
                     'type' => 'prospect',
                     'name' => $validated['name'],
-                    'siret' => $validated['siret'],
-                    'sector' => $validated['sector'],
-                    'address' => $validated['address'],
-                    'city' => $validated['city'],
-                    'zip_code' => $validated['zip_code'],
+                    'rccm' => $validated['rccm'] ?? null,
+                    'sector' => $validated['sector'] ?? null,
+                    'address' => $validated['address'] ?? null,
+                    'city' => $validated['city'] ?? null,
+                    'zip_code' => $validated['zip_code'] ?? null,
+                    'phone' => $validated['phone'] ?? null,
+                    'email' => $validated['email'] ?? null,
                     'commercial_id' => $commercialId,
                     'category' => $validated['category'],
                     'company_type' => $validated['company_type'] ?? null,
                     'temperature' => $validated['temperature'],
                     'estimated_potential' => $validated['estimated_potential'] ?? 0,
-                    'estimated_decision_date' => $validated['estimated_decision_date'],
-                    'needs' => $validated['needs'],
-                    'lead_source' => $validated['lead_source'],
+                    'estimated_decision_date' => $validated['estimated_decision_date'] ?? null,
+                    'needs' => $validated['needs'] ?? null,
+                    'lead_source' => $validated['lead_source'] ?? null,
                     'kanban_stage' => 'nouveau_lead'
                 ]);
 
-                // 2. Créer le compte utilisateur pour le correspondant (rôle client)
-                $plainPassword = Str::random(10);
+                // 2. Créer la fiche du correspondant (rôle client).
+                // Tant que l'entreprise reste un prospect, aucun accès de connexion n'est
+                // activé : le mot de passe est un placeholder inutilisable et aucun email
+                // n'est envoyé. Les vrais identifiants ne sont générés et envoyés qu'à la
+                // conversion en client (cf. convertToClient()).
                 $user = User::create([
                     'company_id' => $company->id,
                     'role' => 'client',
@@ -245,8 +250,9 @@ class ProspectController extends Controller
                     'last_name' => $validated['contact_last_name'],
                     'email' => $validated['contact_email'],
                     'phone' => $validated['contact_phone'] ?? ($validated['phone'] ?? null),
-                    'password' => Hash::make($plainPassword),
-                    'is_main_contact' => true
+                    'password' => Hash::make(Str::random(40)),
+                    'is_main_contact' => true,
+                    'must_change_password' => true,
                 ]);
 
                 return response()->json([
@@ -289,7 +295,7 @@ class ProspectController extends Controller
         // Envoyer un email à TOUS les correspondants de l'entreprise
         foreach ($allContacts as $contact) {
             $plainPassword = Str::random(10);
-            $contact->update(['password' => Hash::make($plainPassword)]);
+            $contact->update(['password' => Hash::make($plainPassword), 'must_change_password' => true]);
             try {
                 \Illuminate\Support\Facades\Mail::to($contact->email)->send(
                     new \App\Mail\ClientAccountCreated($contact, $plainPassword, true)

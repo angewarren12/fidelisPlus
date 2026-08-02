@@ -93,6 +93,36 @@ class LoyaltyPointsService
     }
 
     /**
+     * Remet le compteur de points à zéro (nouveau cycle de fidélité après attribution d'un lot,
+     * conformément au cahier des charges). Calcule le delta exact sous verrou pour rester correct
+     * en cas de crédit concurrent.
+     *
+     * @return array{success: true, points_delta: int, new_balance: int}
+     */
+    public function resetToZero(LoyaltyAccount $account, string $reason, User $actor): array
+    {
+        return DB::transaction(function () use ($account, $reason, $actor) {
+            $locked = LoyaltyAccount::query()->whereKey($account->id)->lockForUpdate()->firstOrFail();
+            $delta = -$locked->points_balance;
+
+            $locked->update(['points_balance' => 0]);
+
+            LoyaltyLedgerEntry::query()->create([
+                'loyalty_account_id' => $locked->id,
+                'type' => 'adjust',
+                'delta_points' => $delta,
+                'balance_after' => 0,
+                'source' => 'reward_cycle_reset',
+                'idempotency_key' => null,
+                'meta' => ['reason' => $reason],
+                'created_by' => $actor->id,
+            ]);
+
+            return ['success' => true, 'points_delta' => $delta, 'new_balance' => 0];
+        });
+    }
+
+    /**
      * @return array{success: true, points_delta: int, new_balance: int}|array{success: false, message: string}
      */
     public function adjust(

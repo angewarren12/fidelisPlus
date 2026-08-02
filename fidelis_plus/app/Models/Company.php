@@ -20,7 +20,7 @@ class Company extends Model
         'name',
         'email',
         'phone',
-        'siret',
+        'rccm',
         'address',
         'city',
         'zip_code',
@@ -80,11 +80,6 @@ class Company extends Model
     public function vehicles(): HasMany
     {
         return $this->hasMany(Vehicle::class);
-    }
-
-    public function appointments(): HasMany
-    {
-        return $this->hasMany(Appointment::class);
     }
 
     public function documents(): \Illuminate\Database\Eloquent\Relations\MorphMany

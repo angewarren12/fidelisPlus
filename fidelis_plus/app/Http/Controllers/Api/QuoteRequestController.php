@@ -25,14 +25,48 @@ class QuoteRequestController extends Controller
      */
     public function index(Request $request)
     {
-        $query = QuoteRequest::with(['user', 'company', 'vehicles']);
+        $query = QuoteRequest::with(['user', 'company', 'vehicles.documents']);
 
         $this->scopeForUser($query);
 
+        $paginated = $query->latest()->paginate(15);
+        $paginated->getCollection()->transform(function ($qr) {
+            $qr->setRelation('vehicles', self::serializeVehicles($qr->vehicles));
+            return $qr;
+        });
+
         return response()->json([
             'status' => 'success',
-            'data' => $query->latest()->paginate(15)
+            'data' => $paginated
         ]);
+    }
+
+    /**
+     * Sérialise une collection de véhicules en tableaux simples (id, plaque, statut documents...).
+     * Évite de mettre une collection de JsonResource dans une relation Eloquent : Model::toArray()
+     * ne sait pas convertir ces objets (ils n'implémentent pas Arrayable sans le $request de la resource),
+     * ce qui faisait disparaître silencieusement le tableau "vehicles" de la réponse JSON.
+     */
+    private static function serializeVehicles($vehicles)
+    {
+        return $vehicles->map(function ($v) {
+            return [
+                'id' => $v->id,
+                'company_id' => $v->company_id,
+                'license_plate' => $v->license_plate,
+                'brand' => $v->brand,
+                'model' => $v->model,
+                'year' => $v->year,
+                'fuel_type' => $v->fuel_type,
+                'has_required_doc' => $v->has_required_doc,
+                'registration_doc_url' => $v->registration_doc_url
+                    ? (str_starts_with($v->registration_doc_url, 'http') ? $v->registration_doc_url : url(Storage::url($v->registration_doc_url)))
+                    : null,
+                'vignette_doc_url' => $v->vignette_doc_url
+                    ? (str_starts_with($v->vignette_doc_url, 'http') ? $v->vignette_doc_url : url(Storage::url($v->vignette_doc_url)))
+                    : null,
+            ];
+        });
     }
 
     /**
@@ -88,7 +122,34 @@ class QuoteRequestController extends Controller
         $quoteRequest->vehicles()->attach($request->vehicle_ids);
 
         // Recharger avec la relation pour le retour
-        $quoteRequest->load('vehicles');
+        $quoteRequest->load('vehicles', 'company');
+
+        // Notification au commercial et au client
+        $commercial = $quoteRequest->company?->commercial;
+        if ($commercial) {
+            $this->notifs->notifyUser(
+                $commercial,
+                'Nouvelle demande de devis',
+                "Le client {$quoteRequest->company->name} a soumis une nouvelle demande de devis.",
+                type: 'quote_request_created',
+                data: ['quote_request_id' => $quoteRequest->id],
+                action: 'quote_request_list',
+                priority: 'high',
+                channel: 'in_app'
+            );
+
+            \Illuminate\Support\Facades\Mail::to($commercial->email)->send(new \App\Mail\QuoteRequestCreatedMail($quoteRequest, $commercial));
+        }
+
+        $this->notifs->notifyUser(
+            $user,
+            'Demande envoyée',
+            "Votre demande de devis a bien été envoyée. Vous serez notifié dès qu'elle sera traitée.",
+            type: 'quote_request_created',
+            data: ['quote_request_id' => $quoteRequest->id],
+            action: 'quote_request_list',
+            channel: 'in_app'
+        );
 
         return response()->json([
             'status' => 'success',
@@ -102,7 +163,7 @@ class QuoteRequestController extends Controller
      */
     public function show($id)
     {
-        $quoteRequest = QuoteRequest::with(['user', 'company', 'vehicles'])->findOrFail($id);
+        $quoteRequest = QuoteRequest::with(['user', 'company', 'vehicles.documents'])->findOrFail($id);
 
         $user = request()->user();
         if ($user) {
@@ -121,6 +182,8 @@ class QuoteRequestController extends Controller
         $quoteRequest->vignette_image_url = $quoteRequest->vignette_image
             ? asset('storage/' . $quoteRequest->vignette_image)
             : null;
+
+        $quoteRequest->setRelation('vehicles', self::serializeVehicles($quoteRequest->vehicles));
 
         return response()->json([
             'status' => 'success',

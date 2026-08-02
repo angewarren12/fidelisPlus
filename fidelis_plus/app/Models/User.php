@@ -28,6 +28,7 @@ class User extends Authenticatable
     protected $fillable = [
         'company_id',
         'role',
+        'login',
         'first_name',
         'last_name',
         'email',
@@ -36,6 +37,7 @@ class User extends Authenticatable
         'notification_preferences',
         'password',
         'is_main_contact',
+        'must_change_password',
     ];
 
     /**
@@ -49,6 +51,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'notification_preferences' => 'array',
+            'must_change_password' => 'boolean',
         ];
     }
 

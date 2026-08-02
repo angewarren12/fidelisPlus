@@ -74,6 +74,37 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
+  /// Inscrit un nouveau client particulier au guichet (sans carte pour l'instant —
+  /// la carte physique est associée juste après via [assignLoyaltyCard]).
+  Future<Map<String, dynamic>> createLoyaltyMember({
+    required String nom,
+    required String prenom,
+    required String contact,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/loyalty/members'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'type': 'particulier',
+        'nom': nom,
+        'prenom': prenom,
+        'contact': contact,
+      }),
+    );
+    return jsonDecode(res.body);
+  }
+
+  /// Associe une carte physique vierge (scannée) au client [memberId] qui vient
+  /// d'être créé.
+  Future<Map<String, dynamic>> assignLoyaltyCard(int memberId, String qrPayload) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/loyalty/members/$memberId/assign-card'),
+      headers: await _headers(),
+      body: jsonEncode({'qr_payload': qrPayload}),
+    );
+    return jsonDecode(res.body);
+  }
+
   Future<Map<String, dynamic>> scanLoyalty(
     String qrPayload,
     int stationId,

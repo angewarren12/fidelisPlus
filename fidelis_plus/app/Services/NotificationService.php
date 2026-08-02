@@ -49,7 +49,16 @@ class NotificationService
             $this->sendPushIfPossible($user, $notification);
         }
 
-        event(new NotificationCreated($notification));
+        // Le broadcast temps réel ne doit jamais faire échouer la requête HTTP
+        // (ex: serveur Pusher/Soketi indisponible en local).
+        try {
+            event(new NotificationCreated($notification));
+        } catch (\Throwable $e) {
+            Log::warning('Broadcast temps réel indisponible pour la notification', [
+                'notification_id' => $notification->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return $notification;
     }

@@ -119,7 +119,9 @@ class LoyaltyMarketingLookupController extends Controller
             'email' => 'nullable|email|max:160|unique:users,email',
         ]);
 
-        $email = $request->input('email') ?: 'loyalty-'.Str::random(10).'@mayelia.local';
+        $providedEmail = $request->input('email');
+        $email = $providedEmail ?: 'loyalty-'.Str::random(10).'@mayelia.local';
+        $plainPassword = Str::random(16);
 
         $user = User::create([
             'role' => 'client',
@@ -127,8 +129,19 @@ class LoyaltyMarketingLookupController extends Controller
             'last_name' => $request->input('last_name'),
             'phone' => $request->input('phone'),
             'email' => $email,
-            'password' => Hash::make(Str::random(16)),
+            'password' => Hash::make($plainPassword),
+            'must_change_password' => true,
         ]);
+
+        if ($providedEmail) {
+            try {
+                \Illuminate\Support\Facades\Mail::to($user->email)->send(
+                    new \App\Mail\ClientAccountCreated($user, $plainPassword)
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Erreur envoi mail client fidélité: ' . $e->getMessage());
+            }
+        }
 
         return response()->json([
             'status' => 'success',

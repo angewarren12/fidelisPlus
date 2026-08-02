@@ -111,8 +111,22 @@ class LoyaltyPosScanController extends Controller
                 if ($account === null) {
                     return ['error' => 'Carte invalide ou révoquée.'];
                 }
+                if ($account->holder_type === 'unassigned') {
+                    return ['error' => 'Cette carte est encore vierge (pas encore remise à un client).'];
+                }
                 if ($account->isBlocked()) {
                     return ['error' => 'Compte fidélité bloqué.'];
+                }
+
+                $cooldown = (int) config('loyalty.scan_cooldown_seconds', 180);
+                if ($cooldown > 0) {
+                    $recentScan = LoyaltyPosScanEvent::query()
+                        ->where('loyalty_account_id', $account->id)
+                        ->where('created_at', '>=', now()->subSeconds($cooldown))
+                        ->exists();
+                    if ($recentScan) {
+                        return ['error' => 'Cette carte vient déjà d\'être scannée, veuillez patienter avant de rescanner.'];
+                    }
                 }
 
                 $points = $claims['points_per_scan'];
@@ -222,7 +236,7 @@ class LoyaltyPosScanController extends Controller
 
         /** @var LoyaltyAccount|null $account */
         $account = LoyaltyAccount::query()
-            ->with(['company', 'user'])
+            ->with(['company', 'user', 'member.vehicles'])
             ->where('public_uuid', $claims['account_uuid'])
             ->first();
 
@@ -233,19 +247,57 @@ class LoyaltyPosScanController extends Controller
             ], 422);
         }
 
+        if ($account->holder_type === 'unassigned') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cette carte est encore vierge (pas encore remise à un client).',
+            ], 422);
+        }
+
+        $holderName = match ($account->holder_type) {
+            'company' => $account->company->name ?? 'Société',
+            'member' => $account->member?->displayName() ?? 'Client',
+            default => $account->user ? $account->user->first_name.' '.$account->user->last_name : 'Particulier',
+        };
+
+        // Véhicules à proposer à la caissière (sélection au lieu de ressaisie) :
+        // en priorité ceux déclarés par le client dans SIRA, sinon ceux déjà vus
+        // lors de précédents passages sur cette carte.
+        $memberVehicles = $account->member?->vehicles;
+        if ($memberVehicles !== null && $memberVehicles->isNotEmpty()) {
+            $knownVehicles = $memberVehicles
+                ->map(fn ($v) => [
+                    'vehicle_registration' => $v->registration,
+                    'vehicle_brand' => $v->brand,
+                    'vehicle_color' => $v->color,
+                ])
+                ->values();
+            $vehiclesSource = 'sira';
+        } else {
+            $knownVehicles = $account->scanEvents()
+                ->whereNotNull('vehicle_registration')
+                ->latest()
+                ->limit(20)
+                ->get(['vehicle_registration', 'vehicle_brand', 'vehicle_color'])
+                ->unique('vehicle_registration')
+                ->values()
+                ->take(5);
+            $vehiclesSource = 'historique';
+        }
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'account_id' => $account->id,
                 'public_uuid' => $account->public_uuid,
-                'holder_name' => $account->holder_type === 'company' 
-                    ? ($account->company->name ?? 'Société') 
-                    : ($account->user ? $account->user->first_name . ' ' . $account->user->last_name : 'Particulier'),
+                'holder_name' => $holderName,
                 'holder_type' => $account->holder_type,
                 'points_balance' => $account->points_balance,
                 'points_per_scan' => $claims['points_per_scan'],
                 'is_blocked' => $account->isBlocked(),
                 'company_type' => $account->company->company_type ?? 'N/A',
+                'known_vehicles' => $knownVehicles,
+                'known_vehicles_source' => $vehiclesSource,
             ],
         ]);
     }

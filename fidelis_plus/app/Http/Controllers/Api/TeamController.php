@@ -106,6 +106,7 @@ class TeamController extends Controller
             'password' => Hash::make($rawPassword),
             'company_id' => null, // Utilisateur interne
             'is_main_contact' => false,
+            'must_change_password' => true,
         ]);
 
         // Envoi de l'email avec le mot de passe généré
@@ -119,7 +120,8 @@ class TeamController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Collaborateur créé avec succès. Un email contenant ses accès a été envoyé.',
-            'data' => $user
+            'data' => $user,
+            'temporary_password' => $rawPassword,
         ], 201);
     }
 

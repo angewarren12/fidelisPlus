@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import 'scanner_screen.dart';
 import 'history_screen.dart';
+import 'new_client_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final dynamic station;
@@ -20,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _screens = [
       ScannerScreen(station: widget.station),
+      const NewClientScreen(),
       const HistoryScreen(),
     ];
   }
@@ -48,6 +50,11 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.qr_code_scanner_rounded),
               activeIcon: Icon(Icons.qr_code_scanner_rounded),
               label: 'Scanner',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_add_alt_1_rounded),
+              activeIcon: Icon(Icons.person_add_alt_1_rounded),
+              label: 'Nouveau client',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.history_rounded),

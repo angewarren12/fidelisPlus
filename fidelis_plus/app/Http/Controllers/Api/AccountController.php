@@ -48,7 +48,7 @@ class AccountController extends Controller
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('name', 'LIKE', "%{$search}%")
-                  ->orWhere('siret', 'LIKE', "%{$search}%");
+                  ->orWhere('rccm', 'LIKE', "%{$search}%");
             });
         }
 
@@ -89,7 +89,7 @@ class AccountController extends Controller
             // 1. Création de l'entité Compte/Entreprise
             // Sécurité : Un commercial ne peut créer qu'un compte pour lui-même
             $data = $request->only([
-                'type', 'category', 'company_type', 'name', 'email', 'phone', 'siret', 'address', 'city', 'zip_code', 'sector', 
+                'type', 'category', 'company_type', 'name', 'email', 'phone', 'rccm', 'address', 'city', 'zip_code', 'sector',
                 'commercial_id', 'observations', 'is_active'
             ]);
 
@@ -99,8 +99,12 @@ class AccountController extends Controller
 
             $company = Company::create($data);
 
-            // 2. Création du premier contact associé (User client)
-            $plainPassword = Str::random(10);
+            // 2. Création du premier contact associé (User client).
+            // Un accès de connexion (mot de passe réel + email) n'est activé que si le
+            // compte est créé directement en tant que client. S'il est créé en tant que
+            // prospect, l'activation se fera à la conversion (cf. convert()).
+            $isClient = $company->type === 'client';
+            $plainPassword = $isClient ? Str::random(10) : Str::random(40);
             $user = User::create([
                 'company_id' => $company->id,
                 'role' => 'client',
@@ -110,9 +114,10 @@ class AccountController extends Controller
                 'phone' => $request->phone,
                 'password' => Hash::make($plainPassword),
                 'is_main_contact' => true,
+                'must_change_password' => true,
             ]);
 
-            if ($company->type === 'client') {
+            if ($isClient) {
                 try {
                     \Illuminate\Support\Facades\Mail::to($user->email)->send(
                         new \App\Mail\ClientAccountCreated($user, $plainPassword)
@@ -170,7 +175,7 @@ class AccountController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email',
             'phone' => 'sometimes|nullable|string',
-            'siret' => 'sometimes|nullable|string|max:255',
+            'rccm' => 'sometimes|nullable|string|max:255',
             'address' => 'sometimes|nullable|string',
             'observations' => 'sometimes|nullable|string',
             'sector' => 'sometimes|nullable|string|max:255',
@@ -292,7 +297,7 @@ class AccountController extends Controller
         // Envoyer un email à TOUS les correspondants de l'entreprise
         foreach ($allContacts as $contact) {
             $plainPassword = Str::random(10);
-            $contact->update(['password' => Hash::make($plainPassword)]);
+            $contact->update(['password' => Hash::make($plainPassword), 'must_change_password' => true]);
             try {
                 \Illuminate\Support\Facades\Mail::to($contact->email)->send(
                     new \App\Mail\ClientAccountCreated($contact, $plainPassword, true)
@@ -320,7 +325,6 @@ class AccountController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'phone' => 'nullable|string|max:255',
-            'role' => 'nullable|string|max:50',
             'position' => 'nullable|string|max:255',
         ]);
 
@@ -328,10 +332,15 @@ class AccountController extends Controller
             return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
         }
 
-        $plainPassword = Str::random(10);
+        // Un correspondant de compte est toujours un client : ce endpoint ne doit
+        // jamais permettre de créer un admin/commercial/marketing (voir TeamController).
+        // L'accès de connexion n'est activé (mot de passe réel + email) que si
+        // l'entreprise est déjà cliente ; pour un prospect, l'activation aura lieu à la conversion.
+        $isClient = $account->type === 'client';
+        $plainPassword = $isClient ? Str::random(10) : Str::random(40);
         $user = User::create([
             'company_id' => $account->id,
-            'role' => $request->get('role', 'client'),
+            'role' => 'client',
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
             'email' => $request->email,
@@ -339,9 +348,10 @@ class AccountController extends Controller
             'position' => $request->position,
             'password' => Hash::make($plainPassword),
             'is_main_contact' => false,
+            'must_change_password' => true,
         ]);
 
-        if ($user->role === 'client' && $account->type === 'client') {
+        if ($isClient) {
             try {
                 \Illuminate\Support\Facades\Mail::to($user->email)->send(
                     new \App\Mail\ClientAccountCreated($user, $plainPassword)

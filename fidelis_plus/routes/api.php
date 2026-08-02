@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\AccountController;
-use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\LoyaltyActivityController;
 use App\Http\Controllers\Api\LoyaltySettingController;
 use App\Http\Controllers\Api\LoyaltyPosScanController;
@@ -31,7 +30,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('v1')->name('api.v1.')->group(function () {
+Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(function () {
 
     // --- Auth publique ---
     Route::post('/auth/login', [AuthController::class, 'login'])
@@ -41,12 +40,21 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         ->middleware('throttle:5,1')
         ->name('auth.forgot-password');
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])
+        ->middleware('throttle:10,1')
         ->name('auth.reset-password');
 
     // --- Formulaire public "Fidelis Plus" (QR station, relance visite technique) ---
     Route::post('/public/technical-visit-reminders', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'store'])
         ->middleware('throttle:20,1')
         ->name('public.technical-visit-reminders.store');
+
+    // --- Intégration app mobile client SIRA (jeton de service, pas de session utilisateur) ---
+    Route::prefix('integrations/sira')->middleware(['sira.token', 'throttle:120,1'])->name('integrations.sira.')->group(function () {
+        Route::post('/loyalty/register', [\App\Http\Controllers\Api\LoyaltySiraIntegrationController::class, 'register'])->name('loyalty.register');
+        Route::get('/loyalty/{siraClientId}', [\App\Http\Controllers\Api\LoyaltySiraIntegrationController::class, 'show'])->name('loyalty.show');
+        Route::get('/loyalty/{siraClientId}/history', [\App\Http\Controllers\Api\LoyaltySiraIntegrationController::class, 'history'])->name('loyalty.history');
+        Route::put('/loyalty/{siraClientId}/vehicles', [\App\Http\Controllers\Api\LoyaltySiraIntegrationController::class, 'syncVehicles'])->name('loyalty.vehicles.sync');
+    });
 
     Route::middleware('auth:sanctum')->group(function () {
 
@@ -55,6 +63,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::patch('/auth/fcm-token', [AuthController::class, 'updateFcmToken'])->name('auth.fcm-token');
         Route::patch('/me/notification-preferences', [AuthController::class, 'updateNotificationPreferences'])
             ->name('me.notification-preferences');
+        Route::patch('/me', [AuthController::class, 'updateProfile'])
+            ->middleware('throttle:20,1')
+            ->name('me.update');
+        Route::patch('/auth/change-password', [AuthController::class, 'changePassword'])
+            ->middleware('throttle:10,1')
+            ->name('auth.change-password');
 
         Route::apiResource('team', \App\Http\Controllers\Api\TeamController::class)
             ->middleware('role:admin,commercial');
@@ -62,10 +76,19 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->middleware('role:admin')
             ->name('team.reassign');
 
-        Route::apiResource('stations', StationController::class);
+        Route::apiResource('stations', StationController::class)->only(['index', 'show']);
+        Route::apiResource('stations', StationController::class)->except(['index', 'show'])->middleware('role:admin');
         
         Route::get('/settings', [\App\Http\Controllers\Api\SettingController::class, 'index'])->name('settings.index');
         Route::put('/settings', [\App\Http\Controllers\Api\SettingController::class, 'update'])->middleware('role:admin')->name('settings.update');
+
+        Route::prefix('tariffs')->name('tariffs.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\PricingController::class, 'index'])->name('index');
+            Route::get('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'show'])->name('show');
+            Route::post('/', [\App\Http\Controllers\Api\PricingController::class, 'store'])->middleware('role:admin')->name('store');
+            Route::put('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'update'])->middleware('role:admin')->name('update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'destroy'])->middleware('role:admin')->name('destroy');
+        });
 
         Route::post('admin/notifications/broadcast', [AdminNotificationController::class, 'broadcast'])
             ->middleware('role:admin')
@@ -85,6 +108,13 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::put('/settings/{id}', [LoyaltySettingController::class, 'update'])->name('settings.update');
         });
 
+        // --- App mobile caisse : inscription d'un client particulier au guichet et
+        // association de sa carte physique (caissier + admin + marketing) ---
+        Route::prefix('loyalty')->middleware('role:caissier,admin,marketing')->name('loyalty.pos-register.')->group(function () {
+            Route::post('/members', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'store'])->name('members.store');
+            Route::post('/members/{id}/assign-card', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'assignCard'])->name('members.assign-card');
+        });
+
         Route::prefix('accounts')->name('accounts.')->group(function () {
             Route::middleware('role:admin,commercial,marketing')->group(function () {
                 Route::get('/', [AccountController::class, 'index'])->name('index');
@@ -98,7 +128,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 Route::get('/{id}/subscription-contract', [\App\Http\Controllers\Api\SubscriptionContractController::class, 'show'])->name('subscription-contract.show');
                 Route::post('/{id}/subscription-contract', [\App\Http\Controllers\Api\SubscriptionContractController::class, 'store'])->name('subscription-contract.store');
             });
-            Route::get('/{id}', [AccountController::class, 'show'])->name('show');
+            Route::get('/{id}', [AccountController::class, 'show'])->middleware('role:admin,commercial,marketing,client')->name('show');
         });
 
         Route::prefix('prospects')->middleware('role:admin,commercial')->name('prospects.')->group(function () {
@@ -115,18 +145,15 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('/stats/summary', [VehicleController::class, 'fleetStats'])->name('stats.summary');
             Route::get('/', [VehicleController::class, 'index'])->name('index');
             Route::post('/', [VehicleController::class, 'store'])->name('store');
+            Route::get('/import/template', [VehicleController::class, 'downloadImportTemplate'])->name('import.template');
+            Route::post('/import', [VehicleController::class, 'importFromExcel'])
+                ->middleware('throttle:10,1')
+                ->name('import');
             Route::get('/{id}', [VehicleController::class, 'show'])->name('show');
             Route::put('/{id}', [VehicleController::class, 'update'])->name('update');
             Route::delete('/{id}', [VehicleController::class, 'destroy'])->name('destroy');
             Route::post('/{id}/documents', [VehicleController::class, 'uploadDocs'])->name('documents');
             Route::post('/{id}/visit', [VehicleController::class, 'recordVisit'])->name('visit');
-        });
-
-        Route::prefix('appointments')->middleware('role:admin,commercial,client')->name('appointments.')->group(function () {
-            Route::get('/', [AppointmentController::class, 'index'])->name('index');
-            Route::post('/', [AppointmentController::class, 'store'])->name('store');
-            Route::get('/slots', [AppointmentController::class, 'getAvailableSlots'])->name('slots');
-            Route::patch('/{id}/cancel', [AppointmentController::class, 'cancel'])->name('cancel');
         });
 
         Route::prefix('quotes')->middleware('role:admin,commercial,client')->name('quotes.')->group(function () {
@@ -135,7 +162,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('/{id}', [QuoteController::class, 'show'])->name('show');
             Route::patch('/{id}', [QuoteController::class, 'update'])->name('update');
             Route::patch('/{id}/status', [QuoteController::class, 'updateStatus'])->name('status');
-            Route::post('/{id}/upload-accord', [QuoteController::class, 'uploadBonPourAccord'])->name('upload-accord');
+            Route::post('/{id}/upload-accord', [QuoteController::class, 'uploadBonDeCommande'])->name('upload-accord');
         });
 
         Route::prefix('quote-requests')->middleware('role:admin,commercial,client')->name('quote-requests.')->group(function () {
@@ -167,7 +194,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('stats.dashboard');
 
         Route::prefix('kpi-targets')->name('kpi-targets.')->group(function () {
-            Route::get('/progress', [CommercialKpiTargetController::class, 'progress'])->name('progress');
+            Route::get('/progress', [CommercialKpiTargetController::class, 'progress'])->middleware('role:admin,commercial')->name('progress');
             Route::middleware('role:admin')->group(function () {
                 Route::get('/', [CommercialKpiTargetController::class, 'index'])->name('index');
                 Route::post('/', [CommercialKpiTargetController::class, 'store'])->name('store');
@@ -225,6 +252,28 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('/accounts/{id}/qr-payload', [LoyaltyAccountController::class, 'qrPayload'])->name('accounts.qr-payload');
             Route::patch('/accounts/{id}', [LoyaltyAccountController::class, 'update'])->name('accounts.update');
             Route::post('/accounts/{id}/associate-card', [LoyaltyAccountController::class, 'associateCard'])->name('accounts.associate-card');
+
+            // Liste de clients propre au marketing (indépendante du CRM commercial).
+            Route::get('/members', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'index'])->name('members.index');
+            // Demandes de carte SIRA en attente de validation (routes fixes, avant /members/{id}).
+            Route::get('/members/requests', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'requests'])->name('members.requests');
+            Route::get('/members/{id}', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'show'])->name('members.show');
+            Route::patch('/members/{id}', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'update'])->name('members.update');
+            Route::post('/members/{id}/validate', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'validateRequest'])->name('members.validate');
+            Route::post('/members/{id}/reject', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'reject'])->name('members.reject');
+            Route::post('/members/{id}/retry-provisioning', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'retryProvisioning'])->name('members.retry-provisioning');
+
+            // Studio Carte : modèles visuels (fond + positionnement QR/texte).
+            Route::get('/card-templates', [\App\Http\Controllers\Api\LoyaltyCardTemplateController::class, 'index'])->name('card-templates.index');
+            Route::post('/card-templates', [\App\Http\Controllers\Api\LoyaltyCardTemplateController::class, 'store'])->name('card-templates.store');
+            Route::post('/card-templates/{id}', [\App\Http\Controllers\Api\LoyaltyCardTemplateController::class, 'update'])->name('card-templates.update');
+            Route::delete('/card-templates/{id}', [\App\Http\Controllers\Api\LoyaltyCardTemplateController::class, 'destroy'])->name('card-templates.destroy');
+
+            // Génération de cartes vierges en masse (PDF) + suivi des lots (impression).
+            Route::get('/card-batches', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'index'])->name('card-batches.index');
+            Route::post('/card-batches', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'store'])->name('card-batches.store');
+            Route::get('/card-batches/{id}/download', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'download'])->name('card-batches.download');
+            Route::patch('/card-batches/{id}/status', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'updateStatus'])->name('card-batches.update-status');
         });
 
         /** Call center marketing : relances visite technique (formulaire QR station). */

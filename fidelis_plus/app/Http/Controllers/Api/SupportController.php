@@ -92,7 +92,15 @@ class SupportController extends Controller
             'message' => 'required|string',
         ]);
 
-        $support = SupportRequest::with('user')->findOrFail($id);
+        $support = SupportRequest::with('user.company')->findOrFail($id);
+
+        $actor = $request->user();
+        if ($actor && $actor->role === 'commercial') {
+            $ticketCommercialId = $support->user?->company?->commercial_id;
+            if ((int) $ticketCommercialId !== (int) $actor->id) {
+                return response()->json(['status' => 'error', 'message' => 'Accès refusé : ce ticket ne fait pas partie de votre portefeuille.'], 403);
+            }
+        }
 
         $support->update([
             'staff_reply' => $request->message,
@@ -111,11 +119,15 @@ class SupportController extends Controller
                 channel: 'both',
             );
 
-            event(new SupportReplyCreated(
-                supportRequestId: (int) $support->id,
-                userId: (int) $support->user->id,
-                status: (string) $support->status,
-            ));
+            try {
+                event(new SupportReplyCreated(
+                    supportRequestId: (int) $support->id,
+                    userId: (int) $support->user->id,
+                    status: (string) $support->status,
+                ));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Broadcast temps réel indisponible (SupportReplyCreated) : '.$e->getMessage());
+            }
         }
 
         return response()->json([

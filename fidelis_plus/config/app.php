@@ -30,6 +30,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL (backoffice Angular)
+    |--------------------------------------------------------------------------
+    |
+    | Utilisé pour générer des liens cliquables vers l'application Angular
+    | (ex : espace client) depuis les emails envoyés par le backend.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:4200'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------
     |

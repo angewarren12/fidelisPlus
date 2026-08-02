@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class Visit extends Model
 {
     protected $fillable = [
-        'appointment_id',
         'vehicle_id',
         'visit_date',
         'kind',
@@ -23,11 +22,6 @@ class Visit extends Model
     protected $casts = [
         'diagnostics_summary' => 'array',
     ];
-
-    public function appointment(): BelongsTo
-    {
-        return $this->belongsTo(Appointment::class);
-    }
 
     public function vehicle(): BelongsTo
     {
