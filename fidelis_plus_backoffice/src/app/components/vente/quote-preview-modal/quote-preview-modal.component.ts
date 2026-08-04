@@ -72,6 +72,7 @@ import { SettingService } from '../../../services/setting.service';
                      <p class="text-[10px] uppercase font-black tracking-widest text-primary mb-2">Client / Destinataire</p>
                      <p class="font-black text-lg text-on-surface">{{ clientDisplayName }}</p>
                      <p class="text-sm text-outline" *ngIf="quoteData?.valid_until">Valable jusqu'au : {{ quoteData?.valid_until | date:'dd/MM/yyyy' }}</p>
+                     <p class="text-sm text-outline" *ngIf="paymentTermLabel">Condition de paiement : <strong class="text-on-surface">{{ paymentTermLabel }}</strong></p>
                   </div>
                </div>
 
@@ -91,8 +92,8 @@ import { SettingService } from '../../../services/setting.service';
                      <tr class="border-b-2 border-on-surface text-on-surface">
                         <th class="py-4 text-[10px] uppercase font-black tracking-widest w-1/2">Description</th>
                         <th class="py-4 text-[10px] uppercase font-black tracking-widest text-center">Qté</th>
-                        <th class="py-4 text-[10px] uppercase font-black tracking-widest text-right">Prix Unitaire (XOF)</th>
-                        <th class="py-4 text-[10px] uppercase font-black tracking-widest text-right">Total (XOF)</th>
+                        <th class="py-4 text-[10px] uppercase font-black tracking-widest text-right">Prix Unitaire ({{ currency }})</th>
+                        <th class="py-4 text-[10px] uppercase font-black tracking-widest text-right">Total ({{ currency }})</th>
                      </tr>
                   </thead>
                   <tbody>
@@ -145,15 +146,15 @@ import { SettingService } from '../../../services/setting.service';
                   <div class="w-1/2 space-y-4">
                      <div class="flex items-center justify-between">
                         <span class="text-[10px] uppercase font-black tracking-widest text-outline">Sous-Total HT</span>
-                        <span class="font-bold text-on-surface">{{ totalHT() | number:'1.0-0' }} XOF</span>
+                        <span class="font-bold text-on-surface">{{ totalHT() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                      <div class="flex items-center justify-between">
                         <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA ({{ tvaRate() }}%)</span>
-                        <span class="font-bold text-on-surface">{{ totalTVA() | number:'1.0-0' }} XOF</span>
+                        <span class="font-bold text-on-surface">{{ totalTVA() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                      <div class="flex items-center justify-between pt-4 border-t-2 border-on-surface mt-4">
                         <span class="text-xs uppercase font-black tracking-[0.2em] text-primary">Total TTC</span>
-                        <span class="text-2xl font-headline font-black text-on-surface">{{ totalTTC() | number:'1.0-0' }} XOF</span>
+                        <span class="text-2xl font-headline font-black text-on-surface">{{ totalTTC() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                   </div>
                </div>
@@ -199,6 +200,14 @@ export class QuotePreviewModalComponent {
   tvaRate = computed(() => this.settingSvc.settings()?.['quote.legal.tva_rate'] ?? 18);
   validityDays = computed(() => this.settingSvc.settings()?.['quote.legal.validity_days'] ?? 30);
   footerText = computed(() => this.settingSvc.settings()?.['quote.legal.footer_text'] ?? 'Mayelia Automotive - SARL au capital de 10.000.000 XOF - RCCM CI-ABJ-2026-B-XXXXX');
+
+  get currency(): string {
+    return this.quoteData?.currency || 'XOF';
+  }
+
+  get paymentTermLabel(): string | null {
+    return this.quoteData?.payment_term_label ?? this.quoteData?.payment_term?.label ?? null;
+  }
 
   /** Nom affiché : input explicite ou champ porté par quoteData (ex. aperçu depuis liste). */
   get clientDisplayName(): string {

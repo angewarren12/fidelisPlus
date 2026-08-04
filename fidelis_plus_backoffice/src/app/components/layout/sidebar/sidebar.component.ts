@@ -145,6 +145,10 @@ import { ROLE_LABELS, UserRoles } from '../../../models/user-roles';
           <span class="material-symbols-outlined text-[20px]">settings</span>
           Paramètres
         </a>
+        <a *ngIf="showCommercialAdminNav" routerLink="/admin/payment-terms" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">payments</span>
+          Conditions de paiement
+        </a>
       </nav>
 
       <div class="px-4 mt-auto pt-4">

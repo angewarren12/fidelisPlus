@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Quote extends Model
 {
-    protected $fillable = ['company_id', 'quote_request_id', 'quote_number', 'status', 'total_amount', 'valid_until', 'bon_de_commande_url'];
+    protected $fillable = ['company_id', 'quote_request_id', 'quote_number', 'status', 'total_amount', 'currency', 'valid_until', 'payment_term_id', 'bon_de_commande_url'];
 
     protected $casts = [
         'valid_until' => 'date',
@@ -40,5 +40,10 @@ class Quote extends Model
     public function items(): HasMany
     {
         return $this->hasMany(QuoteItem::class);
+    }
+
+    public function paymentTerm(): BelongsTo
+    {
+        return $this->belongsTo(PaymentTerm::class);
     }
 }

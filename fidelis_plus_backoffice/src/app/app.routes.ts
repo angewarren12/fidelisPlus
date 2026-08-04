@@ -169,6 +169,11 @@ export const routes: Routes = [
         loadComponent: () => import('./components/admin/settings/settings.component').then(m => m.SettingsComponent),
         canActivate: [commercialAdminRoleGuard],
       },
+      {
+        path: 'admin/payment-terms',
+        loadComponent: () => import('./components/admin/payment-terms/payment-terms.component').then(m => m.PaymentTermsComponent),
+        canActivate: [commercialAdminRoleGuard],
+      },
       { path: '', pathMatch: 'full', canActivate: [homeRedirectGuard], children: [] },
 
       // ─── ESPACE CLIENT ───────────────────────────────────────────────────

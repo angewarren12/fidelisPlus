@@ -52,6 +52,7 @@ import { QuoteService, Quote } from '../../../services/quote.service';
              <div class="space-y-1 text-xs font-medium text-outline">
                 <p>Date : {{ today | date:'dd/MM/yyyy' }}</p>
                 <p *ngIf="quote()?.valid_until">Valable jusqu'au : {{ quote()?.valid_until | date:'dd/MM/yyyy' }}</p>
+                <p *ngIf="quote()?.payment_term">Paiement : {{ quote()?.payment_term?.label }}</p>
              </div>
           </div>
         </div>
@@ -92,8 +93,8 @@ import { QuoteService, Quote } from '../../../services/quote.service';
                  <tr *ngFor="let item of quote()?.items" class="text-sm font-medium text-on-surface">
                     <td class="py-6 px-2">{{ item.description }}</td>
                     <td class="py-6 px-2 text-center">{{ item.quantity || 1 }}</td>
-                    <td class="py-6 px-2 text-right">{{ item.price | number:'1.0-0' }} FCFA</td>
-                    <td class="py-6 px-2 text-right font-bold">{{ (item.price * (item.quantity || 1)) | number:'1.0-0' }} FCFA</td>
+                    <td class="py-6 px-2 text-right">{{ item.price | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</td>
+                    <td class="py-6 px-2 text-right font-bold">{{ (item.price * (item.quantity || 1)) | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</td>
                  </tr>
               </tbody>
            </table>
@@ -104,15 +105,15 @@ import { QuoteService, Quote } from '../../../services/quote.service';
            <div class="w-72 space-y-4">
               <div class="flex justify-between items-center text-sm font-bold text-outline">
                  <span>Total HT</span>
-                 <span>{{ quote()?.total_amount | number:'1.0-0' }} FCFA</span>
+                 <span>{{ quote()?.total_amount | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
               <div class="flex justify-between items-center text-sm font-bold text-outline">
                  <span>TVA (18%)</span>
-                 <span>{{ (quote()!.total_amount * 0.18) | number:'1.0-0' }} FCFA</span>
+                 <span>{{ (quote()!.total_amount * 0.18) | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
               <div class="flex justify-between items-center p-4 bg-primary text-white rounded-2xl shadow-xl shadow-primary/20">
                  <span class="text-xs font-black uppercase tracking-widest">Total TTC</span>
-                 <span class="text-xl font-black">{{ (quote()!.total_amount * 1.18) | number:'1.0-0' }} FCFA</span>
+                 <span class="text-xl font-black">{{ (quote()!.total_amount * 1.18) | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
            </div>
         </div>

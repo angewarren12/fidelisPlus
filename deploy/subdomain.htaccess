@@ -1,0 +1,17 @@
+Options -Indexes
+RewriteEngine On
+RewriteBase /
+
+# Transmet l'en-tête Authorization (nécessaire pour les tokens Bearer Sanctum)
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Bloque l'accès direct au code Laravel, sauf son front controller laravel/public/
+RewriteRule ^laravel/(?!public/) - [F,L]
+
+# Sert les fichiers/dossiers existants tels quels (assets Angular, laravel/public/*)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Tout le reste (API Laravel, Sanctum, fallback SPA Angular) est décidé par Laravel
+RewriteRule ^ laravel/public/index.php [L]

@@ -9,6 +9,7 @@ import { ToastService } from '../../../services/toast.service';
 import { QuoteRequestService } from '../../../services/quote-request.service';
 import { SettingService } from '../../../services/setting.service';
 import { StationService } from '../../../services/station.service';
+import { PaymentTermService, PaymentTerm } from '../../../services/payment-term.service';
 import { QuotePreviewModalComponent } from '../quote-preview-modal/quote-preview-modal.component';
 
 // ─── TABLEAUX DE PRIX ──────────────────────────────────────────────────────
@@ -453,6 +454,21 @@ function inferVehicleIdsFromItems(
                     <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Numéro de Devis</label>
                     <input type="text" [(ngModel)]="quote.quote_number" placeholder="Généré automatiquement à l'enregistrement" class="w-full bg-surface-container-low border-none rounded-2xl p-4 text-sm font-bold focus:ring-primary/20 outline-none">
                     <p class="text-[10px] text-outline/70 ml-1">Laissez vide pour une génération automatique, ou saisissez un numéro personnalisé.</p>
+                 </div>
+                 <div class="space-y-2">
+                    <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Condition de paiement</label>
+                    <select [(ngModel)]="quote.payment_term_id" class="w-full bg-surface-container-low border-none rounded-2xl p-4 text-sm font-bold focus:ring-primary/20 outline-none transition-all">
+                       <option [ngValue]="null">Non précisée</option>
+                       <option *ngFor="let t of paymentTerms()" [ngValue]="t.id">{{ t.label }}</option>
+                    </select>
+                 </div>
+                 <div class="space-y-2">
+                    <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Devise</label>
+                    <select [(ngModel)]="quote.currency" class="w-full bg-surface-container-low border-none rounded-2xl p-4 text-sm font-bold focus:ring-primary/20 outline-none transition-all">
+                       <option value="XOF">XOF — Franc CFA</option>
+                       <option value="EUR">EUR — Euro</option>
+                       <option value="USD">USD — Dollar US</option>
+                    </select>
                  </div>
               </div>
 
@@ -937,17 +953,18 @@ function inferVehicleIdsFromItems(
                  <div class="border-t border-white/10 pt-6 space-y-3">
                     <div class="flex justify-between items-center">
                        <span class="text-[10px] font-black uppercase tracking-widest text-white/50">Total HT</span>
-                       <span class="font-black text-white text-lg font-headline">{{ totalHT() | number:'1.0-0' }} XOF</span>
+                       <span class="font-black text-white text-lg font-headline">{{ totalHT() | number:'1.0-0' }} {{ quote.currency }}</span>
                     </div>
                     <div class="flex justify-between items-center">
                        <span class="text-[10px] font-black uppercase tracking-widest text-primary">TVA 18%</span>
-                       <span class="font-bold text-primary">{{ totalTVA() | number:'1.0-0' }} XOF</span>
+                       <span class="font-bold text-primary">{{ totalTVA() | number:'1.0-0' }} {{ quote.currency }}</span>
                     </div>
                     <div class="flex justify-between items-center bg-white/5 rounded-2xl px-4 py-4">
                        <span class="text-sm font-black uppercase tracking-widest text-white">TOTAL TTC</span>
                        <span class="font-black text-2xl text-primary font-headline">{{ totalTTC() | number:'1.0-0' }}</span>
                     </div>
-                    <p class="text-[10px] text-white/30 text-center">XOF (Franc CFA)</p>
+                    <p class="text-[10px] text-white/30 text-center">{{ currencyLabel() }}</p>
+                    <p *ngIf="paymentTermLabel()" class="text-[10px] text-white/50 text-center pt-1">Paiement : {{ paymentTermLabel() }}</p>
                  </div>
 
                  <div *ngIf="!isValid()" class="text-[10px] text-error/80 text-center font-bold">
@@ -992,9 +1009,13 @@ export class QuoteFormComponent implements OnInit {
     quote_number: '',
     status: 'draft',
     total_amount: 0,
+    currency: 'XOF',
+    payment_term_id: null,
     items: [],
     vehicle_ids: [],
   };
+
+  paymentTerms = signal<PaymentTerm[]>([]);
 
   clients         = signal<any[]>([]);
   companyVehicles = signal<Vehicle[]>([]);
@@ -1013,6 +1034,7 @@ export class QuoteFormComponent implements OnInit {
 
   settingSvc = inject(SettingService);
   stationSvc = inject(StationService);
+  paymentTermSvc = inject(PaymentTermService);
   stations = signal<any[]>([]);
 
   // Data tables exposed to template — les catégories créées depuis Paramètres > Grille
@@ -1155,6 +1177,7 @@ export class QuoteFormComponent implements OnInit {
   ngOnInit(): void {
     this.settingSvc.loadSettings();
     this.stationSvc.list().subscribe(data => this.stations.set(data.filter(s => s.is_active)));
+    this.paymentTermSvc.list().subscribe(data => this.paymentTerms.set(data));
 
     // Le <select> "Client / Entreprise" ne peut afficher la bonne option que si ses
     // <option> (générées par *ngFor="let client of clients()") existent déjà dans le DOM
@@ -1269,6 +1292,8 @@ export class QuoteFormComponent implements OnInit {
         this.quote.status = q.status;
         this.quote.quote_request_id = q.quote_request_id;
         this.quote.valid_until = q.valid_until;
+        this.quote.payment_term_id = q.payment_term_id ?? null;
+        this.quote.currency = q.currency ?? 'XOF';
 
         let vehicleIds: number[] = (q.vehicles || []).map((v: any) => v.id).filter(Boolean);
         const rawItems = q.items || [];
@@ -1595,12 +1620,22 @@ export class QuoteFormComponent implements OnInit {
   sendQuote(): void { this.submit('sent'); }
   onPreviewSend(): void { this.showPreview.set(false); this.submit('sent'); }
 
+  currencyLabel(): string {
+    const labels: Record<string, string> = { XOF: 'XOF (Franc CFA)', EUR: 'EUR (Euro)', USD: 'USD (Dollar US)' };
+    return labels[this.quote.currency] || this.quote.currency;
+  }
+
+  paymentTermLabel(): string | null {
+    return this.paymentTerms().find((t) => t.id === this.quote.payment_term_id)?.label ?? null;
+  }
+
   getPdfData(): any {
     return {
       ...this.quote,
       items: this.buildItems(false),
       total_amount: this.totalTTC(),
       company_name: this.selectedCompanyName(),
+      payment_term_label: this.paymentTerms().find((t) => t.id === this.quote.payment_term_id)?.label ?? null,
     };
   }
 
@@ -1622,6 +1657,8 @@ export class QuoteFormComponent implements OnInit {
       total_amount: this.quote.total_amount,
       quote_request_id: this.quote.quote_request_id,
       valid_until: this.quote.valid_until,
+      payment_term_id: this.quote.payment_term_id,
+      currency: this.quote.currency,
       status: 'draft',
     };
     const qn = String(this.quote.quote_number ?? '').trim();
@@ -1661,6 +1698,8 @@ export class QuoteFormComponent implements OnInit {
       company_id: this.quote.company_id,
       quote_request_id: this.quote.quote_request_id,
       valid_until: this.quote.valid_until,
+      payment_term_id: this.quote.payment_term_id,
+      currency: this.quote.currency,
       vehicle_ids: this.selectedVehicleIds(),
       items: this.quote.items,
     };

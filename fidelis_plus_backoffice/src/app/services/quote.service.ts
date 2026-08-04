@@ -17,7 +17,10 @@ export interface Quote {
   quote_number?: string;
   status: 'draft' | 'sent' | 'accepted' | 'declined' | 'expired';
   total_amount: number;
+  currency?: string;
   valid_until?: string;
+  payment_term_id?: number | null;
+  payment_term?: { id: number; label: string; description?: string | null } | null;
   items: QuoteItem[];
   company?: any;
   vehicles?: any[];

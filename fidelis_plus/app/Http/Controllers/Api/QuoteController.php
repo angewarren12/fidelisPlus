@@ -73,7 +73,7 @@ class QuoteController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Quote::with(['company', 'vehicles', 'items']);
+        $query = Quote::with(['company', 'vehicles', 'items', 'paymentTerm']);
         $this->scopeForUser($query);
 
         if ($request->filled('company_id')) {
@@ -139,7 +139,7 @@ class QuoteController extends Controller
      */
     public function show($id)
     {
-        $quote = Quote::with(['company', 'items', 'vehicles'])->findOrFail($id);
+        $quote = Quote::with(['company', 'items', 'vehicles', 'paymentTerm'])->findOrFail($id);
 
         $user = request()->user();
         if ($user && $user->role === 'commercial' && (int) $quote->company->commercial_id !== (int) $user->id) {
@@ -168,6 +168,8 @@ class QuoteController extends Controller
             // Si non fourni, le serveur génère un numéro unique.
             'quote_number' => 'nullable|string|unique:quotes,quote_number',
             'valid_until' => 'nullable|date',
+            'payment_term_id' => 'nullable|exists:payment_terms,id',
+            'currency' => 'nullable|string|size:3',
             'items' => 'required|array|min:1',
             'items.*.description' => 'required|string',
             'items.*.price' => 'required|numeric',
@@ -200,6 +202,8 @@ class QuoteController extends Controller
                 'quote_request_id' => $request->quote_request_id,
                 'quote_number' => $quoteNumber,
                 'valid_until' => $request->valid_until,
+                'payment_term_id' => $request->payment_term_id,
+                'currency' => $request->input('currency', 'XOF'),
                 'status' => 'draft',
                 'total_amount' => 0,
             ]);
@@ -243,7 +247,7 @@ class QuoteController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Devis créé avec succès.',
-                'data' => $quote->load(['items', 'vehicles'])
+                'data' => $quote->load(['items', 'vehicles', 'paymentTerm'])
             ], 201);
         });
     }
@@ -270,6 +274,8 @@ class QuoteController extends Controller
             // Si vide, le serveur peut régénérer un numéro unique (rare, mais évite les blocages).
             'quote_number' => ['nullable', 'string', Rule::unique('quotes', 'quote_number')->ignore($quote->id)],
             'valid_until' => 'nullable|date',
+            'payment_term_id' => 'nullable|exists:payment_terms,id',
+            'currency' => 'nullable|string|size:3',
             'items' => 'required|array|min:1',
             'items.*.description' => 'required|string',
             'items.*.price' => 'required|numeric',
@@ -306,6 +312,8 @@ class QuoteController extends Controller
                 'quote_request_id' => $request->quote_request_id,
                 'quote_number' => $quoteNumber,
                 'valid_until' => $request->valid_until,
+                'payment_term_id' => $request->payment_term_id,
+                'currency' => $request->input('currency', $quote->currency ?? 'XOF'),
                 'status' => $request->input('status', 'draft'),
             ]);
 
@@ -347,7 +355,7 @@ class QuoteController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Devis mis à jour.',
-                'data' => $quote->fresh()->load(['items', 'vehicles', 'company']),
+                'data' => $quote->fresh()->load(['items', 'vehicles', 'company', 'paymentTerm']),
             ]);
         });
     }

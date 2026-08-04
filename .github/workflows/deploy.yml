@@ -37,31 +37,31 @@ jobs:
         working-directory: fidelis_plus_backoffice
         run: npm run build -- --configuration production
 
-      # Empaquetage en 3 dossiers distincts, chacun uploadé vers un chemin différent
-      # sur le serveur (voir CI-CD-SETUP-GUIDE.md) :
-      #   app/ -> htdocs/fidelis_plus_app                    (code Laravel, dossier orphelin sans sous-domaine)
-      #   api/ -> htdocs/fidelisplus.cieria-app.com/api      (point d'entrée public Laravel)
-      #   web/ -> htdocs/fidelisplus.cieria-app.com          (build Angular)
+      # Empaquetage en UN SEUL dossier reproduisant exactement le docroot cible
+      # (htdocs/fidelisplus.cieria-app.com/) : Angular à la racine, Laravel complet
+      # dans laravel/ (accès direct bloqué par le .htaccess racine, sauf laravel/public/).
+      # Approche validée sur ce même hébergement LWS par un autre projet
+      # (voir deploy/subdomain.htaccess pour le détail des règles de réécriture).
       - name: Package release
         run: |
-          mkdir -p /tmp/release/app /tmp/release/api /tmp/release/web
+          mkdir -p /tmp/release/laravel
 
-          rsync -a --exclude='public' \
+          rsync -a \
             --exclude='.git' --exclude='node_modules' \
             --exclude='storage/logs' --exclude='storage/framework/cache' \
             --exclude='storage/framework/sessions' --exclude='storage/framework/views' \
-            fidelis_plus/ /tmp/release/app/
-          mkdir -p /tmp/release/app/storage/framework/cache/data \
-                   /tmp/release/app/storage/framework/sessions \
-                   /tmp/release/app/storage/framework/views \
-                   /tmp/release/app/storage/logs
+            fidelis_plus/ /tmp/release/laravel/
+          mkdir -p /tmp/release/laravel/storage/framework/cache/data \
+                   /tmp/release/laravel/storage/framework/sessions \
+                   /tmp/release/laravel/storage/framework/views \
+                   /tmp/release/laravel/storage/logs
 
-          cp -r fidelis_plus/public/. /tmp/release/api/
-          cp fidelis_plus/index.deploy.php /tmp/release/api/index.php
+          cp fidelis_plus/index.deploy.php /tmp/release/laravel/public/index.php
 
-          cp -r fidelis_plus_backoffice/dist/fidelis_plus_backoffice/browser/. /tmp/release/web/
+          cp -r fidelis_plus_backoffice/dist/fidelis_plus_backoffice/browser/. /tmp/release/
+          cp deploy/subdomain.htaccess /tmp/release/.htaccess
 
-          cd /tmp/release && tar -czf /tmp/release.tar.gz app api web
+          cd /tmp/release && tar -czf /tmp/release.tar.gz .
           mv /tmp/release.tar.gz "$GITHUB_WORKSPACE/release.tar.gz"
 
       - name: Upload artifact
@@ -91,33 +91,15 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      # 3 transferts SFTP purs (aucune commande à distance possible sur cet
-      # hébergement — voir section 2.4 du guide). Pas de --delete : ne supprime
-      # jamais un fichier absent de l'archive (protège .env, storage/, uploads).
-      - name: Upload Laravel app (code, hors dossier web)
+      # Transfert SFTP pur (aucune commande à distance possible sur cet hébergement —
+      # voir section 2.4 du guide). Pas de --delete : ne supprime jamais un fichier
+      # absent de l'archive (protège .env, storage/, uploads déjà en place).
+      - name: Upload release (Angular + Laravel) via SFTP
         run: |
           lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
             set sftp:auto-confirm yes
             set net:max-retries 2
-            mirror -R --parallel=4 --verbose release/app ${{ secrets.DEPLOY_PATH_APP }}
-            quit
-          "
-
-      - name: Upload Laravel API entrypoint (public)
-        run: |
-          lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
-            set sftp:auto-confirm yes
-            set net:max-retries 2
-            mirror -R --parallel=4 --verbose release/api ${{ secrets.DEPLOY_PATH_API }}
-            quit
-          "
-
-      - name: Upload Angular build
-        run: |
-          lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
-            set sftp:auto-confirm yes
-            set net:max-retries 2
-            mirror -R --parallel=4 --verbose release/web ${{ secrets.DEPLOY_PATH_WEB }}
+            mirror -R --parallel=4 --verbose release ${{ secrets.DEPLOY_PATH }}
             quit
           "
 

@@ -82,6 +82,13 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         Route::apiResource('stations', StationController::class)->only(['index', 'show']);
         Route::apiResource('stations', StationController::class)->except(['index', 'show'])->middleware('role:admin_commercial,admin_marketing,super_admin');
 
+        Route::prefix('payment-terms')->name('payment-terms.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\PaymentTermController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Api\PaymentTermController::class, 'store'])->name('store');
+            Route::put('/{id}', [\App\Http\Controllers\Api\PaymentTermController::class, 'update'])->name('update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\PaymentTermController::class, 'destroy'])->name('destroy');
+        });
+
         Route::get('/settings', [\App\Http\Controllers\Api\SettingController::class, 'index'])->name('settings.index');
         Route::put('/settings', [\App\Http\Controllers\Api\SettingController::class, 'update'])->middleware('role:admin_commercial,super_admin')->name('settings.update');
 
