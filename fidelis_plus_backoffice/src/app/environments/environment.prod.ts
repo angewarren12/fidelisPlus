@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://fidelisplus.cieria-app.com/api',
+  apiUrl: 'https://fidelisplus.cieria-app.com',
   pusher: {
     key: '',
     host: '',
