@@ -94,12 +94,21 @@ jobs:
       # Transfert SFTP pur (aucune commande à distance possible sur cet hébergement —
       # voir section 2.4 du guide). Pas de --delete : ne supprime jamais un fichier
       # absent de l'archive (protège .env, storage/, uploads déjà en place).
+      #
+      # Transfert INCRÉMENTAL, pas un envoi brutal de tout le dossier à chaque fois :
+      # --size-only compare chaque fichier local à sa version distante par TAILLE
+      # uniquement (pas par date — chaque build CI régénère des fichiers avec une date
+      # fraîche même quand le contenu n'a pas changé, comparer les dates réenverrait
+      # donc tout à chaque déploiement). Seuls les fichiers dont la taille diffère sont
+      # retransférés ; --verbose affiche "Transferring file ..." uniquement pour ceux-là
+      # dans les logs — un second déploiement sans changement de code ne devrait
+      # quasiment rien réenvoyer.
       - name: Upload release (Angular + Laravel) via SFTP
         run: |
           lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
             set sftp:auto-confirm yes
             set net:max-retries 2
-            mirror -R --parallel=4 --verbose release ${{ secrets.DEPLOY_PATH }}
+            mirror -R --parallel=4 --verbose --size-only release ${{ secrets.DEPLOY_PATH }}
             quit
           "
 
