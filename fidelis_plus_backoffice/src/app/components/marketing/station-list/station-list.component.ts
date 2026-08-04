@@ -131,7 +131,7 @@ export class StationListComponent implements OnInit {
   }
 
   isAdmin(): boolean {
-    return this.auth.getCurrentUser()?.role === 'admin';
+    return ['admin_commercial', 'admin_marketing', 'super_admin'].includes(this.auth.getCurrentUser()?.role ?? '');
   }
 
   loadStations(): void {

@@ -67,6 +67,19 @@ export class AuthService {
     );
   }
 
+  uploadAvatar(file: File): Observable<{ status: string; data: User }> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return this.http.post<{ status: string; data: User }>(`${this.API_URL}/me/avatar`, formData).pipe(
+      tap((res) => {
+        const token = this.getToken();
+        if (token && res.data) {
+          this.setSession(token, res.data);
+        }
+      })
+    );
+  }
+
   logout(): void {
     localStorage.removeItem(this.AUTH_TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);

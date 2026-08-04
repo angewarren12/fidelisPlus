@@ -29,6 +29,12 @@
         font-family: 'Courier New', monospace;
         font-weight: bold;
     }
+    .card .holder-name {
+        position: absolute;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: bold;
+        white-space: nowrap;
+    }
 </style>
 </head>
 <body>
@@ -44,6 +50,12 @@
              style="left: {{ $layout['card_number_x'] }}%; top: {{ $layout['card_number_y'] }}%; color: {{ $layout['card_number_color'] }}; font-size: {{ $layout['card_number_size'] }}px;">
             N° {{ $item['card_number'] }}
         </div>
+        @if (!empty($layout['holder_name_enabled']) && !empty($item['holder_name']))
+            <div class="holder-name"
+                 style="left: {{ $layout['holder_name_x'] ?? 8 }}%; top: {{ $layout['holder_name_y'] ?? 75 }}%; color: {{ $layout['holder_name_color'] ?? '#ffffff' }}; font-size: {{ $layout['holder_name_size'] ?? 11 }}px;">
+                {{ $item['holder_name'] }}
+            </div>
+        @endif
     </div>
 @endforeach
 </body>

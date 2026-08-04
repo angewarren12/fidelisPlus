@@ -8,8 +8,8 @@ export const homeRedirectGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
   const role = auth.getCurrentUser()?.role;
-  if (role === UserRoles.MARKETING) {
-    return router.createUrlTree(['/marketing/fidelite']);
+  if (role === UserRoles.MARKETING || role === UserRoles.ADMIN_MARKETING) {
+    return router.createUrlTree(['/marketing/dashboard']);
   }
   if (role === UserRoles.CLIENT) {
     return router.createUrlTree(['/client/dashboard']);

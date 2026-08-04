@@ -10,6 +10,7 @@ import {
   LoyaltyAccountRow,
   LoyaltyCardBatchRow,
   PaginatedMeta,
+  MarketingDashboardStats,
 } from '../../../services/loyalty.service';
 import { ToastService } from '../../../services/toast.service';
 import { MarketingBgPatternComponent } from '../../ui/marketing-bg-pattern/marketing-bg-pattern.component';
@@ -18,6 +19,8 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
   return {
     qr_x: 70, qr_y: 25, qr_size: 24,
     card_number_x: 8, card_number_y: 88, card_number_color: '#ffffff', card_number_size: 12,
+    holder_name_enabled: false,
+    holder_name_x: 8, holder_name_y: 75, holder_name_color: '#ffffff', holder_name_size: 11,
   };
 }
 
@@ -50,6 +53,27 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
         </div>
       </section>
 
+      <!-- KPI -->
+      <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl p-5 border border-outline-variant/10 shadow-sm">
+          <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Cartes émises</p>
+          <p class="text-2xl font-headline font-black text-on-surface">{{ stats()?.accounts?.total ?? '—' }}</p>
+          <p class="text-[10px] text-outline mt-0.5" *ngIf="stats()">{{ stats()!.accounts.particulier }} particulier · {{ stats()!.accounts.entreprise }} entreprise</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-outline-variant/10 shadow-sm">
+          <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Cartes vierges en stock</p>
+          <p class="text-2xl font-headline font-black text-on-surface">{{ stats()?.card_stock?.blank_available ?? '—' }}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-outline-variant/10 shadow-sm">
+          <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Lots à imprimer</p>
+          <p class="text-2xl font-headline font-black" [class.text-error]="(stats()?.card_stock?.batches_to_print ?? 0) > 0" [class.text-on-surface]="!(stats()?.card_stock?.batches_to_print ?? 0)">{{ stats()?.card_stock?.batches_to_print ?? '—' }}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-5 border border-outline-variant/10 shadow-sm">
+          <p class="text-[10px] font-black uppercase text-outline tracking-widest mb-1">Modèles disponibles</p>
+          <p class="text-2xl font-headline font-black text-on-surface">{{ templates().length }}</p>
+        </div>
+      </section>
+
       <!-- ================= ÉMETTRE / GÉRER ================= -->
       <section *ngIf="section() === 'issue'" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
@@ -67,9 +91,13 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
               <button *ngFor="let m of members()" type="button" (click)="selectMember(m)"
                       [class]="'w-full text-left p-3 rounded-xl border-2 transition-all ' + (selectedMember()?.id === m.id ? 'border-primary bg-primary/5' : 'border-outline-variant/15 hover:border-primary/30')">
                 <p class="text-sm font-bold text-on-surface">{{ displayName(m) }}</p>
-                <p class="text-xs text-outline">{{ m.contact }} · carte {{ m.loyalty_account?.card_number || '—' }}</p>
+                <p class="text-xs text-outline">{{ m.contact }} · N° {{ m.loyalty_account?.card_number || '—' }}</p>
               </button>
               <p *ngIf="!loadingMembers() && members().length === 0" class="text-xs text-outline italic py-4 text-center">Aucun client trouvé.</p>
+              <button *ngIf="hasMoreMembers()" type="button" (click)="loadMoreMembers()" [disabled]="loadingMoreMembers()"
+                      class="w-full py-2.5 text-[11px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 rounded-xl transition-colors disabled:opacity-50">
+                {{ loadingMoreMembers() ? 'Chargement…' : 'Voir plus (' + (membersMeta()!.total - members().length) + ' restants)' }}
+              </button>
             </div>
           </div>
 
@@ -91,6 +119,11 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
               <span class="material-symbols-outlined text-lg">print</span>
               Imprimer / Exporter la carte
             </button>
+            <button type="button" (click)="downloadCardPdf()" [disabled]="!canPrint() || downloadingCard()"
+                    class="w-full h-12 rounded-xl bg-white border border-outline-variant/20 text-on-surface text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-surface-container-low transition-colors">
+              <span class="material-symbols-outlined text-lg" [class.animate-spin]="downloadingCard()">{{ downloadingCard() ? 'sync' : 'picture_as_pdf' }}</span>
+              {{ downloadingCard() ? 'Génération…' : 'Télécharger en PDF' }}
+            </button>
           </div>
         </div>
 
@@ -105,11 +138,16 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
               <img [src]="t.background_url" class="absolute inset-0 w-full h-full object-cover">
               <div class="absolute font-bold font-mono" [style.left.%]="t.layout_json.card_number_x" [style.top.%]="t.layout_json.card_number_y"
                    [style.color]="t.layout_json.card_number_color" [style.fontSize.px]="t.layout_json.card_number_size">
-                Carte {{ selectedMember()?.loyalty_account?.card_number || '—' }}
+                N° {{ selectedMember()?.loyalty_account?.card_number || '—' }}
               </div>
               <img *ngIf="cardQrDataUrl()" [src]="cardQrDataUrl()!"
                    class="absolute bg-white p-1 rounded"
                    [style.left.%]="t.layout_json.qr_x" [style.top.%]="t.layout_json.qr_y" [style.width.%]="t.layout_json.qr_size">
+              <div *ngIf="t.layout_json.holder_name_enabled" class="absolute font-bold whitespace-nowrap"
+                   [style.left.%]="t.layout_json.holder_name_x" [style.top.%]="t.layout_json.holder_name_y"
+                   [style.color]="t.layout_json.holder_name_color" [style.fontSize.px]="t.layout_json.holder_name_size">
+                {{ displayName(selectedMember()!) }}
+              </div>
             </div>
           </div>
         </div>
@@ -182,6 +220,24 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
             </div>
           </div>
 
+          <!-- Nom du titulaire : facultatif, désactivé par défaut -->
+          <div class="border border-outline-variant/15 rounded-2xl p-4 space-y-3">
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" [(ngModel)]="templateForm.layout.holder_name_enabled" class="w-4 h-4 accent-primary rounded">
+              <span class="text-xs font-bold text-on-surface">Afficher le nom du titulaire sur la carte</span>
+            </label>
+            <div class="grid grid-cols-2 gap-4" *ngIf="templateForm.layout.holder_name_enabled">
+              <div>
+                <label class="block text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Nom titulaire — Couleur</label>
+                <input type="color" [(ngModel)]="templateForm.layout.holder_name_color" class="w-full h-9 rounded-lg border-none">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Nom titulaire — Taille (px)</label>
+                <input type="number" [(ngModel)]="templateForm.layout.holder_name_size" min="6" max="30" class="w-full px-3 py-2 bg-surface-container rounded-lg text-sm outline-none">
+              </div>
+            </div>
+          </div>
+
           <!-- Aperçu live — glisser-déposer façon Canva pour positionner le QR et le n° de carte -->
           <div>
             <label class="block text-[10px] font-bold text-outline uppercase tracking-wider mb-2">Aperçu — glissez le QR ou le n° de carte pour les positionner</label>
@@ -193,13 +249,19 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
                      (mousedown)="startDrag($event, 'card_number', templatePreviewEl)" (touchstart)="startDrag($event, 'card_number', templatePreviewEl)"
                      [style.left.%]="templateForm.layout.card_number_x" [style.top.%]="templateForm.layout.card_number_y"
                      [style.color]="templateForm.layout.card_number_color" [style.fontSize.px]="templateForm.layout.card_number_size">
-                  Carte 0001
+                  {{ templateForm.type === 'entreprise' ? 'N° ENT-0042' : 'N° FID-0042' }}
                 </div>
                 <div class="absolute bg-white/90 rounded flex items-center justify-center text-[8px] font-bold text-outline cursor-move ring-2 ring-primary/40"
                      (mousedown)="startDrag($event, 'qr', templatePreviewEl)" (touchstart)="startDrag($event, 'qr', templatePreviewEl)"
                      [style.left.%]="templateForm.layout.qr_x" [style.top.%]="templateForm.layout.qr_y"
                      [style.width.%]="templateForm.layout.qr_size" [style.aspectRatio]="'1'">
                   QR
+                </div>
+                <div *ngIf="templateForm.layout.holder_name_enabled" class="absolute font-bold cursor-move ring-2 ring-primary/40 rounded px-0.5 whitespace-nowrap"
+                     (mousedown)="startDrag($event, 'holder_name', templatePreviewEl)" (touchstart)="startDrag($event, 'holder_name', templatePreviewEl)"
+                     [style.left.%]="templateForm.layout.holder_name_x" [style.top.%]="templateForm.layout.holder_name_y"
+                     [style.color]="templateForm.layout.holder_name_color" [style.fontSize.px]="templateForm.layout.holder_name_size">
+                  {{ templateForm.type === 'entreprise' ? 'Société Exemple' : 'Prénom Nom' }}
                 </div>
               </div>
             </div>
@@ -398,7 +460,9 @@ export class LoyaltyCardStudioComponent implements OnInit {
 
   // Émettre / gérer
   members = signal<LoyaltyMemberRow[]>([]);
+  membersMeta = signal<PaginatedMeta | null>(null);
   loadingMembers = signal(false);
+  loadingMoreMembers = signal(false);
   memberSearch = '';
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
   selectedMember = signal<LoyaltyMemberRow | null>(null);
@@ -429,7 +493,7 @@ export class LoyaltyCardStudioComponent implements OnInit {
   private stockSearchDebounce: ReturnType<typeof setTimeout> | null = null;
 
   // Drag & drop façon Canva (positionnement QR / n° de carte dans l'éditeur de modèle)
-  private dragTarget: 'qr' | 'card_number' | null = null;
+  private dragTarget: 'qr' | 'card_number' | 'holder_name' | null = null;
   private dragContainer: HTMLElement | null = null;
   private onDragMoveBound = (event: MouseEvent | TouchEvent) => this.onDragMove(event);
   private onDragEndBound = () => this.onDragEnd();
@@ -442,6 +506,16 @@ export class LoyaltyCardStudioComponent implements OnInit {
     this.loadTemplates();
     this.loadStock();
     this.loadBatches();
+    this.loadStats();
+  }
+
+  stats = signal<MarketingDashboardStats | null>(null);
+
+  loadStats(): void {
+    this.loyaltyService.dashboardStats().subscribe({
+      next: (data) => this.stats.set(data),
+      error: () => {},
+    });
   }
 
   displayName(m: LoyaltyMemberRow): string {
@@ -463,9 +537,33 @@ export class LoyaltyCardStudioComponent implements OnInit {
 
   loadMembers(): void {
     this.loadingMembers.set(true);
-    this.loyaltyService.listMembers({ search: this.memberSearch.trim() || undefined, per_page: 30 }).subscribe({
-      next: (res) => { this.members.set(res.items); this.loadingMembers.set(false); },
+    this.loyaltyService.listMembers({ search: this.memberSearch.trim() || undefined, page: 1, per_page: 30 }).subscribe({
+      next: (res) => {
+        this.members.set(res.items);
+        this.membersMeta.set(res.meta);
+        this.loadingMembers.set(false);
+      },
       error: () => this.loadingMembers.set(false),
+    });
+  }
+
+  hasMoreMembers(): boolean {
+    const meta = this.membersMeta();
+    return !!meta && meta.current_page < meta.last_page;
+  }
+
+  loadMoreMembers(): void {
+    const meta = this.membersMeta();
+    if (!meta || this.loadingMoreMembers()) return;
+
+    this.loadingMoreMembers.set(true);
+    this.loyaltyService.listMembers({ search: this.memberSearch.trim() || undefined, page: meta.current_page + 1, per_page: 30 }).subscribe({
+      next: (res) => {
+        this.members.update((list) => [...list, ...res.items]);
+        this.membersMeta.set(res.meta);
+        this.loadingMoreMembers.set(false);
+      },
+      error: () => this.loadingMoreMembers.set(false),
     });
   }
 
@@ -498,6 +596,32 @@ export class LoyaltyCardStudioComponent implements OnInit {
     window.print();
   }
 
+  downloadingCard = signal(false);
+
+  downloadCardPdf(): void {
+    if (!this.canPrint()) return;
+    const accountId = this.selectedMember()?.loyalty_account?.id;
+    const templateId = this.selectedTemplate()?.id;
+    if (!accountId || !templateId) return;
+
+    this.downloadingCard.set(true);
+    this.loyaltyService.downloadCardPdf(accountId, templateId).subscribe({
+      next: (blob) => {
+        this.downloadingCard.set(false);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `carte-fidelite-${this.selectedMember()?.loyalty_account?.card_number || accountId}.pdf`;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.downloadingCard.set(false);
+        this.toastService.error('Erreur lors de la génération du PDF.');
+      },
+    });
+  }
+
   // ─── Modèles ──────────────────────────────────────────────────────────────
 
   loadTemplates(): void {
@@ -515,11 +639,40 @@ export class LoyaltyCardStudioComponent implements OnInit {
   }
 
   onBgSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0];
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
     if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      this.toastService.error('Format non supporté. Utilise une image JPEG, PNG ou WebP.');
+      input.value = '';
+      return;
+    }
+    const maxSizeBytes = 5 * 1024 * 1024; // 5 Mo — même limite que côté backend
+    if (file.size > maxSizeBytes) {
+      this.toastService.error(`Image trop lourde (${(file.size / (1024 * 1024)).toFixed(1)} Mo). Limite : 5 Mo.`);
+      input.value = '';
+      return;
+    }
+
     this.templateBgFile = file;
     const reader = new FileReader();
-    reader.onload = (e: any) => this.templateBgPreview.set(e.target.result);
+    reader.onload = (e: any) => {
+      const dataUrl = e.target.result;
+      this.templateBgPreview.set(dataUrl);
+
+      // Alerte non bloquante si le visuel s'écarte trop du ratio carte bancaire (1.586) :
+      // il sera quand même accepté, mais recadré (object-cover) sur l'aperçu/l'impression.
+      const img = new Image();
+      img.onload = () => {
+        const ratio = img.width / img.height;
+        if (Math.abs(ratio - 1.586) / 1.586 > 0.15) {
+          this.toastService.info('Ce visuel ne respecte pas le ratio carte bancaire (1.586) — il sera recadré à l\'affichage.');
+        }
+      };
+      img.src = dataUrl;
+    };
     reader.readAsDataURL(file);
   }
 
@@ -554,6 +707,7 @@ export class LoyaltyCardStudioComponent implements OnInit {
   }
 
   deleteTemplate(t: LoyaltyCardTemplateRow): void {
+    if (!confirm(`Supprimer définitivement le modèle "${t.name}" ? Cette action est irréversible.`)) return;
     this.loyaltyService.deleteCardTemplate(t.id).subscribe({
       next: () => {
         this.templates.update((list) => list.filter((x) => x.id !== t.id));
@@ -566,7 +720,7 @@ export class LoyaltyCardStudioComponent implements OnInit {
 
   // ─── Drag & drop façon Canva (positionnement dans l'éditeur de modèle) ──────
 
-  startDrag(event: MouseEvent | TouchEvent, target: 'qr' | 'card_number', container: HTMLElement): void {
+  startDrag(event: MouseEvent | TouchEvent, target: 'qr' | 'card_number' | 'holder_name', container: HTMLElement): void {
     event.preventDefault();
     this.dragTarget = target;
     this.dragContainer = container;
@@ -589,9 +743,12 @@ export class LoyaltyCardStudioComponent implements OnInit {
     if (this.dragTarget === 'qr') {
       this.templateForm.layout.qr_x = x;
       this.templateForm.layout.qr_y = y;
-    } else {
+    } else if (this.dragTarget === 'card_number') {
       this.templateForm.layout.card_number_x = x;
       this.templateForm.layout.card_number_y = y;
+    } else if (this.dragTarget === 'holder_name') {
+      this.templateForm.layout.holder_name_x = x;
+      this.templateForm.layout.holder_name_y = y;
     }
   }
 

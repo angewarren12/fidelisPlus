@@ -13,6 +13,7 @@ use App\Services\Loyalty\LoyaltyRulesService;
 use App\Services\Loyalty\SignedLoyaltyQrService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class LoyaltyAccountController extends Controller
 {
@@ -29,6 +30,7 @@ class LoyaltyAccountController extends Controller
             ->when($request->filled('holder_type'), fn ($qq) => $qq->where('holder_type', $request->input('holder_type')))
             ->when(! $request->filled('holder_type'), fn ($qq) => $qq->where('holder_type', '!=', 'unassigned'))
             ->when($request->filled('batch_status'), fn ($qq) => $qq->whereHas('batch', fn ($b) => $b->where('status', $request->input('batch_status'))))
+            ->when($request->filled('blank_card_type'), fn ($qq) => $qq->where('blank_card_type', $request->input('blank_card_type')))
             ->when($request->filled('search'), fn ($qq) => $qq->where('card_number', 'like', '%'.$request->input('search').'%'));
         LoyaltyCommercialVisibility::scopeLoyaltyAccounts($q, $request->user());
         $paginator = $q->paginate($perPage);
@@ -208,6 +210,22 @@ class LoyaltyAccountController extends Controller
         }
 
         return [$claims['account_uuid'], $qrPayload];
+    }
+
+    /**
+     * Export PDF (format carte bancaire imprimable) d'une carte déjà associée à un client,
+     * sur le modèle choisi côté Studio Carte — même rendu que les lots générés en masse.
+     */
+    public function downloadCard(Request $request, int $id, \App\Services\Loyalty\LoyaltyCardPdfService $pdfService): Response
+    {
+        $request->validate([
+            'template_id' => 'required|integer|exists:loyalty_card_templates,id',
+        ]);
+
+        $account = LoyaltyAccount::query()->findOrFail($id);
+        $template = \App\Models\LoyaltyCardTemplate::query()->findOrFail($request->integer('template_id'));
+
+        return $pdfService->forAccounts([$account], $template, 'carte-fidelite-'.$account->card_number.'.pdf');
     }
 
     public function qrPayload(Request $request, int $id): JsonResponse

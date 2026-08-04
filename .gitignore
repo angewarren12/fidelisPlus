@@ -1,0 +1,22 @@
+# Racine du monorepo (fidelis_plus / fidelis_plus_backoffice / fidelis_plus_caisse) —
+# chaque sous-projet a déjà son propre .gitignore (vendor/, node_modules/, .env, build/...).
+# Celui-ci couvre uniquement ce qui traîne à la racine ou peut apparaître n'importe où.
+
+# Documents bureautiques / données métier — ne doivent jamais être versionnés ni déployés
+# (maquettes, exports client, etc.). Utiliser un espace de partage externe pour ces fichiers.
+*.pptx
+*.xlsx
+*.xls
+*.csv
+~$*
+
+# Crash dumps JVM (IDE, outils) et logs divers à la racine
+hs_err_pid*.log
+replay_pid*.log
+*.log
+
+# Éditeurs / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -7,6 +7,7 @@ import { ToastService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
 import { FormsModule } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { ANY_ADMIN_ROLES, ROLE_LABELS } from '../../../models/user-roles';
 
 @Component({
   selector: 'app-team-list',
@@ -40,8 +41,12 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
           <label class="block text-[10px] font-black uppercase text-outline tracking-[0.2em] mb-1.5 ml-1">Rôle</label>
           <select [(ngModel)]="filterRole" (ngModelChange)="onFilterChange()" class="w-full py-3.5 px-4 rounded-2xl bg-surface-container-low border-none text-sm font-bold outline-none">
             <option value="">Tous</option>
-            <option value="admin">Admin</option>
+            <option value="super_admin">Super admin</option>
+            <option value="admin_commercial">Admin — Commercial</option>
+            <option value="admin_marketing">Admin — Marketing</option>
             <option value="commercial">Commercial</option>
+            <option value="marketing">Marketing</option>
+            <option value="caissier">Caissière station</option>
           </select>
         </div>
         <div class="w-full sm:w-28">
@@ -96,8 +101,7 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
               <tr class="bg-surface-container-low border-b border-outline-variant/10">
                 <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Collaborateur</th>
                 <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Rôle</th>
-                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-center">Clients</th>
-                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-center">Prospects</th>
+                <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest">Activité (service)</th>
                 <th class="px-6 py-4 text-[10px] font-black text-outline uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
@@ -105,7 +109,8 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
               <tr *ngFor="let user of users()" class="hover:bg-surface-container-low/50 transition-colors">
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-on-surface font-bold text-sm shrink-0">
+                    <img *ngIf="user.avatar_url" [src]="user.avatar_url" class="w-10 h-10 rounded-xl object-cover shrink-0">
+                    <div *ngIf="!user.avatar_url" class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-on-surface font-bold text-sm shrink-0">
                       {{ user.first_name.charAt(0) }}{{ user.last_name.charAt(0) }}
                     </div>
                     <div class="min-w-0">
@@ -116,16 +121,26 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
                 </td>
                 <td class="px-6 py-4">
                   <span
-                    [class.bg-primary/10]="user.role === 'admin'" [class.text-primary]="user.role === 'admin'"
-                    [class.bg-secondary/10]="user.role === 'commercial'" [class.text-secondary]="user.role === 'commercial'"
+                    [class.bg-primary/10]="isAdminRole(user.role)" [class.text-primary]="isAdminRole(user.role)"
+                    [class.bg-secondary/10]="user.role === 'commercial' || user.role === 'marketing'" [class.text-secondary]="user.role === 'commercial' || user.role === 'marketing'"
                     class="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-                     {{ user.role }}
+                     {{ roleLabel(user.role) }}
                   </span>
                 </td>
-                <td class="px-6 py-4 text-center text-sm font-bold text-on-surface">{{ user.clients_count || 0 }}</td>
-                <td class="px-6 py-4 text-center text-sm font-bold text-on-surface">{{ user.prospects_count || 0 }}</td>
+                <td class="px-6 py-4">
+                  <div class="flex flex-wrap gap-x-4 gap-y-0.5">
+                    <span *ngFor="let stat of statBlocks(user)" class="text-xs font-bold text-outline">
+                      <span class="text-on-surface font-black">{{ stat.value }}</span> {{ stat.label }}
+                    </span>
+                    <span *ngIf="statBlocks(user).length === 0" class="text-xs text-outline/50 italic">—</span>
+                  </div>
+                </td>
                 <td class="px-6 py-4">
                   <div class="flex items-center justify-end gap-2">
+                    <a [routerLink]="['/equipe', user.id]" title="Détails"
+                       class="w-9 h-9 rounded-xl bg-surface-container-low text-outline flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-colors">
+                       <span class="material-symbols-outlined text-lg">visibility</span>
+                    </a>
                     <a *ngIf="showPerformanceLink(user)" (click)="goToPerformance(user.id)" title="Performances"
                        class="w-9 h-9 rounded-xl bg-surface-container-low text-primary flex items-center justify-center hover:bg-primary/10 transition-colors cursor-pointer">
                        <span class="material-symbols-outlined text-lg">monitoring</span>
@@ -142,7 +157,7 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
                 </td>
               </tr>
               <tr *ngIf="users().length === 0">
-                <td colspan="5" class="px-6 py-20 text-center text-outline/60 italic">
+                <td colspan="4" class="px-6 py-20 text-center text-outline/60 italic">
                   Aucun collaborateur ne correspond à ces critères.
                 </td>
               </tr>
@@ -160,14 +175,15 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
          <ng-container *ngIf="!loading()">
             <div *ngFor="let user of users()" class="bg-white p-8 rounded-[2rem] border border-outline-variant/10 shadow-sm relative group overflow-hidden flex flex-col">
                <div class="flex items-start justify-between mb-6">
-                  <div class="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-on-surface text-xl font-black">
+                  <img *ngIf="user.avatar_url" [src]="user.avatar_url" class="w-16 h-16 rounded-2xl object-cover">
+                  <div *ngIf="!user.avatar_url" class="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-on-surface text-xl font-black">
                      {{ user.first_name.charAt(0) }}{{ user.last_name.charAt(0) }}
                   </div>
-                  <span 
-                    [class.bg-primary/10]="user.role === 'admin'" [class.text-primary]="user.role === 'admin'"
-                    [class.bg-secondary/10]="user.role === 'commercial'" [class.text-secondary]="user.role === 'commercial'"
+                  <span
+                    [class.bg-primary/10]="isAdminRole(user.role)" [class.text-primary]="isAdminRole(user.role)"
+                    [class.bg-secondary/10]="user.role === 'commercial' || user.role === 'marketing'" [class.text-secondary]="user.role === 'commercial' || user.role === 'marketing'"
                     class="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-                     {{ user.role }}
+                     {{ roleLabel(user.role) }}
                   </span>
                </div>
                
@@ -177,17 +193,18 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
                   {{ user.email }}
                </p>
 
-               <div class="grid grid-cols-2 gap-4 mb-8 pt-6 border-t border-outline-variant/10">
-                  <div>
-                     <p class="text-[9px] font-black uppercase text-outline tracking-widest">Clients</p>
-                     <p class="text-lg font-black text-on-surface">{{ user.clients_count || 0 }}</p>
-                  </div>
-                  <div>
-                     <p class="text-[9px] font-black uppercase text-outline tracking-widest">Prospects</p>
-                     <p class="text-lg font-black text-on-surface">{{ user.prospects_count || 0 }}</p>
+               <div *ngIf="statBlocks(user).length > 0" class="grid gap-4 mb-8 pt-6 border-t border-outline-variant/10" [style.grid-template-columns]="'repeat(' + statBlocks(user).length + ', minmax(0, 1fr))'">
+                  <div *ngFor="let stat of statBlocks(user)">
+                     <p class="text-[9px] font-black uppercase text-outline tracking-widest">{{ stat.label }}</p>
+                     <p class="text-lg font-black text-on-surface">{{ stat.value }}</p>
                   </div>
                </div>
+               <p *ngIf="statBlocks(user).length === 0" class="pt-6 mb-8 border-t border-outline-variant/10 text-xs text-outline/60 italic">Accès complet aux deux services.</p>
 
+               <a [routerLink]="['/equipe', user.id]" class="w-full py-3 mb-3 bg-surface-container-low border border-outline-variant/10 rounded-xl text-outline text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary transition-colors flex justify-center items-center gap-2">
+                  <span class="material-symbols-outlined text-[14px]">visibility</span>
+                  Détails
+               </a>
                <button *ngIf="showPerformanceLink(user)" type="button" (click)="goToPerformance(user.id)" class="w-full py-3 mb-3 bg-surface-container-low border border-outline-variant/10 rounded-xl text-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 transition-colors flex justify-center items-center gap-2">
                   <span class="material-symbols-outlined text-[14px]">monitoring</span>
                   Performances
@@ -268,13 +285,41 @@ export class TeamListComponent implements OnInit {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
-  /** Performances : admin voit tous les commerciaux ; un commercial ne voit que la sienne. */
+  /** Performances : les admins voient tous les commerciaux ; un commercial ne voit que la sienne. */
   showPerformanceLink(user: User): boolean {
     if (user.role !== 'commercial') return false;
     const me = this.authService.getCurrentUser();
     if (!me) return false;
-    if (me.role === 'admin') return true;
+    if (this.isAdminRole(me.role)) return true;
     return me.role === 'commercial' && me.id === user.id;
+  }
+
+  isAdminRole(role: string): boolean {
+    return (ANY_ADMIN_ROLES as string[]).includes(role);
+  }
+
+  /** Indicateur propre au service de chaque rôle — le marketing ne gère pas de prospects,
+   *  il crée des comptes fidélité ; la caisse ne gère que des scans. */
+  statBlocks(user: User): { label: string; value: number }[] {
+    switch (user.role) {
+      case 'commercial':
+      case 'admin_commercial':
+        return [
+          { label: 'Clients', value: user.clients_count || 0 },
+          { label: 'Prospects', value: user.prospects_count || 0 },
+        ];
+      case 'caissier':
+        return [{ label: 'Scans effectués', value: user.scans_count || 0 }];
+      case 'marketing':
+      case 'admin_marketing':
+        return [{ label: 'Lots fidélité traités', value: user.redemptions_handled_count || 0 }];
+      default:
+        return [];
+    }
+  }
+
+  roleLabel(role: string): string {
+    return ROLE_LABELS[role] || role;
   }
 
   ngOnInit(): void {

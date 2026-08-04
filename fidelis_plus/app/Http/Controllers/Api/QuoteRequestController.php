@@ -93,7 +93,7 @@ class QuoteRequestController extends Controller
 
         // Sécurité : Vérifier que les véhicules appartiennent à l'entreprise de l'utilisateur
         foreach ($vehicles as $vehicle) {
-            if ($vehicle->company_id !== $user->company_id && $user->role !== 'admin') {
+            if ($vehicle->company_id !== $user->company_id && !in_array($user->role, ['admin_commercial', 'super_admin'], true)) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Le véhicule avec l\'ID ' . $vehicle->id . ' ne vous appartient pas.'

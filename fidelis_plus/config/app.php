@@ -68,6 +68,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Deploy Webhook Token
+    |--------------------------------------------------------------------------
+    |
+    | Jeton partagé avec le secret GitHub Actions DEPLOY_TOKEN — vérifié par
+    | DeployController::hook() pour autoriser le déclenchement des commandes
+    | post-déploiement (migrate, cache) depuis le CI sur cet hébergement
+    | mutualisé (SSH restreint au SFTP, pas d'exécution de commande à distance).
+    |
+    */
+
+    'deploy_token' => env('DEPLOY_TOKEN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

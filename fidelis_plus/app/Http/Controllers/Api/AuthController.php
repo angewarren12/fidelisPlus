@@ -208,6 +208,31 @@ class AuthController extends Controller
     }
 
     /**
+     * Upload de la photo de profil de l'utilisateur connecté (self-service).
+     */
+    public function updateAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
+
+        $user = $request->user();
+
+        if ($user->avatar_path) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+        }
+
+        $user->avatar_path = $request->file('avatar')->store('avatars', 'public');
+        $user->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Photo de profil mise à jour.',
+            'data' => $user->fresh(),
+        ]);
+    }
+
+    /**
      * Mettre à jour le token FCM pour les notifications Push.
      */
     public function updateFcmToken(Request $request)

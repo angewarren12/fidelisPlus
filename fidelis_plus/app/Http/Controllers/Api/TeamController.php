@@ -29,10 +29,17 @@ class TeamController extends Controller
         // et disparaissaient alors de la liste.
         $query = User::whereIn('role', self::internalStaffRoles());
 
-        // Un commercial ne voit que les autres commerciaux dans cette liste (pas admins/marketing).
+        // Chacun ne voit que son propre périmètre : un commercial (ou l'admin commercial) ne
+        // voit que l'équipe commerciale, un admin marketing que l'équipe marketing/caisse.
+        // Le super_admin voit tout le monde (pas de filtre supplémentaire).
         $viewer = $request->user();
-        if ($viewer && $viewer->role === 'commercial') {
-            $query->where('role', 'commercial');
+        $scopedRoles = match ($viewer?->role) {
+            UserRoles::COMMERCIAL, UserRoles::ADMIN_COMMERCIAL => [UserRoles::COMMERCIAL, UserRoles::ADMIN_COMMERCIAL],
+            UserRoles::MARKETING, UserRoles::ADMIN_MARKETING => [UserRoles::MARKETING, UserRoles::ADMIN_MARKETING, UserRoles::CAISSIER],
+            default => null,
+        };
+        if ($scopedRoles !== null) {
+            $query->whereIn('role', $scopedRoles);
         }
 
         if ($request->filled('role')) {
@@ -50,11 +57,15 @@ class TeamController extends Controller
 
         $perPage = min(100, max(1, (int) $request->get('per_page', 12)));
 
-        $paginator = $query->withCount(['managedCompanies as clients_count' => function ($query) {
-            $query->where('type', 'client');
-        }, 'managedCompanies as prospects_count' => function ($query) {
-            $query->where('type', 'prospect');
-        }])
+        $paginator = $query->withCount([
+            // Service commercial : portefeuille clients/prospects.
+            'managedCompanies as clients_count' => fn ($q) => $q->where('type', 'client'),
+            'managedCompanies as prospects_count' => fn ($q) => $q->where('type', 'prospect'),
+            // Caissier : scans effectués en station.
+            'cashierScans as scans_count',
+            // Service marketing : lots fidélité traités (livrés ou annulés).
+            'handledRedemptions as redemptions_handled_count',
+        ])
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->paginate($perPage);
@@ -78,7 +89,9 @@ class TeamController extends Controller
     {
         $actor = $request->user();
         $allowedRoles = match ($actor?->role) {
-            UserRoles::ADMIN => [UserRoles::COMMERCIAL, UserRoles::ADMIN, UserRoles::MARKETING, UserRoles::CAISSIER],
+            UserRoles::SUPER_ADMIN => UserRoles::internalStaff(),
+            UserRoles::ADMIN_COMMERCIAL => [UserRoles::COMMERCIAL, UserRoles::ADMIN_COMMERCIAL],
+            UserRoles::ADMIN_MARKETING => [UserRoles::MARKETING, UserRoles::ADMIN_MARKETING, UserRoles::CAISSIER],
             UserRoles::COMMERCIAL => [UserRoles::COMMERCIAL],
             default => [],
         };
@@ -132,7 +145,12 @@ class TeamController extends Controller
     public function show(Request $request, $id)
     {
         $user = User::whereIn('role', self::internalStaffRoles())
-                    ->withCount('managedCompanies')
+                    ->withCount([
+                        'managedCompanies as clients_count' => fn ($q) => $q->where('type', 'client'),
+                        'managedCompanies as prospects_count' => fn ($q) => $q->where('type', 'prospect'),
+                        'cashierScans as scans_count',
+                        'handledRedemptions as redemptions_handled_count',
+                    ])
                     ->findOrFail($id);
 
         $current = $request->user();
@@ -141,9 +159,34 @@ class TeamController extends Controller
             abort(403, 'Vous ne pouvez consulter que votre propre fiche équipe.');
         }
 
+        $detail = [];
+
+        if (in_array($user->role, [UserRoles::CAISSIER], true)) {
+            $detail['cashier'] = [
+                'points_credited' => (int) $user->cashierScans()->sum('points_credited'),
+                'last_scan_at' => $user->cashierScans()->latest()->value('created_at'),
+                'top_station' => $user->cashierScans()
+                    ->join('stations', 'stations.id', '=', 'loyalty_pos_scan_events.station_id')
+                    ->selectRaw('stations.name as station_name, COUNT(*) as scans_count')
+                    ->groupBy('stations.id', 'stations.name')
+                    ->orderByDesc('scans_count')
+                    ->first(),
+            ];
+        }
+
+        if (in_array($user->role, [UserRoles::MARKETING, UserRoles::ADMIN_MARKETING], true)) {
+            $detail['marketing'] = [
+                'redemptions_delivered' => (int) $user->handledRedemptions()->where('status', 'delivered')->count(),
+                'redemptions_cancelled' => (int) $user->handledRedemptions()->where('status', 'cancelled')->count(),
+            ];
+        }
+
         return response()->json([
             'status' => 'success',
-            'data' => $user
+            'data' => [
+                ...$user->toArray(),
+                'detail' => $detail,
+            ]
         ]);
     }
 
@@ -161,7 +204,9 @@ class TeamController extends Controller
         }
 
         $allowedRoles = match ($current?->role) {
-            UserRoles::ADMIN => [UserRoles::COMMERCIAL, UserRoles::ADMIN, UserRoles::MARKETING, UserRoles::CAISSIER],
+            UserRoles::SUPER_ADMIN => UserRoles::internalStaff(),
+            UserRoles::ADMIN_COMMERCIAL => [UserRoles::COMMERCIAL, UserRoles::ADMIN_COMMERCIAL],
+            UserRoles::ADMIN_MARKETING => [UserRoles::MARKETING, UserRoles::ADMIN_MARKETING, UserRoles::CAISSIER],
             UserRoles::COMMERCIAL => [UserRoles::COMMERCIAL],
             UserRoles::CAISSIER => [UserRoles::CAISSIER],
             default => [],
@@ -180,7 +225,7 @@ class TeamController extends Controller
         ]);
 
         // Commercial / marketing / caissier ne peuvent pas s’auto-promouvoir admin.
-        if ($current && $current->role !== 'admin' && $request->role !== $user->role) {
+        if ($current && ! in_array($current->role, UserRoles::anyAdmin(), true) && $request->role !== $user->role) {
             abort(403, 'Changement de rôle réservé à un administrateur.');
         }
 
@@ -201,7 +246,7 @@ class TeamController extends Controller
         $user = User::whereIn('role', self::internalStaffRoles())->findOrFail($id);
 
         $current = $request->user();
-        if ($current && $current->role !== 'admin' && (int) $current->id !== (int) $id) {
+        if ($current && ! in_array($current->role, UserRoles::anyAdmin(), true) && (int) $current->id !== (int) $id) {
             abort(403, 'Suppression réservée à un administrateur ou à votre propre compte.');
         }
 
@@ -228,8 +273,8 @@ class TeamController extends Controller
      */
     public function reassignClients(Request $request, $id)
     {
-        if ($request->user()?->role !== UserRoles::ADMIN) {
-            abort(403, 'Réattribution réservée à un administrateur.');
+        if (! in_array($request->user()?->role, [UserRoles::ADMIN_COMMERCIAL, UserRoles::SUPER_ADMIN], true)) {
+            abort(403, 'Réattribution réservée à un administrateur commercial.');
         }
 
         $request->validate([

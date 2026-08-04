@@ -107,6 +107,20 @@ class LoyaltyAccount extends Model
         return $prefix.'-'.str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * Nom à afficher pour le titulaire (ex : imprimé sur la carte physique) selon la nature
+     * du compte — société, membre marketing (particulier/entreprise) ou utilisateur client.
+     */
+    public function holderDisplayName(): string
+    {
+        return match ($this->holder_type) {
+            'company' => $this->company?->name ?? 'Société',
+            'member' => $this->member?->displayName() ?? 'Client',
+            'user' => $this->user ? trim($this->user->first_name.' '.$this->user->last_name) : 'Particulier',
+            default => '—',
+        };
+    }
+
     public function scanEvents(): HasMany
     {
         return $this->hasMany(LoyaltyPosScanEvent::class);

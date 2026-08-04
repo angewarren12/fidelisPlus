@@ -533,7 +533,7 @@ class VehicleController extends Controller
         }
 
         if ($request->filled('company_name')) {
-            if (!in_array($user->role, ['admin', 'commercial'], true)) {
+            if (!in_array($user->role, ['admin_commercial', 'super_admin', 'commercial'], true)) {
                 return [null, response()->json(['status' => 'error', 'message' => 'Accès refusé pour la création d\'un client.'], 403)];
             }
 

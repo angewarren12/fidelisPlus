@@ -99,7 +99,7 @@ export class LoyaltyDashboardComponent implements OnInit {
   createMemberForm: CreateLoyaltyMemberPayload = this.emptyMemberForm();
 
   // Associer une carte physique vierge à un client fidélité
-  assignCardTarget = signal<{ memberId: number; label: string; cardNumber: string | null } | null>(null);
+  assignCardTarget = signal<{ memberId: number; memberType: string; label: string; cardNumber: string | null } | null>(null);
   assignCardPayload = '';
   assigningCard = signal(false);
   showAssignCardCamera = signal(false);
@@ -145,6 +145,7 @@ export class LoyaltyDashboardComponent implements OnInit {
   reportDateTo = '';
   stationReport = signal<StationScanReport | null>(null);
   chartOptions: any;
+  exportingReport = signal(false);
 
   redemptionFilter = 'pending';
   redemptionSearch = '';
@@ -347,6 +348,25 @@ export class LoyaltyDashboardComponent implements OnInit {
         this.reportLoading.set(false);
       },
       error: () => this.reportLoading.set(false),
+    });
+  }
+
+  exportStationReport(): void {
+    this.exportingReport.set(true);
+    this.loyaltyService.exportStationScansCsv({ from: this.reportDateFrom, to: this.reportDateTo }).subscribe({
+      next: (blob) => {
+        this.exportingReport.set(false);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `export_fidelite_${this.reportDateFrom}_${this.reportDateTo}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.exportingReport.set(false);
+        this.toastService.error("Impossible d'exporter le rapport.");
+      },
     });
   }
 
@@ -735,11 +755,11 @@ export class LoyaltyDashboardComponent implements OnInit {
   }
 
   isAdmin(): boolean {
-    return this.auth.hasRole(UserRoles.ADMIN);
+    return this.auth.hasRole(UserRoles.ADMIN_MARKETING, UserRoles.SUPER_ADMIN);
   }
 
   canManageLoyalty(): boolean {
-    return this.auth.hasRole(UserRoles.ADMIN, UserRoles.MARKETING);
+    return this.auth.hasRole(UserRoles.ADMIN_MARKETING, UserRoles.SUPER_ADMIN, UserRoles.MARKETING);
   }
 
   canEmitLoyaltyCard(): boolean {
@@ -747,7 +767,7 @@ export class LoyaltyDashboardComponent implements OnInit {
   }
 
   showCrmLinks(): boolean {
-    return this.auth.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL);
+    return this.auth.hasRole(UserRoles.ADMIN_COMMERCIAL, UserRoles.SUPER_ADMIN, UserRoles.COMMERCIAL);
   }
 
   private todayInputDate(): string {
@@ -858,14 +878,14 @@ export class LoyaltyDashboardComponent implements OnInit {
 
   openAssignCardModal(a: LoyaltyAccountRow): void {
     if (!a.member) return;
-    this.assignCardTarget.set({ memberId: a.member.id, label: this.holderLabel(a), cardNumber: a.card_number });
+    this.assignCardTarget.set({ memberId: a.member.id, memberType: a.member.type, label: this.holderLabel(a), cardNumber: a.card_number });
     this.assignCardPayload = '';
     this.showAssignCardCamera.set(false);
     this.showPickPrintedCard.set(false);
   }
 
   openAssignCardModalForMember(m: LoyaltyMemberRow): void {
-    this.assignCardTarget.set({ memberId: m.id, label: this.memberDisplayName(m), cardNumber: null });
+    this.assignCardTarget.set({ memberId: m.id, memberType: m.type, label: this.memberDisplayName(m), cardNumber: null });
     this.assignCardPayload = '';
     this.showAssignCardCamera.set(false);
     this.showPickPrintedCard.set(false);
@@ -917,7 +937,8 @@ export class LoyaltyDashboardComponent implements OnInit {
 
   loadPrintedCards(): void {
     this.loadingPrintedCards.set(true);
-    this.loyaltyService.listAccounts(1, 50, { holder_type: 'unassigned', batch_status: 'printed' }).subscribe({
+    const memberType = this.assignCardTarget()?.memberType;
+    this.loyaltyService.listAccounts(1, 50, { holder_type: 'unassigned', batch_status: 'printed', blank_card_type: memberType }).subscribe({
       next: (res) => {
         this.printedCards.set(res.items);
         this.loadingPrintedCards.set(false);

@@ -72,6 +72,20 @@ export interface StationScanReport {
   by_day: { day: string; scans_count: number; points_credited: number }[];
 }
 
+export interface MarketingDashboardStats {
+  accounts: { total: number; particulier: number; entreprise: number };
+  points_in_circulation: number;
+  week: {
+    scans_count: number;
+    points_credited: number;
+    by_day: { day: string; scans_count: number }[];
+  };
+  top_stations: { station_name: string; scans_count: number }[];
+  pending: { member_requests: number; redemptions: number; sira_failed: number };
+  card_stock: { blank_available: number; batches_to_print: number };
+  active_rewards: number;
+}
+
 export interface LoyaltyClientUserOption {
   id: number;
   first_name: string;
@@ -121,6 +135,9 @@ export interface LoyaltyMemberRow {
 export interface LoyaltyCardTemplateLayout {
   qr_x: number; qr_y: number; qr_size: number;
   card_number_x: number; card_number_y: number; card_number_color: string; card_number_size: number;
+  /** Nom du titulaire imprimé sur la carte — facultatif, désactivé par défaut. */
+  holder_name_enabled?: boolean;
+  holder_name_x?: number; holder_name_y?: number; holder_name_color?: string; holder_name_size?: number;
 }
 
 export interface LoyaltyCardTemplateRow {
@@ -165,11 +182,12 @@ export class LoyaltyService {
   private http = inject(HttpClient);
   private readonly base = `${environment.apiUrl}/api/v1/loyalty`;
 
-  listAccounts(page = 1, perPage = 20, filters: { holder_type?: string; search?: string; batch_status?: string } = {}): Observable<{ items: LoyaltyAccountRow[]; meta: PaginatedMeta }> {
+  listAccounts(page = 1, perPage = 20, filters: { holder_type?: string; search?: string; batch_status?: string; blank_card_type?: string } = {}): Observable<{ items: LoyaltyAccountRow[]; meta: PaginatedMeta }> {
     let params = new HttpParams().set('page', String(page)).set('per_page', String(perPage));
     if (filters.holder_type) params = params.set('holder_type', filters.holder_type);
     if (filters.search) params = params.set('search', filters.search);
     if (filters.batch_status) params = params.set('batch_status', filters.batch_status);
+    if (filters.blank_card_type) params = params.set('blank_card_type', filters.blank_card_type);
     return this.http.get<any>(`${this.base}/accounts`, { params }).pipe(
       map((res) => ({
         items: res.data ?? [],
@@ -246,6 +264,11 @@ export class LoyaltyService {
     );
   }
 
+  downloadCardPdf(accountId: number, templateId: number): Observable<Blob> {
+    const params = new HttpParams().set('template_id', String(templateId));
+    return this.http.get(`${this.base}/accounts/${accountId}/card-pdf`, { params, responseType: 'blob' });
+  }
+
   adjustPoints(accountId: number, delta_points: number, reason: string): Observable<{ new_balance: number }> {
     return this.http
       .post<any>(`${this.base}/accounts/${accountId}/adjust`, { delta_points, reason })
@@ -268,6 +291,24 @@ export class LoyaltyService {
       hp = hp.set('station_id', String(params.station_id));
     }
     return this.http.get<any>(`${this.base}/reports/station-scans`, { params: hp }).pipe(map((res) => res.data));
+  }
+
+  exportStationScansCsv(params: {
+    date?: string;
+    from?: string;
+    to?: string;
+    station_id?: number | null;
+  }): Observable<Blob> {
+    let hp = new HttpParams();
+    if (params.date) {
+      hp = hp.set('date', params.date);
+    } else if (params.from && params.to) {
+      hp = hp.set('from', params.from).set('to', params.to);
+    }
+    if (params.station_id != null && params.station_id > 0) {
+      hp = hp.set('station_id', String(params.station_id));
+    }
+    return this.http.get(`${this.base}/reports/station-scans/export`, { params: hp, responseType: 'blob' });
   }
 
   searchClientUsers(search: string, limit = 40): Observable<LoyaltyClientUserOption[]> {
@@ -296,6 +337,10 @@ export class LoyaltyService {
 
   referralStats(): Observable<{ total_referrals: number; top_referrers: { id: number; name: string; referrals_count: number }[] }> {
     return this.http.get<any>(`${this.base}/stats/referrals`).pipe(map((res) => res.data));
+  }
+
+  dashboardStats(): Observable<MarketingDashboardStats> {
+    return this.http.get<any>(`${this.base}/stats/dashboard`).pipe(map((res) => res.data));
   }
 
   listRedemptions(status?: string, page = 1, perPage = 20): Observable<{ items: LoyaltyRedemptionRow[]; meta: PaginatedMeta }> {

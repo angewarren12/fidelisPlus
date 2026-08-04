@@ -106,7 +106,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   get showSettings(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN);
+    return this.authService.hasRole(UserRoles.ADMIN_COMMERCIAL, UserRoles.SUPER_ADMIN);
   }
 
   goToSettings(): void {

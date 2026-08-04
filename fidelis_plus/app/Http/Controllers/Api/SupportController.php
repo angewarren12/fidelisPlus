@@ -21,7 +21,7 @@ class SupportController extends Controller
     {
         $user = $request->user();
 
-        if (in_array($user->role, ['admin', 'commercial'], true)) {
+        if (in_array($user->role, ['admin_commercial', 'super_admin', 'commercial'], true)) {
             $query = SupportRequest::query()
                 ->with(['user:id,first_name,last_name,email,company_id']);
 

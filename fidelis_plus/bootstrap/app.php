@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
             'sira.token' => \App\Http\Middleware\VerifySiraToken::class,
         ]);
+        // Le webhook de déploiement CI est appelé par GitHub Actions (pas de session
+        // navigateur), protégé par jeton (X-Deploy-Token) au lieu du CSRF classique.
+        $middleware->validateCsrfTokens(except: [
+            'internal/deploy-hook',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

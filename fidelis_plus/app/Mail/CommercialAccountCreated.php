@@ -46,6 +46,9 @@ class CommercialAccountCreated extends Mailable
             'commercial' => 'Commercial / Vendeur',
             'marketing' => 'Marketing',
             'caissier' => 'Caissière station',
+            'admin_commercial' => 'Administrateur — Service commercial',
+            'admin_marketing' => 'Administrateur — Service marketing',
+            'super_admin' => 'Super administrateur',
         ];
         $roleLabel = $roleLabels[$this->user->role] ?? ucfirst($this->user->role);
         $loginUrl = config('app.frontend_url', config('app.url'));

@@ -19,6 +19,7 @@ class User extends Authenticatable
     /**
      * @var list<string>
      */
+
     protected $hidden = [
         'password',
         'remember_token',
@@ -33,12 +34,20 @@ class User extends Authenticatable
         'last_name',
         'email',
         'phone',
+        'avatar_path',
         'fcm_token',
         'notification_preferences',
         'password',
         'is_main_contact',
         'must_change_password',
     ];
+
+    protected $appends = ['avatar_url'];
+
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatar_path ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path) : null;
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -68,5 +77,17 @@ class User extends Authenticatable
     public function loyaltyAccounts(): HasMany
     {
         return $this->hasMany(LoyaltyAccount::class);
+    }
+
+    /** Scans effectués par ce caissier (loyalty_pos_scan_events.cashier_user_id). */
+    public function cashierScans(): HasMany
+    {
+        return $this->hasMany(LoyaltyPosScanEvent::class, 'cashier_user_id');
+    }
+
+    /** Demandes de lots traitées (livrées/annulées) par ce membre marketing. */
+    public function handledRedemptions(): HasMany
+    {
+        return $this->hasMany(LoyaltyRedemption::class, 'handled_by');
     }
 }

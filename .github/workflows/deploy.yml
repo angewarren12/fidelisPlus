@@ -1,0 +1,133 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, dom, curl, zip, gd, bcmath, exif, pcntl, xml, ctype, fileinfo, tokenizer, openssl, pdo, pdo_mysql
+          coverage: none
+
+      - name: Install PHP dependencies
+        working-directory: fidelis_plus
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: fidelis_plus_backoffice/package-lock.json
+
+      - name: Install Node dependencies
+        working-directory: fidelis_plus_backoffice
+        run: npm ci
+
+      - name: Build Angular (production)
+        working-directory: fidelis_plus_backoffice
+        run: npm run build -- --configuration production
+
+      # Empaquetage en 3 dossiers distincts, chacun uploadé vers un chemin différent
+      # sur le serveur (voir CI-CD-SETUP-GUIDE.md) :
+      #   app/ -> htdocs/fidelis_plus_app                    (code Laravel, dossier orphelin sans sous-domaine)
+      #   api/ -> htdocs/fidelisplus.cieria-app.com/api      (point d'entrée public Laravel)
+      #   web/ -> htdocs/fidelisplus.cieria-app.com          (build Angular)
+      - name: Package release
+        run: |
+          mkdir -p /tmp/release/app /tmp/release/api /tmp/release/web
+
+          rsync -a --exclude='public' \
+            --exclude='.git' --exclude='node_modules' \
+            --exclude='storage/logs' --exclude='storage/framework/cache' \
+            --exclude='storage/framework/sessions' --exclude='storage/framework/views' \
+            fidelis_plus/ /tmp/release/app/
+          mkdir -p /tmp/release/app/storage/framework/cache/data \
+                   /tmp/release/app/storage/framework/sessions \
+                   /tmp/release/app/storage/framework/views \
+                   /tmp/release/app/storage/logs
+
+          cp -r fidelis_plus/public/. /tmp/release/api/
+          cp fidelis_plus/index.deploy.php /tmp/release/api/index.php
+
+          cp -r fidelis_plus_backoffice/dist/fidelis_plus_backoffice/browser/. /tmp/release/web/
+
+          cd /tmp/release && tar -czf /tmp/release.tar.gz app api web
+          mv /tmp/release.tar.gz "$GITHUB_WORKSPACE/release.tar.gz"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release.tar.gz
+          retention-days: 3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    # Validation manuelle : le job "build" tourne à chaque push (vérifie que ça
+    # compile), mais "deploy" ne se lance qu'en cliquant "Run workflow" à la main
+    # dans l'onglet Actions (jamais automatiquement sur un simple push).
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+
+      - name: Extract release locally
+        run: mkdir release && tar -xzf release.tar.gz -C release
+
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      # 3 transferts SFTP purs (aucune commande à distance possible sur cet
+      # hébergement — voir section 2.4 du guide). Pas de --delete : ne supprime
+      # jamais un fichier absent de l'archive (protège .env, storage/, uploads).
+      - name: Upload Laravel app (code, hors dossier web)
+        run: |
+          lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
+            set sftp:auto-confirm yes
+            set net:max-retries 2
+            mirror -R --parallel=4 --verbose release/app ${{ secrets.DEPLOY_PATH_APP }}
+            quit
+          "
+
+      - name: Upload Laravel API entrypoint (public)
+        run: |
+          lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
+            set sftp:auto-confirm yes
+            set net:max-retries 2
+            mirror -R --parallel=4 --verbose release/api ${{ secrets.DEPLOY_PATH_API }}
+            quit
+          "
+
+      - name: Upload Angular build
+        run: |
+          lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
+            set sftp:auto-confirm yes
+            set net:max-retries 2
+            mirror -R --parallel=4 --verbose release/web ${{ secrets.DEPLOY_PATH_WEB }}
+            quit
+          "
+
+      - name: Run post-deploy commands via webhook
+        run: |
+          http_code=$(curl -s -o response.json -w "%{http_code}" -X POST "${{ secrets.DEPLOY_HOOK_URL }}" \
+            -H "X-Deploy-Token: ${{ secrets.DEPLOY_TOKEN }}")
+          echo "HTTP status: $http_code"
+          cat response.json
+          echo
+          if [ "$http_code" -ge 400 ]; then
+            exit 1
+          fi

@@ -370,7 +370,7 @@ export class ProspectListComponent implements OnInit {
   convertSubmitting = signal(false);
 
   isAdmin(): boolean {
-    return this.authService.hasRole('admin');
+    return this.authService.hasRole('admin_commercial', 'super_admin');
   }
 
   ngOnInit(): void {

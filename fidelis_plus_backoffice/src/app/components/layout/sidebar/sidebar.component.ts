@@ -3,8 +3,9 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { LayoutService } from '../../../services/layout.service';
+import { ToastService } from '../../../services/toast.service';
 import { User } from '../../../models/auth.model';
-import { UserRoles } from '../../../models/user-roles';
+import { ROLE_LABELS, UserRoles } from '../../../models/user-roles';
 
 @Component({
   selector: 'app-sidebar',
@@ -93,6 +94,10 @@ import { UserRoles } from '../../../models/user-roles';
 
         <!-- FIDÉLITÉ -->
         <p *ngIf="showLoyaltyReadNav" class="px-6 pt-5 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Fidélité</p>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/dashboard" [routerLinkActiveOptions]="{exact: true}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">dashboard</span>
+          Tableau de bord
+        </a>
         <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}" [class]="navLink" [routerLinkActive]="navLinkActive">
           <span class="material-symbols-outlined text-[20px]">card_giftcard</span>
           Comptes Fidélité
@@ -129,14 +134,14 @@ import { UserRoles } from '../../../models/user-roles';
           <span class="material-symbols-outlined text-[20px]">ev_station</span>
           Stations
         </a>
-        <a *ngIf="showAdminNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'settings'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+        <a *ngIf="showMarketingSettingsNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'settings'}" [class]="navLink" [routerLinkActive]="navLinkActive">
           <span class="material-symbols-outlined text-[20px]">tune</span>
           Réglages Fidélité
         </a>
 
         <!-- ADMINISTRATION -->
-        <p *ngIf="showAdminNav" class="px-6 pt-5 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Administration</p>
-        <a *ngIf="showAdminNav" routerLink="/admin/settings" [class]="navLink" [routerLinkActive]="navLinkActive">
+        <p *ngIf="showCommercialAdminNav" class="px-6 pt-5 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Administration</p>
+        <a *ngIf="showCommercialAdminNav" routerLink="/admin/settings" [class]="navLink" [routerLinkActive]="navLinkActive">
           <span class="material-symbols-outlined text-[20px]">settings</span>
           Paramètres
         </a>
@@ -144,9 +149,16 @@ import { UserRoles } from '../../../models/user-roles';
 
       <div class="px-4 mt-auto pt-4">
         <div class="flex items-center gap-3 px-3 py-3 rounded-2xl bg-white/[0.04] border border-white/5">
-          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-[#15b9a3] to-[#006b5d] flex items-center justify-center text-white font-bold text-xs shrink-0">
-            {{ userInitials }}
-          </div>
+          <label class="relative w-10 h-10 rounded-full shrink-0 cursor-pointer group/avatar" title="Changer la photo de profil">
+            <img *ngIf="currentUser?.avatar_url" [src]="currentUser?.avatar_url" class="w-10 h-10 rounded-full object-cover">
+            <div *ngIf="!currentUser?.avatar_url" class="w-10 h-10 rounded-full bg-gradient-to-br from-[#15b9a3] to-[#006b5d] flex items-center justify-center text-white font-bold text-xs">
+              {{ userInitials }}
+            </div>
+            <div class="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity">
+              <span class="material-symbols-outlined text-white text-sm">photo_camera</span>
+            </div>
+            <input type="file" accept="image/*" class="hidden" (change)="onAvatarSelected($event)">
+          </label>
           <div class="overflow-hidden">
             <p class="text-white text-sm font-semibold truncate">{{ userName }}</p>
             <p class="text-slate-400 text-[11px] truncate capitalize">{{ userRole }}</p>
@@ -166,9 +178,23 @@ export class SidebarComponent {
   readonly navLink = 'group flex items-center gap-3 mx-3 my-0.5 px-4 py-2.5 rounded-2xl text-slate-300 border-l-[3px] border-transparent hover:text-white hover:bg-white/5 transition-all duration-200 font-headline text-sm tracking-wide';
   readonly navLinkActive = 'bg-gradient-to-r from-[#15b9a3]/25 to-[#15b9a3]/0 text-white border-[#15b9a3] shadow-sm';
 
+  private toastService = inject(ToastService);
+
   constructor(private authService: AuthService) {
     this.authService.currentUser$.subscribe(user => {
       this.currentUser = user;
+    });
+  }
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    this.authService.uploadAvatar(file).subscribe({
+      next: () => this.toastService.success('Photo de profil mise à jour.'),
+      error: () => this.toastService.error("Erreur lors de l'envoi de la photo."),
     });
   }
 
@@ -180,7 +206,7 @@ export class SidebarComponent {
   }
 
   get showCrmNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL);
+    return this.authService.hasRole(UserRoles.ADMIN_COMMERCIAL, UserRoles.SUPER_ADMIN, UserRoles.COMMERCIAL);
   }
 
   get showClientNav(): boolean {
@@ -188,25 +214,31 @@ export class SidebarComponent {
   }
 
   get showClientsNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL);
+    return this.authService.hasRole(UserRoles.ADMIN_COMMERCIAL, UserRoles.SUPER_ADMIN, UserRoles.COMMERCIAL);
   }
 
   get showStaffNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.COMMERCIAL);
+    return this.authService.hasRole(UserRoles.ADMIN_COMMERCIAL, UserRoles.ADMIN_MARKETING, UserRoles.SUPER_ADMIN, UserRoles.COMMERCIAL);
   }
 
-  /** Accès complet fidélité : admin + marketing (bootstrap, gestion récompenses) */
+  /** Accès complet fidélité : admin marketing + marketing (bootstrap, gestion récompenses) */
   get showLoyaltyNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.MARKETING);
+    return this.authService.hasRole(UserRoles.ADMIN_MARKETING, UserRoles.SUPER_ADMIN, UserRoles.MARKETING);
   }
 
-  /** Fidélité (comptes, catalogue, analytics) : réservé au service marketing + admin. */
+  /** Fidélité (comptes, catalogue, analytics) : réservé au service marketing. */
   get showLoyaltyReadNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN, UserRoles.MARKETING);
+    return this.authService.hasRole(UserRoles.ADMIN_MARKETING, UserRoles.SUPER_ADMIN, UserRoles.MARKETING);
   }
 
-  get showAdminNav(): boolean {
-    return this.authService.hasRole(UserRoles.ADMIN);
+  /** Réglages fidélité : admin marketing uniquement. */
+  get showMarketingSettingsNav(): boolean {
+    return this.authService.hasRole(UserRoles.ADMIN_MARKETING, UserRoles.SUPER_ADMIN);
+  }
+
+  /** Paramètres généraux (mentions légales devis, tarifs) : admin commercial uniquement. */
+  get showCommercialAdminNav(): boolean {
+    return this.authService.hasRole(UserRoles.ADMIN_COMMERCIAL, UserRoles.SUPER_ADMIN);
   }
 
   get userName(): string {
@@ -215,7 +247,9 @@ export class SidebarComponent {
   }
 
   get userRole(): string {
-    return this.currentUser?.role || 'Utilisateur';
+    const role = this.currentUser?.role;
+    if (!role) return 'Utilisateur';
+    return ROLE_LABELS[role] || role;
   }
 
   get userInitials(): string {

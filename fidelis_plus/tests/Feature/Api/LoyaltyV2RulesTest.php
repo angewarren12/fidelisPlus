@@ -14,38 +14,35 @@ class LoyaltyV2RulesTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_points_calculation_based_on_company_type(): void
+    public function test_points_calculation_based_on_segment(): void
     {
         $rules = new LoyaltyRulesService();
 
-        // 1. TPE
-        $tpe = Company::factory()->create(['company_type' => 'TPE']);
-        $accTpe = LoyaltyAccount::factory()->create([
-            'holder_type' => 'company',
-            'company_id' => $tpe->id
-        ]);
-        
-        $this->assertEquals(1, $rules->getPointsPerScan($accTpe));
+        LoyaltySetting::updateOrCreate(['key' => 'points_particulier'], ['value' => '5', 'type' => 'number']);
+        LoyaltySetting::updateOrCreate(['key' => 'points_entreprise'], ['value' => '10', 'type' => 'number']);
 
-        // 2. Grande Flotte
-        $gf = Company::factory()->create(['company_type' => 'Grande Flotte']);
-        $accGf = LoyaltyAccount::factory()->create([
+        // Le programme ne gère que deux segments : particulier et entreprise.
+        $entreprise = Company::factory()->create();
+        $accEntreprise = LoyaltyAccount::factory()->create([
             'holder_type' => 'company',
-            'company_id' => $gf->id
+            'company_id' => $entreprise->id,
         ]);
-        $this->assertEquals(1, $rules->getPointsPerScan($accGf));
+        $this->assertEquals(10, $rules->getPointsPerScan($accEntreprise));
 
-        // 3. Particulier
         $accUser = LoyaltyAccount::factory()->create([
             'holder_type' => 'user',
-            'user_id' => User::factory()->create()->id
+            'user_id' => User::factory()->create()->id,
         ]);
-        $this->assertEquals(1, $rules->getPointsPerScan($accUser));
+        $this->assertEquals(5, $rules->getPointsPerScan($accUser));
+
+        // Le réglage doit réellement piloter le calcul, pas juste être affiché.
+        LoyaltySetting::where('key', 'points_particulier')->update(['value' => '7']);
+        $this->assertEquals(7, $rules->getPointsPerScan($accUser->fresh()));
     }
 
     public function test_admin_can_update_settings(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'super_admin']);
         $setting = LoyaltySetting::where('key', 'referral_bonus')->first();
         if (!$setting) {
              $setting = LoyaltySetting::create(['key' => 'referral_bonus', 'value' => '500', 'type' => 'number']);
@@ -62,7 +59,7 @@ class LoyaltyV2RulesTest extends TestCase
 
     public function test_activity_feed_returns_recent_scans(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'super_admin']);
         
         // Create a scan
         $acc = LoyaltyAccount::factory()->create();

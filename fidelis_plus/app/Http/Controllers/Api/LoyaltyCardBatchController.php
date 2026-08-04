@@ -6,16 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\LoyaltyAccount;
 use App\Models\LoyaltyCardBatch;
 use App\Models\LoyaltyCardTemplate;
+use App\Services\Loyalty\LoyaltyCardPdfService;
 use App\Services\Loyalty\LoyaltyRulesService;
 use App\Services\Loyalty\SignedLoyaltyQrService;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Endroid\QrCode\QrCode;
-use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -127,39 +124,9 @@ class LoyaltyCardBatchController extends Controller
         LoyaltyRulesService $rulesService,
     ): Response {
         $template = $batch->template ?? LoyaltyCardTemplate::query()->findOrFail($batch->loyalty_card_template_id);
-
-        $backgroundDataUri = null;
-        if ($template->background_path && Storage::disk('public')->exists($template->background_path)) {
-            $mime = Storage::disk('public')->mimeType($template->background_path) ?: 'image/png';
-            $backgroundDataUri = 'data:'.$mime.';base64,'.base64_encode(Storage::disk('public')->get($template->background_path));
-        }
-
         $accounts = $batch->accounts()->orderBy('card_number')->get();
 
-        $writer = new PngWriter();
-
-        $items = $accounts->map(function (LoyaltyAccount $account) use ($qrService, $rulesService, $writer) {
-            $qrPayload = $qrService->encode([
-                'account_uuid' => $account->public_uuid,
-                'jti' => bin2hex(random_bytes(8)),
-                'exp' => 0,
-                'points_per_scan' => $rulesService->getPointsPerScan($account),
-            ]);
-
-            $qrImage = $writer->write(new QrCode($qrPayload, size: 300, margin: 0));
-
-            return [
-                'card_number' => $account->card_number,
-                'qr_data_uri' => $qrImage->getDataUri(),
-            ];
-        })->all();
-
-        $pdf = Pdf::loadView('loyalty.card-batch-pdf', [
-            'backgroundDataUri' => $backgroundDataUri,
-            'layout' => $template->layout_json,
-            'items' => $items,
-        ])->setPaper([0, 0, 242.65, 153.07]); // ~85.6x54mm en points
-
-        return $pdf->download('cartes-fidelite-lot-'.$batch->id.'.pdf');
+        return (new LoyaltyCardPdfService($qrService, $rulesService))
+            ->forAccounts($accounts, $template, 'cartes-fidelite-lot-'.$batch->id.'.pdf');
     }
 }

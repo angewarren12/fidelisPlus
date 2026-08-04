@@ -519,7 +519,7 @@ export class CommercialPerformanceComponent implements OnInit {
   }
 
   isAdmin(): boolean {
-    return this.authService.getCurrentUser()?.role === 'admin';
+    return ['admin_commercial', 'super_admin'].includes(this.authService.getCurrentUser()?.role ?? '');
   }
 
   reloadProgress(): void {

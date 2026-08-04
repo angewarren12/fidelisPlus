@@ -13,6 +13,10 @@ export interface AppSettings {
   'notification.email.quote_sent'?: string;
   'pricing.visite_technique'?: Record<string, { visite: number; revisite: number; volontaire: number | null }>;
   'pricing.vignette'?: Record<string, Record<string, number>>;
+  'pricing.visite_technique_categories'?: { key: string; label: string }[];
+  'pricing.vignette_categories'?: { key: string; label: string }[];
+  'pricing.additional_services'?: { key: string; label: string; price: number }[];
+  'pricing.vignette_exemptions'?: { key: string; label: string; price: number }[];
   [key: string]: any;
 }
 

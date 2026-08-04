@@ -56,7 +56,7 @@ class ProspectController extends Controller
         $query = Company::where('type', 'prospect');
         $this->scopeForUser($query);
 
-        if ($request->user()->role === 'admin' && $request->filled('commercial_id')) {
+        if (in_array($request->user()->role, ['admin_commercial', 'super_admin'], true) && $request->filled('commercial_id')) {
             $query->where('commercial_id', $request->commercial_id);
         }
 
@@ -96,7 +96,7 @@ class ProspectController extends Controller
         // Calcul dynamique du délai moyen de closing (jours entre création et conversion)
         $closingQuery = Company::where('type', 'client')->whereNotNull('converted_at');
         $this->scopeForUser($closingQuery);
-        if ($request->user()->role === 'admin' && $request->filled('commercial_id')) {
+        if (in_array($request->user()->role, ['admin_commercial', 'super_admin'], true) && $request->filled('commercial_id')) {
             $closingQuery->where('commercial_id', $request->commercial_id);
         }
         $avgDays = $closingQuery->select(DB::raw('AVG(DATEDIFF(converted_at, created_at)) as avg_days'))->first()->avg_days;
@@ -104,7 +104,7 @@ class ProspectController extends Controller
 
         // Calcul dynamique de l'objectif trimestriel (Quarterly Target)
         $commercialId = $request->user()->id;
-        if ($request->user()->role === 'admin') {
+        if (in_array($request->user()->role, ['admin_commercial', 'super_admin'], true)) {
             $commercialId = $request->filled('commercial_id') ? (int) $request->commercial_id : null;
         }
 
@@ -205,13 +205,13 @@ class ProspectController extends Controller
                 $commercialId = $validated['commercial_id'] ?? null;
                 if ($requestUser && $requestUser->role === 'commercial') {
                     $commercialId = $requestUser->id;
-                } elseif ($requestUser && $requestUser->role === 'admin' && !$commercialId) {
+                } elseif ($requestUser && in_array($requestUser->role, ['admin_commercial', 'super_admin'], true) && !$commercialId) {
                     $commercialId = $requestUser->id;
                 }
 
                 if ($commercialId) {
                     $assignee = \App\Models\User::find($commercialId);
-                    if (!$assignee || !in_array($assignee->role, ['admin', 'commercial'], true)) {
+                    if (!$assignee || !in_array($assignee->role, ['admin_commercial', 'super_admin', 'commercial'], true)) {
                         abort(422, "commercial_id invalide: l'utilisateur assigné doit être admin ou commercial.");
                     }
                 }

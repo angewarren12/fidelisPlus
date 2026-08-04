@@ -27,6 +27,7 @@ export interface User {
   company?: Company;
   loyalty_accounts?: any[];
   must_change_password?: boolean;
+  avatar_url?: string | null;
 }
 
 export interface MeResponse {

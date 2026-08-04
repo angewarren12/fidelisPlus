@@ -17,10 +17,24 @@ export interface User {
   email: string;
   phone?: string;
   role: string;
+  avatar_url?: string | null;
   clients_count?: number;
   prospects_count?: number;
+  scans_count?: number;
+  redemptions_handled_count?: number;
   is_main_contact: boolean;
   created_at?: string;
+  detail?: {
+    cashier?: {
+      points_credited: number;
+      last_scan_at: string | null;
+      top_station: { station_name: string; scans_count: number } | null;
+    };
+    marketing?: {
+      redemptions_delivered: number;
+      redemptions_cancelled: number;
+    };
+  };
 }
 
 @Injectable({

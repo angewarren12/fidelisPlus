@@ -66,36 +66,39 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         Route::patch('/me', [AuthController::class, 'updateProfile'])
             ->middleware('throttle:20,1')
             ->name('me.update');
+        Route::post('/me/avatar', [AuthController::class, 'updateAvatar'])
+            ->middleware('throttle:20,1')
+            ->name('me.avatar');
         Route::patch('/auth/change-password', [AuthController::class, 'changePassword'])
             ->middleware('throttle:10,1')
             ->name('auth.change-password');
 
         Route::apiResource('team', \App\Http\Controllers\Api\TeamController::class)
-            ->middleware('role:admin,commercial');
+            ->middleware('role:admin_commercial,admin_marketing,super_admin,commercial');
         Route::post('team/{id}/reassign', [\App\Http\Controllers\Api\TeamController::class, 'reassignClients'])
-            ->middleware('role:admin')
+            ->middleware('role:admin_commercial,super_admin')
             ->name('team.reassign');
 
         Route::apiResource('stations', StationController::class)->only(['index', 'show']);
-        Route::apiResource('stations', StationController::class)->except(['index', 'show'])->middleware('role:admin');
-        
+        Route::apiResource('stations', StationController::class)->except(['index', 'show'])->middleware('role:admin_commercial,admin_marketing,super_admin');
+
         Route::get('/settings', [\App\Http\Controllers\Api\SettingController::class, 'index'])->name('settings.index');
-        Route::put('/settings', [\App\Http\Controllers\Api\SettingController::class, 'update'])->middleware('role:admin')->name('settings.update');
+        Route::put('/settings', [\App\Http\Controllers\Api\SettingController::class, 'update'])->middleware('role:admin_commercial,super_admin')->name('settings.update');
 
         Route::prefix('tariffs')->name('tariffs.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\PricingController::class, 'index'])->name('index');
             Route::get('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'show'])->name('show');
-            Route::post('/', [\App\Http\Controllers\Api\PricingController::class, 'store'])->middleware('role:admin')->name('store');
-            Route::put('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'update'])->middleware('role:admin')->name('update');
-            Route::delete('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'destroy'])->middleware('role:admin')->name('destroy');
+            Route::post('/', [\App\Http\Controllers\Api\PricingController::class, 'store'])->middleware('role:admin_commercial,super_admin')->name('store');
+            Route::put('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'update'])->middleware('role:admin_commercial,super_admin')->name('update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\PricingController::class, 'destroy'])->middleware('role:admin_commercial,super_admin')->name('destroy');
         });
 
         Route::post('admin/notifications/broadcast', [AdminNotificationController::class, 'broadcast'])
-            ->middleware('role:admin')
+            ->middleware('role:admin_commercial,admin_marketing,super_admin')
             ->name('admin.notifications.broadcast');
 
-        // --- App mobile caisse : scan carte fidélité (caissier + admin) ---
-        Route::prefix('loyalty/pos')->middleware('role:caissier,admin')->name('loyalty.pos.')->group(function () {
+        // --- App mobile caisse : scan carte fidélité (caissier + admin marketing) ---
+        Route::prefix('loyalty/pos')->middleware('role:caissier,admin_marketing,super_admin')->name('loyalty.pos.')->group(function () {
             Route::get('/', [LoyaltyPosScanController::class, 'index'])->name('index');
             Route::post('/scan', [LoyaltyPosScanController::class, 'store'])
                 ->middleware('throttle:180,1')
@@ -109,14 +112,14 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         });
 
         // --- App mobile caisse : inscription d'un client particulier au guichet et
-        // association de sa carte physique (caissier + admin + marketing) ---
-        Route::prefix('loyalty')->middleware('role:caissier,admin,marketing')->name('loyalty.pos-register.')->group(function () {
+        // association de sa carte physique (caissier + admin marketing + marketing) ---
+        Route::prefix('loyalty')->middleware('role:caissier,admin_marketing,super_admin,marketing')->name('loyalty.pos-register.')->group(function () {
             Route::post('/members', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'store'])->name('members.store');
             Route::post('/members/{id}/assign-card', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'assignCard'])->name('members.assign-card');
         });
 
         Route::prefix('accounts')->name('accounts.')->group(function () {
-            Route::middleware('role:admin,commercial,marketing')->group(function () {
+            Route::middleware('role:admin_commercial,admin_marketing,super_admin,commercial,marketing')->group(function () {
                 Route::get('/', [AccountController::class, 'index'])->name('index');
                 Route::post('/', [AccountController::class, 'store'])->name('store');
                 Route::put('/{id}', [AccountController::class, 'update'])->name('update');
@@ -128,10 +131,10 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
                 Route::get('/{id}/subscription-contract', [\App\Http\Controllers\Api\SubscriptionContractController::class, 'show'])->name('subscription-contract.show');
                 Route::post('/{id}/subscription-contract', [\App\Http\Controllers\Api\SubscriptionContractController::class, 'store'])->name('subscription-contract.store');
             });
-            Route::get('/{id}', [AccountController::class, 'show'])->middleware('role:admin,commercial,marketing,client')->name('show');
+            Route::get('/{id}', [AccountController::class, 'show'])->middleware('role:admin_commercial,admin_marketing,super_admin,commercial,marketing,client')->name('show');
         });
 
-        Route::prefix('prospects')->middleware('role:admin,commercial')->name('prospects.')->group(function () {
+        Route::prefix('prospects')->middleware('role:admin_commercial,super_admin,commercial')->name('prospects.')->group(function () {
             Route::get('/', [ProspectController::class, 'index'])->name('index');
             Route::get('/sectors', [ProspectController::class, 'getSectors'])->name('sectors');
             Route::get('/lead-sources', [ProspectController::class, 'getLeadSources'])->name('lead-sources');
@@ -140,7 +143,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::patch('/{id}/convert', [ProspectController::class, 'convertToClient'])->name('convert');
         });
 
-        Route::prefix('vehicles')->middleware('role:admin,commercial,client,marketing')->name('vehicles.')->group(function () {
+        Route::prefix('vehicles')->middleware('role:admin_commercial,admin_marketing,super_admin,commercial,client,marketing')->name('vehicles.')->group(function () {
             Route::get('/stats', [VehicleController::class, 'fleetStatsSimple'])->name('stats');
             Route::get('/stats/summary', [VehicleController::class, 'fleetStats'])->name('stats.summary');
             Route::get('/', [VehicleController::class, 'index'])->name('index');
@@ -156,7 +159,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::post('/{id}/visit', [VehicleController::class, 'recordVisit'])->name('visit');
         });
 
-        Route::prefix('quotes')->middleware('role:admin,commercial,client')->name('quotes.')->group(function () {
+        Route::prefix('quotes')->middleware('role:admin_commercial,super_admin,commercial,client')->name('quotes.')->group(function () {
             Route::get('/', [QuoteController::class, 'index'])->name('index');
             Route::post('/', [QuoteController::class, 'store'])->name('store');
             Route::get('/{id}', [QuoteController::class, 'show'])->name('show');
@@ -165,12 +168,12 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::post('/{id}/upload-accord', [QuoteController::class, 'uploadBonDeCommande'])->name('upload-accord');
         });
 
-        Route::prefix('quote-requests')->middleware('role:admin,commercial,client')->name('quote-requests.')->group(function () {
+        Route::prefix('quote-requests')->middleware('role:admin_commercial,super_admin,commercial,client')->name('quote-requests.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\QuoteRequestController::class, 'index'])->name('index');
             Route::post('/', [\App\Http\Controllers\Api\QuoteRequestController::class, 'store'])->name('store');
             Route::get('/{id}', [\App\Http\Controllers\Api\QuoteRequestController::class, 'show'])->name('show');
             Route::patch('/{id}/status', [\App\Http\Controllers\Api\QuoteRequestController::class, 'updateStatus'])
-                ->middleware('role:admin,commercial')
+                ->middleware('role:admin_commercial,super_admin,commercial')
                 ->name('status');
         });
 
@@ -178,7 +181,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::get('/', [SupportController::class, 'index'])->name('index');
             Route::post('/', [SupportController::class, 'store'])->name('store');
             Route::post('/{id}/reply', [SupportController::class, 'reply'])
-                ->middleware('role:admin,commercial')
+                ->middleware('role:admin_commercial,super_admin,commercial')
                 ->name('reply');
         });
 
@@ -190,12 +193,12 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         });
 
         Route::get('/stats/dashboard', [StatsController::class, 'getDashboardStats'])
-            ->middleware('role:admin,commercial,client')
+            ->middleware('role:admin_commercial,super_admin,commercial,client')
             ->name('stats.dashboard');
 
         Route::prefix('kpi-targets')->name('kpi-targets.')->group(function () {
-            Route::get('/progress', [CommercialKpiTargetController::class, 'progress'])->middleware('role:admin,commercial')->name('progress');
-            Route::middleware('role:admin')->group(function () {
+            Route::get('/progress', [CommercialKpiTargetController::class, 'progress'])->middleware('role:admin_commercial,super_admin,commercial')->name('progress');
+            Route::middleware('role:admin_commercial,super_admin')->group(function () {
                 Route::get('/', [CommercialKpiTargetController::class, 'index'])->name('index');
                 Route::post('/', [CommercialKpiTargetController::class, 'store'])->name('store');
                 Route::put('/{id}', [CommercialKpiTargetController::class, 'update'])->name('update');
@@ -203,8 +206,8 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             });
         });
 
-        /** Fidélité : lecture (comptes, rapports, catalogue) pour admin, marketing, commercial (portefeuille filtré pour commercial). */
-        Route::prefix('loyalty')->middleware('role:admin,marketing,commercial')->name('loyalty.')->group(function () {
+        /** Fidélité : lecture (comptes, rapports, catalogue) pour les deux admins, marketing, commercial (portefeuille filtré pour commercial). */
+        Route::prefix('loyalty')->middleware('role:admin_commercial,admin_marketing,super_admin,marketing,commercial')->name('loyalty.')->group(function () {
             Route::get('/reports/station-scans', [LoyaltyStationScanReportController::class, 'index'])->name('reports.station-scans');
             Route::get('/reports/station-scans/export', [LoyaltyStationScanReportController::class, 'export'])->name('reports.station-scans.export');
 
@@ -217,21 +220,23 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         });
 
         /** Back-office fidélité : activité scans (hors app caisse). */
-        Route::prefix('loyalty')->middleware('role:admin,marketing,commercial')->name('loyalty.')->group(function () {
+        Route::prefix('loyalty')->middleware('role:admin_commercial,admin_marketing,super_admin,marketing,commercial')->name('loyalty.')->group(function () {
             Route::get('/activity', [LoyaltyActivityController::class, 'index'])->name('activity.index');
         });
 
-        Route::prefix('loyalty')->middleware('role:admin')->name('loyalty.admin.')->group(function () {
+        /** Réglages du programme fidélité : réservés au service marketing. */
+        Route::prefix('loyalty')->middleware('role:admin_marketing,super_admin')->name('loyalty.admin.')->group(function () {
             Route::get('/settings', [LoyaltySettingController::class, 'index'])->name('settings.index');
             Route::put('/settings/{id}', [LoyaltySettingController::class, 'update'])->name('settings.update');
         });
 
-        Route::prefix('loyalty')->middleware('role:admin,marketing')->name('loyalty.')->group(function () {
+        Route::prefix('loyalty')->middleware('role:admin_marketing,super_admin,marketing')->name('loyalty.')->group(function () {
             Route::get('/lookup/client-users', [LoyaltyMarketingLookupController::class, 'clientUsers'])->name('lookup.client-users');
             Route::post('/lookup/client-users', [LoyaltyMarketingLookupController::class, 'createClientUser'])->name('lookup.client-users.store');
             Route::get('/lookup/companies', [LoyaltyMarketingLookupController::class, 'companies'])->name('lookup.companies');
             Route::post('/lookup/companies', [LoyaltyMarketingLookupController::class, 'createCompany'])->name('lookup.companies.store');
             Route::get('/stats/referrals', [LoyaltyMarketingLookupController::class, 'referralStats'])->name('stats.referrals');
+            Route::get('/stats/dashboard', [LoyaltyMarketingLookupController::class, 'dashboardStats'])->name('stats.dashboard');
             Route::post('/accounts/{id}/adjust', [LoyaltyAccountController::class, 'adjust'])->name('accounts.adjust');
 
             Route::post('/rewards', [LoyaltyRewardController::class, 'store'])->name('rewards.store');
@@ -243,13 +248,14 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         });
 
         // Client/Admin claiming a reward
-        Route::prefix('loyalty')->middleware('role:admin,marketing,commercial,client')->name('loyalty.')->group(function () {
+        Route::prefix('loyalty')->middleware('role:admin_commercial,admin_marketing,super_admin,marketing,commercial,client')->name('loyalty.')->group(function () {
             Route::post('/redemptions', [\App\Http\Controllers\Api\LoyaltyRedemptionController::class, 'store'])->name('redemptions.store');
         });
 
-        Route::prefix('loyalty')->middleware('role:admin,marketing')->name('loyalty.marketing.')->group(function () {
+        Route::prefix('loyalty')->middleware('role:admin_marketing,super_admin,marketing')->name('loyalty.marketing.')->group(function () {
             Route::post('/accounts/bootstrap', [LoyaltyAccountController::class, 'bootstrap'])->name('accounts.bootstrap');
             Route::get('/accounts/{id}/qr-payload', [LoyaltyAccountController::class, 'qrPayload'])->name('accounts.qr-payload');
+            Route::get('/accounts/{id}/card-pdf', [LoyaltyAccountController::class, 'downloadCard'])->name('accounts.card-pdf');
             Route::patch('/accounts/{id}', [LoyaltyAccountController::class, 'update'])->name('accounts.update');
             Route::post('/accounts/{id}/associate-card', [LoyaltyAccountController::class, 'associateCard'])->name('accounts.associate-card');
 
@@ -277,7 +283,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         });
 
         /** Call center marketing : relances visite technique (formulaire QR station). */
-        Route::prefix('technical-visit-reminders')->middleware('role:admin,marketing,commercial')->name('technical-visit-reminders.')->group(function () {
+        Route::prefix('technical-visit-reminders')->middleware('role:admin_commercial,admin_marketing,super_admin,marketing,commercial')->name('technical-visit-reminders.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'index'])->name('index');
             Route::patch('/{id}', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'update'])->name('update');
         });

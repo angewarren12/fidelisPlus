@@ -4,7 +4,7 @@ import { marketingRoleGuard } from './guards/marketing-role.guard';
 import { backofficeAccessGuard } from './guards/backoffice-access.guard';
 import { crmRoleGuard } from './guards/crm-role.guard';
 import { staffRoleGuard } from './guards/staff-role.guard';
-import { adminRoleGuard } from './guards/admin-role.guard';
+import { adminRoleGuard, commercialAdminRoleGuard } from './guards/admin-role.guard';
 import { homeRedirectGuard } from './guards/home-redirect.guard';
 import { clientsRoleGuard } from './guards/clients-role.guard';
 import { clientRoleGuard } from './guards/client-role.guard';
@@ -133,6 +133,16 @@ export const routes: Routes = [
         canActivate: [staffRoleGuard],
       },
       {
+        path: 'equipe/:id',
+        loadComponent: () => import('./components/team/team-member-detail/team-member-detail.component').then(m => m.TeamMemberDetailComponent),
+        canActivate: [staffRoleGuard],
+      },
+      {
+        path: 'marketing/dashboard',
+        loadComponent: () => import('./components/marketing/marketing-dashboard/marketing-dashboard.component').then(m => m.MarketingDashboardComponent),
+        canActivate: [marketingRoleGuard],
+      },
+      {
         path: 'marketing/fidelite',
         loadComponent: () => import('./components/marketing/loyalty-dashboard/loyalty-dashboard.component').then(m => m.LoyaltyDashboardComponent),
         canActivate: [marketingRoleGuard],
@@ -157,7 +167,7 @@ export const routes: Routes = [
       {
         path: 'admin/settings',
         loadComponent: () => import('./components/admin/settings/settings.component').then(m => m.SettingsComponent),
-        canActivate: [adminRoleGuard],
+        canActivate: [commercialAdminRoleGuard],
       },
       { path: '', pathMatch: 'full', canActivate: [homeRedirectGuard], children: [] },
 

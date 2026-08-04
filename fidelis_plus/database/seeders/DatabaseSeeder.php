@@ -46,7 +46,7 @@ class DatabaseSeeder extends Seeder
                 'email' => 'admin@fidelis.ci',
                 'login' => 'admin',
                 'password' => Hash::make('password'),
-                'role' => 'admin',
+                'role' => 'super_admin',
             ]);
 
             $marketing = User::create([

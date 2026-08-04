@@ -111,11 +111,21 @@ const ADDITIONAL_SERVICES = [
   { key: 'vehicule_neuf',  label: 'Traitement véhicule neuf (identification)', price: 24700 },
 ];
 
+// Tarifs fixes d'exemption de vignette (Handicapé / société / communes / véhicule de projet) —
+// remplacent le calcul CV/âge quand le client est exonéré. Éditables depuis Paramètres.
+const VIGNETTE_EXEMPTIONS = [
+  { key: 'handicape', label: 'Handicapé',                    price: 2000 },
+  { key: 'societe',   label: "Cas d'une société",            price: 2000 },
+  { key: 'communes',  label: 'Communes',                     price: 10000 },
+  { key: 'projet',    label: 'Véhicule actif de projet',     price: 10000 },
+];
+
 interface VehicleService_ {
   vehicleId: number;
   vignette: {
     enabled: boolean; category: string; ageGroup: string; price: number;
     penaltyActive: boolean; penaltyRate: 25 | 100 | null;
+    exemptionKey: string | null;
   };
   visite:   { enabled: boolean; category: string; type: 'visite' | 'revisite' | 'volontaire'; price: number };
   additionals: string[];
@@ -183,7 +193,10 @@ function resolveAgeGroupFromStoredLabel(ageLabel: string, tourisme: boolean): st
   return tourisme ? 'recent_1_2' : 'recent';
 }
 
-function parseVignetteDescription(desc: string): { plate: string; catKey: string; ageGroup: string } | null {
+function parseVignetteDescription(
+  desc: string,
+  categories: { key: string; label: string }[] = VIGNETTE_CATEGORIES,
+): { plate: string; catKey: string; ageGroup: string } | null {
   if (!desc.startsWith('Vignette — ')) return null;
   const rest = desc.slice('Vignette — '.length);
   const op = rest.indexOf(' (');
@@ -197,13 +210,27 @@ function parseVignetteDescription(desc: string): { plate: string; catKey: string
   if (comma === -1) return null;
   const catLabel = inside.slice(0, comma).trim();
   const ageLabel = inside.slice(comma + 2).trim();
-  const cat = VIGNETTE_CATEGORIES.find(c => c.label === catLabel);
+  const cat = categories.find(c => c.label === catLabel);
   if (!cat) return null;
   const ageGroup = resolveAgeGroupFromStoredLabel(ageLabel, cat.key === 'tourisme_16cv');
   return { plate, catKey: cat.key, ageGroup };
 }
 
-function parseVtDescription(desc: string): { plate: string; catKey: string; visiteType: 'visite' | 'revisite' | 'volontaire' } | null {
+function parseVignetteExemptionDescription(
+  desc: string,
+  exemptions: { key: string; label: string }[] = VIGNETTE_EXEMPTIONS,
+): { plate: string; exemptionKey: string } | null {
+  const m = desc.match(/^Vignette \(exonération (.+)\) — (.+)$/);
+  if (!m) return null;
+  const exemption = exemptions.find(e => e.label === m[1].trim());
+  if (!exemption) return null;
+  return { plate: m[2].trim(), exemptionKey: exemption.key };
+}
+
+function parseVtDescription(
+  desc: string,
+  categories: { key: string; label: string }[] = VT_CATEGORIES,
+): { plate: string; catKey: string; visiteType: 'visite' | 'revisite' | 'volontaire' } | null {
   const tries: { prefix: string; type: 'visite' | 'revisite' | 'volontaire' }[] = [
     { prefix: 'Visite Technique — ', type: 'visite' },
     { prefix: 'Révisite — ', type: 'revisite' },
@@ -219,15 +246,18 @@ function parseVtDescription(desc: string): { plate: string; catKey: string; visi
     const close = after.lastIndexOf(')');
     if (close === -1) continue;
     const vtLabel = after.slice(0, close).trim();
-    const cat = VT_CATEGORIES.find(c => c.label === vtLabel);
+    const cat = categories.find(c => c.label === vtLabel);
     if (!cat) continue;
     return { plate, catKey: cat.key, visiteType: type };
   }
   return null;
 }
 
-function parseAdditionalDescription(desc: string): { plate: string; key: string } | null {
-  for (const svc of ADDITIONAL_SERVICES) {
+function parseAdditionalDescription(
+  desc: string,
+  services: { key: string; label: string }[] = ADDITIONAL_SERVICES,
+): { plate: string; key: string } | null {
+  for (const svc of services) {
     const prefix = `${svc.label} — `;
     if (desc.startsWith(prefix)) return { plate: desc.slice(prefix.length).trim(), key: svc.key };
   }
@@ -254,7 +284,11 @@ function hydrateVehicleServicesFromQuoteItems(
   vehicleIds: number[],
   vehicles: Vehicle[],
   customVignetteRates?: any,
-  customVtRates?: any
+  customVtRates?: any,
+  vignetteCategories: { key: string; label: string }[] = VIGNETTE_CATEGORIES,
+  vtCategories: { key: string; label: string }[] = VT_CATEGORIES,
+  vignetteExemptions: { key: string; label: string; price: number }[] = VIGNETTE_EXEMPTIONS,
+  additionalServices: { key: string; label: string }[] = ADDITIONAL_SERVICES,
 ): Map<number, VehicleService_> {
   const map = new Map<number, VehicleService_>();
   for (const vid of vehicleIds) {
@@ -268,6 +302,7 @@ function hydrateVehicleServicesFromQuoteItems(
       price: 0,
       penaltyActive: false,
       penaltyRate: null,
+      exemptionKey: null,
     };
     let visite: VehicleService_['visite'] = {
       enabled: false,
@@ -279,7 +314,7 @@ function hydrateVehicleServicesFromQuoteItems(
 
     for (const it of items) {
       const d = it.description;
-      const pv = parseVignetteDescription(d);
+      const pv = parseVignetteDescription(d, vignetteCategories);
       if (pv && normalizePlateForMatch(pv.plate) === plateNorm) {
         vignette = {
           enabled: true,
@@ -288,6 +323,21 @@ function hydrateVehicleServicesFromQuoteItems(
           price: computeVignettePrice(pv.catKey, pv.ageGroup, customVignetteRates),
           penaltyActive: vignette.penaltyActive,
           penaltyRate: vignette.penaltyRate,
+          exemptionKey: null,
+        };
+        continue;
+      }
+      const pve = parseVignetteExemptionDescription(d, vignetteExemptions);
+      if (pve && normalizePlateForMatch(pve.plate) === plateNorm) {
+        const exemption = vignetteExemptions.find(e => e.key === pve.exemptionKey);
+        vignette = {
+          enabled: true,
+          category: '',
+          ageGroup: vignette.ageGroup,
+          price: exemption?.price ?? 0,
+          penaltyActive: vignette.penaltyActive,
+          penaltyRate: vignette.penaltyRate,
+          exemptionKey: pve.exemptionKey,
         };
         continue;
       }
@@ -297,7 +347,7 @@ function hydrateVehicleServicesFromQuoteItems(
         vignette.penaltyRate = pp.rate;
         continue;
       }
-      const pvt = parseVtDescription(d);
+      const pvt = parseVtDescription(d, vtCategories);
       if (pvt && normalizePlateForMatch(pvt.plate) === plateNorm) {
         visite = {
           enabled: true,
@@ -307,7 +357,7 @@ function hydrateVehicleServicesFromQuoteItems(
         };
         continue;
       }
-      const pa = parseAdditionalDescription(d);
+      const pa = parseAdditionalDescription(d, additionalServices);
       if (pa && normalizePlateForMatch(pa.plate) === plateNorm && !additionals.includes(pa.key)) {
         additionals.push(pa.key);
       }
@@ -317,15 +367,24 @@ function hydrateVehicleServicesFromQuoteItems(
   return map;
 }
 
-function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Vehicle[]): number[] {
+function inferVehicleIdsFromItems(
+  items: { description: string }[],
+  vehicles: Vehicle[],
+  vignetteCategories: { key: string; label: string }[] = VIGNETTE_CATEGORIES,
+  vtCategories: { key: string; label: string }[] = VT_CATEGORIES,
+  vignetteExemptions: { key: string; label: string }[] = VIGNETTE_EXEMPTIONS,
+  additionalServices: { key: string; label: string }[] = ADDITIONAL_SERVICES,
+): number[] {
   const ids = new Set<number>();
   const plates = new Set<string>();
   for (const it of items) {
-    const pv = parseVignetteDescription(it.description);
+    const pv = parseVignetteDescription(it.description, vignetteCategories);
     if (pv) plates.add(normalizePlateForMatch(pv.plate));
-    const pvt = parseVtDescription(it.description);
+    const pve = parseVignetteExemptionDescription(it.description, vignetteExemptions);
+    if (pve) plates.add(normalizePlateForMatch(pve.plate));
+    const pvt = parseVtDescription(it.description, vtCategories);
     if (pvt) plates.add(normalizePlateForMatch(pvt.plate));
-    const pa = parseAdditionalDescription(it.description);
+    const pa = parseAdditionalDescription(it.description, additionalServices);
     if (pa) plates.add(normalizePlateForMatch(pa.plate));
   }
   for (const v of vehicles) {
@@ -612,11 +671,32 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                       <p class="text-[11px] text-amber-900/80 leading-relaxed -mt-1 mb-1">
                          Choisissez la <strong>puissance fiscale (CV)</strong> comme sur la carte grise, puis la <strong>tranche d’âge du véhicule</strong> pour appliquer le barème.
                       </p>
-                      <div class="space-y-6">
+
+                      <!-- EXONÉRATION DE VIGNETTE -->
+                      <div class="space-y-3">
+                         <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Client exonéré ?</label>
+                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button type="button" *ngFor="let ex of vignetteExemptions()"
+                               (click)="toggleVignetteExemption(vehicle.id, ex.key)"
+                               [attr.aria-pressed]="getVehicleSvc(vehicle.id).vignette.exemptionKey === ex.key"
+                               class="text-left p-4 rounded-2xl border border-outline-variant/15 bg-white transition-all hover:border-amber-400/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+                               [class.ring-2]="getVehicleSvc(vehicle.id).vignette.exemptionKey === ex.key"
+                               [class.ring-amber-500]="getVehicleSvc(vehicle.id).vignette.exemptionKey === ex.key"
+                               [class.bg-amber-50]="getVehicleSvc(vehicle.id).vignette.exemptionKey === ex.key">
+                               <span class="block text-xs font-bold text-on-surface leading-snug">{{ ex.label }}</span>
+                               <span class="block text-[10px] text-outline font-medium mt-0.5">{{ ex.price | number:'1.0-0' }} XOF (tarif fixe)</span>
+                            </button>
+                         </div>
+                         <p *ngIf="getVehicleSvc(vehicle.id).vignette.exemptionKey" class="text-[10px] text-amber-700 font-bold ml-1">
+                            Exonération « {{ vignetteExemptionLabel(vehicle.id) }} » appliquée — clic à nouveau pour l'annuler et revenir au barème normal.
+                         </p>
+                      </div>
+
+                      <div class="space-y-6" *ngIf="!getVehicleSvc(vehicle.id).vignette.exemptionKey">
                          <div class="space-y-3">
                             <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Catégorie (CV / type)</label>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                               <button type="button" *ngFor="let cat of vignetteCategories"
+                               <button type="button" *ngFor="let cat of vignetteCategories()"
                                   (click)="pickVignetteCategory(vehicle.id, cat.key)"
                                   [attr.aria-pressed]="getVehicleSvc(vehicle.id).vignette.category === cat.key"
                                   class="text-left p-4 rounded-2xl border border-outline-variant/15 bg-white transition-all hover:border-amber-400/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
@@ -744,7 +824,7 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                       <div class="space-y-8">
                          <div class="space-y-4">
                             <label class="block text-[10px] font-black text-outline uppercase tracking-widest ml-1">Catégorie de transport</label>
-                            <div *ngFor="let grp of vtCategoryGroups" class="space-y-2">
+                            <div *ngFor="let grp of vtCategoryGroups()" class="space-y-2">
                                <p class="text-[10px] font-black text-primary uppercase tracking-wider ml-1">{{ grp.label }}</p>
                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <button type="button" *ngFor="let key of grp.keys"
@@ -791,7 +871,7 @@ function inferVehicleIdsFromItems(items: { description: string }[], vehicles: Ve
                 <div class="space-y-3">
                    <p class="text-[10px] font-black text-outline uppercase tracking-widest ml-1">Services additionnels</p>
                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label *ngFor="let svc of additionalServices"
+                      <label *ngFor="let svc of additionalServices()"
                              class="flex items-center gap-3 p-4 rounded-2xl border border-outline-variant/10 cursor-pointer hover:bg-surface-container-low/50 transition-all"
                              [class.border-primary]="isAdditionalSelected(vehicle.id, svc.key)"
                              [class.bg-primary/5]="isAdditionalSelected(vehicle.id, svc.key)">
@@ -935,19 +1015,50 @@ export class QuoteFormComponent implements OnInit {
   stationSvc = inject(StationService);
   stations = signal<any[]>([]);
 
-  // Data tables exposed to template
-  vignetteCategories = VIGNETTE_CATEGORIES;
+  // Data tables exposed to template — les catégories créées depuis Paramètres > Grille
+  // Vignette/Visite Technique (pricing.vignette_categories / pricing.visite_technique_categories)
+  // sont fusionnées avec les listes intégrées, pour qu'une catégorie ajoutée par l'admin soit
+  // immédiatement sélectionnable ici sans redéploiement.
   vignetteAgeTilesStandard = VIGNETTE_AGE_TILES_STANDARD;
   vignetteAgeTilesTourisme = VIGNETTE_AGE_TILES_TOURISME;
-  vtCategories       = VT_CATEGORIES;
-  vtCategoryGroups   = VT_CATEGORY_GROUPS;
   vtVisitTypes       = VT_VISIT_TYPES;
-  additionalServices = ADDITIONAL_SERVICES;
+  vignetteCategories = computed(() => [
+    ...VIGNETTE_CATEGORIES,
+    ...(this.settingSvc.settings()?.['pricing.vignette_categories'] ?? []),
+  ]);
+
+  vtCategories = computed(() => [
+    ...VT_CATEGORIES,
+    ...(this.settingSvc.settings()?.['pricing.visite_technique_categories'] ?? []),
+  ]);
+
+  vtCategoryGroups = computed(() => {
+    const customCategories = this.settingSvc.settings()?.['pricing.visite_technique_categories'] ?? [];
+    if (customCategories.length === 0) return VT_CATEGORY_GROUPS;
+    return [...VT_CATEGORY_GROUPS, { label: 'Autres catégories', keys: customCategories.map((c) => c.key) }];
+  });
+
+  // Frais annexes et exemptions de vignette : éditables depuis Paramètres > Frais Annexes.
+  // Une fois l'admin passé par cet écran, la liste est persistée dans les settings ; le
+  // fallback ADDITIONAL_SERVICES/VIGNETTE_EXEMPTIONS ne sert qu'avant la première sauvegarde.
+  additionalServices = computed<{ key: string; label: string; price: number }[]>(
+    () => this.settingSvc.settings()?.['pricing.additional_services'] ?? ADDITIONAL_SERVICES,
+  );
+  vignetteExemptions = computed<{ key: string; label: string; price: number }[]>(
+    () => this.settingSvc.settings()?.['pricing.vignette_exemptions'] ?? VIGNETTE_EXEMPTIONS,
+  );
 
   pickVignetteCategory(vehicleId: number, key: string): void {
     const svc = this.getVehicleSvc(vehicleId);
     svc.vignette.category = key;
+    svc.vignette.exemptionKey = null;
     this.onVignetteCategoryChange(vehicleId);
+  }
+
+  toggleVignetteExemption(vehicleId: number, key: string): void {
+    const svc = this.getVehicleSvc(vehicleId);
+    svc.vignette.exemptionKey = svc.vignette.exemptionKey === key ? null : key;
+    this.recalcVignette(vehicleId);
   }
 
   pickVignetteAge(vehicleId: number, ageGroup: string): void {
@@ -959,7 +1070,8 @@ export class QuoteFormComponent implements OnInit {
   pickVtCategory(vehicleId: number, key: string): void {
     const svc = this.getVehicleSvc(vehicleId);
     svc.visite.category = key;
-    if (VT_RATES[key]?.volontaire === null && svc.visite.type === 'volontaire') {
+    const rates = this.settingSvc.settings()?.['pricing.visite_technique'] || VT_RATES;
+    if (rates[key]?.volontaire === null && svc.visite.type === 'volontaire') {
       svc.visite.type = 'visite';
     }
     this.recalcVisite(vehicleId);
@@ -973,7 +1085,7 @@ export class QuoteFormComponent implements OnInit {
   }
 
   vtLabel(key: string): string {
-    return VT_CATEGORIES.find(c => c.key === key)?.label ?? key;
+    return this.vtCategories().find(c => c.key === key)?.label ?? key;
   }
 
   yearRangeHint(band: 'recent' | 'medium' | 'old'): string {
@@ -1164,7 +1276,11 @@ export class QuoteFormComponent implements OnInit {
         this.vehicleSvc.getByClient(q.company_id).subscribe(vehicles => {
           this.companyVehicles.set(vehicles);
           if (vehicleIds.length === 0 && rawItems.length > 0) {
-            vehicleIds = inferVehicleIdsFromItems(rawItems, vehicles);
+            vehicleIds = inferVehicleIdsFromItems(
+              rawItems, vehicles,
+              this.vignetteCategories(), this.vtCategories(),
+              this.vignetteExemptions(), this.additionalServices(),
+            );
           }
           this.selectedVehicleIds.set(vehicleIds);
           const map = hydrateVehicleServicesFromQuoteItems(
@@ -1172,7 +1288,11 @@ export class QuoteFormComponent implements OnInit {
             vehicleIds,
             vehicles,
             this.settingSvc.settings()?.[ 'pricing.vignette' ],
-            this.settingSvc.settings()?.[ 'pricing.visite_technique' ]
+            this.settingSvc.settings()?.[ 'pricing.visite_technique' ],
+            this.vignetteCategories(),
+            this.vtCategories(),
+            this.vignetteExemptions(),
+            this.additionalServices(),
           );
           this.vehicleServices.set(map);
         });
@@ -1254,7 +1374,7 @@ export class QuoteFormComponent implements OnInit {
       const ageGroup = getAgeGroup(vehicle?.year ?? null);
       map.set(vehicleId, {
         vehicleId,
-        vignette: { enabled: false, category: '', ageGroup, price: 0, penaltyActive: false, penaltyRate: null },
+        vignette: { enabled: false, category: '', ageGroup, price: 0, penaltyActive: false, penaltyRate: null, exemptionKey: null },
         visite:   { enabled: false, category: '', type: 'visite', price: 0 },
         additionals: [],
       });
@@ -1271,7 +1391,7 @@ export class QuoteFormComponent implements OnInit {
     if (!map.has(vehicleId)) {
       const newSvc: VehicleService_ = {
         vehicleId,
-        vignette: { enabled: false, category: '', ageGroup: 'recent', price: 0, penaltyActive: false, penaltyRate: null },
+        vignette: { enabled: false, category: '', ageGroup: 'recent', price: 0, penaltyActive: false, penaltyRate: null, exemptionKey: null },
         visite:   { enabled: false, category: '', type: 'visite', price: 0 },
         additionals: [],
       };
@@ -1335,8 +1455,13 @@ export class QuoteFormComponent implements OnInit {
 
   recalcVignette(vehicleId: number): void {
     const svc = this.getVehicleSvc(vehicleId);
-    const customRates = this.settingSvc.settings()?.[ 'pricing.vignette' ];
-    svc.vignette.price = computeVignettePrice(svc.vignette.category, svc.vignette.ageGroup, customRates);
+    if (svc.vignette.exemptionKey) {
+      const exemption = this.vignetteExemptions().find(e => e.key === svc.vignette.exemptionKey);
+      svc.vignette.price = exemption?.price ?? 0;
+    } else {
+      const customRates = this.settingSvc.settings()?.[ 'pricing.vignette' ];
+      svc.vignette.price = computeVignettePrice(svc.vignette.category, svc.vignette.ageGroup, customRates);
+    }
     this.vehicleServices.set(new Map(this.vehicleServices()));
   }
 
@@ -1369,11 +1494,16 @@ export class QuoteFormComponent implements OnInit {
   }
 
   getAdditionalLabel(key: string): string {
-    return ADDITIONAL_SERVICES.find(s => s.key === key)?.label ?? key;
+    return this.additionalServices().find(s => s.key === key)?.label ?? key;
   }
 
   getAdditionalPrice(key: string): number {
-    return ADDITIONAL_SERVICES.find(s => s.key === key)?.price ?? 0;
+    return this.additionalServices().find(s => s.key === key)?.price ?? 0;
+  }
+
+  vignetteExemptionLabel(vehicleId: number): string {
+    const key = this.getVehicleSvc(vehicleId).vignette.exemptionKey;
+    return this.vignetteExemptions().find(e => e.key === key)?.label ?? '';
   }
 
   getVehicleTotal(vehicleId: number): number {
@@ -1419,10 +1549,15 @@ export class QuoteFormComponent implements OnInit {
     for (const vehicle of this.selectedVehicles()) {
       const svc = this.getVehicleSvc(vehicle.id);
       const plate = vehicle.license_plate;
-      const catLabel = VIGNETTE_CATEGORIES.find(c => c.key === svc.vignette.category)?.label ?? '';
-      
+      const catLabel = this.vignetteCategories().find(c => c.key === svc.vignette.category)?.label ?? '';
+      const exemption = svc.vignette.exemptionKey ? this.vignetteExemptions().find(e => e.key === svc.vignette.exemptionKey) : null;
+
       if (svc.vignette.enabled && svc.vignette.price > 0) {
-        items.push({
+        items.push(exemption ? {
+          description: `Vignette (exonération ${exemption.label}) — ${plate}`,
+          price: svc.vignette.price,
+          quantity: 1,
+        } : {
           description: `Vignette — ${plate} (${catLabel}, ${vignetteAgeLabel(svc.vignette.ageGroup)})`,
           price: svc.vignette.price,
           quantity: 1,
@@ -1437,7 +1572,7 @@ export class QuoteFormComponent implements OnInit {
         }
       }
       if (svc.visite.enabled && svc.visite.price > 0) {
-        const vtLabel = VT_CATEGORIES.find(c => c.key === svc.visite.category)?.label ?? '';
+        const vtLabel = this.vtCategories().find(c => c.key === svc.visite.category)?.label ?? '';
         const typeLabel = svc.visite.type === 'visite' ? 'Visite Technique' : svc.visite.type === 'revisite' ? 'Révisite' : 'Visite Volontaire';
         items.push({
           description: `${typeLabel} — ${plate} (${vtLabel})`,

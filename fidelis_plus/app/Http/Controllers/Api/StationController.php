@@ -24,7 +24,7 @@ class StationController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        if ($request->user()->role !== 'admin') {
+        if (!in_array($request->user()->role, ['admin_commercial', 'admin_marketing', 'super_admin'], true)) {
             abort(403, 'Action réservée aux administrateurs.');
         }
 
@@ -47,7 +47,7 @@ class StationController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        if ($request->user()->role !== 'admin') {
+        if (!in_array($request->user()->role, ['admin_commercial', 'admin_marketing', 'super_admin'], true)) {
             abort(403, 'Action réservée aux administrateurs.');
         }
 
@@ -72,7 +72,7 @@ class StationController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        if ($request->user()->role !== 'admin') {
+        if (!in_array($request->user()->role, ['admin_commercial', 'admin_marketing', 'super_admin'], true)) {
             abort(403, 'Action réservée aux administrateurs.');
         }
 

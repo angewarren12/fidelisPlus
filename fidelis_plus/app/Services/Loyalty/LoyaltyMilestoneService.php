@@ -8,10 +8,14 @@ use App\Models\LoyaltyReward;
 
 class LoyaltyMilestoneService
 {
+    /**
+     * @param  int  $basePoints  Déjà calculé par LoyaltyRulesService::getPointsPerScan() selon le
+     *                           segment du compte (embedded dans le QR à sa génération) — cette
+     *                           méthode ne le recalcule pas, elle ajoute seulement les récompenses
+     *                           de palier déclenchées par ce passage.
+     */
     public function processScan(LoyaltyAccount $account, int &$basePoints): void
     {
-        $basePoints = 1; // 1 véhicule / 1 visite = 1 point
-
         if ($account->holder_type === 'company' && $account->company) {
             $account->total_vehicles_referred += 1;
             $vc = $account->total_vehicles_referred;

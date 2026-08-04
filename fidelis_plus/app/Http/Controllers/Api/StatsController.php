@@ -30,7 +30,7 @@ class StatsController extends Controller
         $filterCommercialId = null;
         if ($user->role === 'commercial') {
             $filterCommercialId = (int) $user->id;
-        } elseif ($user->role === 'admin' && $request->filled('commercial_id')) {
+        } elseif (in_array($user->role, ['admin_commercial', 'super_admin'], true) && $request->filled('commercial_id')) {
             $filterCommercialId = (int) $request->input('commercial_id');
         }
 

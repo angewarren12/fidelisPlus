@@ -6,6 +6,39 @@ import { TeamService } from '../../../services/team.service';
 import { ToastService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
 
+interface RoleTileOption {
+  value: string;
+  label: string;
+  hint: string;
+  icon: string;
+  iconClass: string;
+}
+
+const ROLE_TILES: Record<string, RoleTileOption> = {
+  commercial: { value: 'commercial', label: 'Commercial / Vendeur', hint: 'Gère ses clients et ses devis', icon: 'sensor_door', iconClass: 'text-secondary' },
+  admin_commercial: { value: 'admin_commercial', label: 'Admin — Commercial', hint: 'Équipe, devis, tarifs, CRM', icon: 'admin_panel_settings', iconClass: 'text-primary' },
+  marketing: { value: 'marketing', label: 'Marketing', hint: 'Fidélité & campagnes', icon: 'campaign', iconClass: 'text-amber-500' },
+  admin_marketing: { value: 'admin_marketing', label: 'Admin — Marketing', hint: 'Fidélité, Studio Carte, réglages', icon: 'admin_panel_settings', iconClass: 'text-amber-600' },
+  caissier: { value: 'caissier', label: 'Caissière station', hint: 'Scan carte fidélité en magasin', icon: 'qr_code_scanner', iconClass: 'text-teal-400' },
+  super_admin: { value: 'super_admin', label: 'Super administrateur', hint: 'Accès complet aux deux services', icon: 'shield_person', iconClass: 'text-error' },
+};
+
+/** Mêmes règles que TeamController::store() côté backend — qui peut inviter qui. */
+function allowedRolesFor(actorRole: string | undefined): string[] {
+  switch (actorRole) {
+    case 'super_admin':
+      return ['commercial', 'admin_commercial', 'marketing', 'admin_marketing', 'caissier', 'super_admin'];
+    case 'admin_commercial':
+      return ['commercial', 'admin_commercial'];
+    case 'admin_marketing':
+      return ['marketing', 'admin_marketing', 'caissier'];
+    case 'commercial':
+      return ['commercial'];
+    default:
+      return [];
+  }
+}
+
 @Component({
   selector: 'app-team-form',
   standalone: true,
@@ -24,7 +57,7 @@ import { AuthService } from '../../../services/auth.service';
             {{ isEditing ? 'Éditer' : 'Nouveau' }} <span class="text-primary">Collaborateur</span>
           </h1>
           <p class="text-outline text-sm font-medium mt-2">
-            {{ isEditing ? 'Mettez à jour les informations du collaborateur.' : 'Créez un profil pour donner l\'accès à un vendeur ou un administrateur.' }}
+            {{ isEditing ? 'Mettez à jour les informations du collaborateur.' : "Créez un profil pour donner l'accès à un vendeur ou un administrateur." }}
           </p>
         </div>
       </section>
@@ -61,40 +94,18 @@ import { AuthService } from '../../../services/auth.service';
             <div class="space-y-2 col-span-1 md:col-span-2">
                <label class="text-[11px] font-bold uppercase tracking-wider text-outline ml-1">Rôle dans le système</label>
                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-                  <label [class.border-primary]="teamForm.get('role')?.value === 'commercial'" [class.bg-primary/5]="teamForm.get('role')?.value === 'commercial'" class="cursor-pointer p-4 rounded-xl border border-outline-variant/20 flex flex-col items-center justify-center text-center gap-2 transition-all hover:bg-surface-container">
-                     <input type="radio" formControlName="role" value="commercial" class="hidden">
-                     <span class="material-symbols-outlined text-secondary text-3xl">sensor_door</span>
+                  <label *ngFor="let opt of availableRoleOptions"
+                         [class.border-primary]="teamForm.get('role')?.value === opt.value" [class.bg-primary/5]="teamForm.get('role')?.value === opt.value"
+                         class="cursor-pointer p-4 rounded-xl border border-outline-variant/20 flex flex-col items-center justify-center text-center gap-2 transition-all hover:bg-surface-container">
+                     <input type="radio" formControlName="role" [value]="opt.value" class="hidden">
+                     <span class="material-symbols-outlined text-3xl" [class]="opt.iconClass">{{ opt.icon }}</span>
                      <div>
-                        <span class="block font-black text-on-surface">Commercial / Vendeur</span>
-                        <span class="text-[10px] text-outline">Gère ses clients et ses devis</span>
-                     </div>
-                  </label>
-                  <label *ngIf="isAdmin" [class.border-primary]="teamForm.get('role')?.value === 'admin'" [class.bg-primary/5]="teamForm.get('role')?.value === 'admin'" class="cursor-pointer p-4 rounded-xl border border-outline-variant/20 flex flex-col items-center justify-center text-center gap-2 transition-all hover:bg-surface-container">
-                     <input type="radio" formControlName="role" value="admin" class="hidden">
-                     <span class="material-symbols-outlined text-primary text-3xl">admin_panel_settings</span>
-                     <div>
-                        <span class="block font-black text-on-surface">Administrateur</span>
-                        <span class="text-[10px] text-outline">Vue globale CRM</span>
-                     </div>
-                  </label>
-                  <label *ngIf="isAdmin" [class.border-primary]="teamForm.get('role')?.value === 'marketing'" [class.bg-primary/5]="teamForm.get('role')?.value === 'marketing'" class="cursor-pointer p-4 rounded-xl border border-outline-variant/20 flex flex-col items-center justify-center text-center gap-2 transition-all hover:bg-surface-container">
-                     <input type="radio" formControlName="role" value="marketing" class="hidden">
-                     <span class="material-symbols-outlined text-amber-500 text-3xl">campaign</span>
-                     <div>
-                        <span class="block font-black text-on-surface">Marketing</span>
-                        <span class="text-[10px] text-outline">Fidélité & campagnes</span>
-                     </div>
-                  </label>
-                  <label *ngIf="isAdmin" [class.border-primary]="teamForm.get('role')?.value === 'caissier'" [class.bg-primary/5]="teamForm.get('role')?.value === 'caissier'" class="cursor-pointer p-4 rounded-xl border border-outline-variant/20 flex flex-col items-center justify-center text-center gap-2 transition-all hover:bg-surface-container">
-                     <input type="radio" formControlName="role" value="caissier" class="hidden">
-                     <span class="material-symbols-outlined text-teal-400 text-3xl">qr_code_scanner</span>
-                     <div>
-                        <span class="block font-black text-on-surface">Caissière station</span>
-                        <span class="text-[10px] text-outline">Scan carte fidélité en magasin</span>
+                        <span class="block font-black text-on-surface">{{ opt.label }}</span>
+                        <span class="text-[10px] text-outline">{{ opt.hint }}</span>
                      </div>
                   </label>
                </div>
-               <p *ngIf="!isAdmin" class="text-[10px] text-outline font-medium ml-1 mt-2">En tant que commercial, vous ne pouvez inviter que d&apos;autres commerciaux.</p>
+               <p *ngIf="availableRoleOptions.length <= 1" class="text-[10px] text-outline font-medium ml-1 mt-2">En tant que commercial, vous ne pouvez inviter que d&apos;autres commerciaux.</p>
             </div>
          </div>
 
@@ -181,8 +192,9 @@ export class TeamFormComponent implements OnInit {
   private toastService = inject(ToastService);
   private authService = inject(AuthService);
 
-  get isAdmin(): boolean {
-    return this.authService.getCurrentUser()?.role === 'admin';
+  get availableRoleOptions(): RoleTileOption[] {
+    const actorRole = this.authService.getCurrentUser()?.role;
+    return allowedRolesFor(actorRole).map((r) => ROLE_TILES[r]).filter((t): t is RoleTileOption => !!t);
   }
 
   constructor() {
@@ -201,7 +213,7 @@ export class TeamFormComponent implements OnInit {
       this.isEditing = true;
       this.userId = +id;
       this.loadUser();
-    } else if (!this.isAdmin) {
+    } else if (this.availableRoleOptions.length <= 1 && this.availableRoleOptions[0]?.value === 'commercial') {
       this.teamForm.patchValue({ role: 'commercial' });
     }
   }
