@@ -45,4 +45,17 @@ return [
         'outbound_token' => env('SIRA_OUTBOUND_TOKEN', ''),
     ],
 
+    // Intégration Odoo (service commercial uniquement). Bidirectionnelle mais toujours
+    // à l'initiative de Fidelis : outbound_base_url/outbound_token servent aux appels
+    // sortants (prospects/clients/flottes/devis créés ou modifiés, voir
+    // app/Services/Odoo/OdooClient.php, app/Jobs/Sync*ToOdoo.php) ET aux appels de pull
+    // (GET .../updated, voir app/Console/Commands/SyncFromOdoo.php et
+    // app/Services/Odoo/OdooIngestService.php) — Odoo n'appelle jamais Fidelis, donc pas
+    // de jeton entrant à fournir. Valeurs à renseigner dès que l'équipe Odoo fournit
+    // l'URL/le jeton de son API.
+    'odoo' => [
+        'outbound_base_url' => env('ODOO_OUTBOUND_BASE_URL', ''),
+        'outbound_token' => env('ODOO_OUTBOUND_TOKEN', ''),
+    ],
+
 ];

@@ -201,6 +201,8 @@ class VehicleController extends Controller
             report($e);
         }
 
+        \App\Jobs\SyncVehicleToOdoo::dispatch($vehicle->id, 'vehicle_created');
+
         return response()->json([
             'status' => 'success',
             'message' => 'Véhicule enregistré.',
@@ -267,6 +269,8 @@ class VehicleController extends Controller
         } catch (\Throwable $e) {
             report($e);
         }
+
+        \App\Jobs\SyncVehicleToOdoo::dispatch($vehicle->id, 'vehicle_updated');
 
         return response()->json([
             'status' => 'success',

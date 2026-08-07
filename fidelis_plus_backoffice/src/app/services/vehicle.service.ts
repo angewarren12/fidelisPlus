@@ -49,6 +49,7 @@ export interface Vehicle {
   carte_grise?: { id: number; path: string } | null;
   vignette?: { id: number; path: string } | null;
   company?: any;
+  created_via_odoo?: boolean;
 }
 
 @Injectable({

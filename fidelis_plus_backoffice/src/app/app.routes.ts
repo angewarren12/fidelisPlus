@@ -48,6 +48,11 @@ export const routes: Routes = [
         canActivate: [crmRoleGuard],
       },
       {
+        path: 'prospection/:id/editer',
+        loadComponent: () => import('./components/prospects/prospect-form/prospect-form.component').then(m => m.ProspectFormComponent),
+        canActivate: [crmRoleGuard],
+      },
+      {
         path: 'clients',
         loadComponent: () => import('./components/clients/client-list/client-list.component').then(m => m.ClientListComponent),
         canActivate: [clientsRoleGuard],

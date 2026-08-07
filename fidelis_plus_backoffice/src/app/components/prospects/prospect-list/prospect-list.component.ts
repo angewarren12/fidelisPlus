@@ -125,13 +125,14 @@ import { TeamService } from '../../../services/team.service';
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Entreprise</th>
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Correspondant</th>
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest text-center">Température</th>
+              <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Provenance</th>
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Dernière Activité</th>
               <th class="px-6 py-4"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-surface-container-low">
             <tr *ngIf="loading()">
-              <td colspan="5" class="px-6 py-16 text-center">
+              <td colspan="6" class="px-6 py-16 text-center">
                 <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
                 <p class="text-outline font-medium mt-2">Chargement des prospects...</p>
               </td>
@@ -166,6 +167,10 @@ import { TeamService } from '../../../services/team.service';
                   </select>
                 </td>
                 <td class="px-6 py-5">
+                  <span *ngIf="p.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#714B67]/10 text-[#714B67]">Odoo</span>
+                  <span *ngIf="!p.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary">FidelisPlus</span>
+                </td>
+                <td class="px-6 py-5">
                   <div class="flex flex-col">
                     <span class="text-sm font-medium">{{ (p.last_contact_date || p.created_at) | date:'short' }}</span>
                     <span class="text-[11px] text-on-surface-variant italic">{{ p.lead_source }}</span>
@@ -184,14 +189,14 @@ import { TeamService } from '../../../services/team.service';
                             class="px-3 py-1.5 bg-surface-container text-outline text-[10px] font-bold rounded-lg cursor-not-allowed uppercase tracking-wider">
                       Convertir Client
                     </button>
-                    <span class="p-2 text-outline">
-                      <span class="material-symbols-outlined">more_vert</span>
-                    </span>
+                    <a [routerLink]="['/prospection', p.id, 'editer']" title="Modifier" class="p-2 text-outline hover:text-primary transition-colors">
+                      <span class="material-symbols-outlined">edit</span>
+                    </a>
                   </div>
                 </td>
               </tr>
               <tr *ngIf="prospects().length === 0">
-                <td colspan="5" class="px-6 py-20 text-center">
+                <td colspan="6" class="px-6 py-20 text-center">
                   <span class="material-symbols-outlined text-4xl text-outline/30 mb-2">search_off</span>
                   <p class="text-outline font-medium">Aucun prospect pour ces critères.</p>
                 </td>
@@ -238,17 +243,25 @@ import { TeamService } from '../../../services/team.service';
             <span class="italic">{{ p.lead_source }}</span>
           </div>
 
-          <div class="pt-3 border-t border-outline-variant/10">
+          <div>
+            <span *ngIf="p.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#714B67]/10 text-[#714B67]">Odoo</span>
+            <span *ngIf="!p.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary">FidelisPlus</span>
+          </div>
+
+          <div class="pt-3 border-t border-outline-variant/10 flex items-center gap-2">
             <button *ngIf="p.temperature === 'chaud'" type="button"
                     (click)="openConvertModal(p)"
-                    class="w-full px-3 py-2.5 bg-secondary text-white text-[10px] font-bold rounded-lg hover:brightness-110 transition-all uppercase tracking-wider">
+                    class="flex-1 px-3 py-2.5 bg-secondary text-white text-[10px] font-bold rounded-lg hover:brightness-110 transition-all uppercase tracking-wider">
               Convertir Client
             </button>
             <button *ngIf="p.temperature !== 'chaud'" type="button" disabled
                     title="Seuls les prospects CHAUDS peuvent être convertis en clients"
-                    class="w-full px-3 py-2.5 bg-surface-container text-outline text-[10px] font-bold rounded-lg cursor-not-allowed uppercase tracking-wider">
+                    class="flex-1 px-3 py-2.5 bg-surface-container text-outline text-[10px] font-bold rounded-lg cursor-not-allowed uppercase tracking-wider">
               Convertir Client
             </button>
+            <a [routerLink]="['/prospection', p.id, 'editer']" title="Modifier" class="p-2.5 rounded-lg bg-surface-container-low text-outline hover:text-primary transition-colors shrink-0">
+              <span class="material-symbols-outlined text-lg">edit</span>
+            </a>
           </div>
         </div>
 

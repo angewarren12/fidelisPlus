@@ -103,3 +103,21 @@ Artisan::command('notifications:ct-reminders', function (NotificationService $no
 // Scheduler: exécute quotidiennement à 08:00.
 Schedule::command('notifications:ct-reminders')->dailyAt('08:00');
 Schedule::command('quotes:check-expired')->dailyAt('08:00');
+
+// Cron de pull Odoo -> FidelisPlus (prospects/clients/flottes/devis créés ou modifiés
+// côté Odoo). Fréquence provisoire, ajustable. withoutOverlapping() évite un second
+// passage si Odoo répond lentement.
+Schedule::command('odoo:sync')->everyFifteenMinutes()->withoutOverlapping();
+
+// Traitement de la file d'attente (jobs Sync*ToOdoo, ProvisionSiraAccountForMember,
+// etc. — QUEUE_CONNECTION=database). Sur un hébergement mutualisé, aucun worker
+// permanent (`queue:work` en démon) n'est possible : on lance donc un worker
+// "jetable" à chaque minute du scheduler, qui traite ce qui est en attente puis
+// s'arrête. --max-time=50 garantit qu'il rend la main avant la minute suivante ;
+// --tries=1 évite qu'un job qui échoue reste bloqué à retenter indéfiniment.
+// Conséquence pratique : une seule tâche cron à configurer côté hébergeur
+// (`php artisan schedule:run` chaque minute) suffit à faire tourner à la fois le
+// scheduler ET la queue — voir docs/ops/production-cron-queue-setup.md.
+Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=1')
+    ->everyMinute()
+    ->withoutOverlapping();

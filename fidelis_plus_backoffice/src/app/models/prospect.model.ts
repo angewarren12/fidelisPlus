@@ -22,6 +22,7 @@ export interface Prospect {
   kanban_stage: KanbanStage;
   commercial_id: number;
   is_active: boolean;
+  created_via_odoo?: boolean;
   last_contact_date?: string;
   created_at: string;
   updated_at: string;

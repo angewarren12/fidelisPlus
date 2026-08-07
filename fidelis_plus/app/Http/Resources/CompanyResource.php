@@ -25,6 +25,7 @@ class CompanyResource extends JsonResource
             'kanban_stage' => $this->kanban_stage,
             'temperature' => $this->temperature,
             'is_active' => (bool) $this->is_active,
+            'created_via_odoo' => (bool) $this->created_via_odoo,
             'balance' => (float) $this->account_balance,
             'vehicles_count' => $this->vehicles_count,
             'last_contact' => $this->last_contact_date?->toIso8601String(),

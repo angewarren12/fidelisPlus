@@ -213,6 +213,8 @@ class AccountController extends Controller
 
         $account->delete();
 
+        \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_archived');
+
         return response()->json([
             'status' => 'success',
             'message' => 'Compte archivé avec succès.'
@@ -232,6 +234,8 @@ class AccountController extends Controller
         }
 
         $account->restore();
+
+        \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_restored');
 
         return response()->json([
             'status' => 'success',

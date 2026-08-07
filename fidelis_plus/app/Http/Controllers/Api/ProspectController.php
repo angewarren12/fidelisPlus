@@ -255,6 +255,8 @@ class ProspectController extends Controller
                     'must_change_password' => true,
                 ]);
 
+                \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, 'prospect_created');
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Prospect enregistré avec succès',
@@ -265,6 +267,109 @@ class ProspectController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Erreur lors de la création : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Détail d'un prospect (pour préremplir le formulaire d'édition)
+     */
+    public function show($id)
+    {
+        $company = Company::where('id', $id)->where('type', 'prospect')->with('contacts')->firstOrFail();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $company
+        ]);
+    }
+
+    /**
+     * Mise à jour d'un prospect existant
+     */
+    public function update(Request $request, $id)
+    {
+        $company = Company::where('id', $id)->where('type', 'prospect')->firstOrFail();
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'rccm' => 'nullable|string|max:20',
+            'sector' => 'nullable|string',
+            'address' => 'nullable|string',
+            'city' => 'nullable|string',
+            'zip_code' => 'nullable|string',
+            'phone' => 'nullable|string',
+            'email' => 'nullable|email',
+            'temperature' => 'required|in:froid,tiede,chaud',
+            'commercial_id' => 'nullable|exists:users,id',
+            'estimated_potential' => 'nullable|numeric',
+            'estimated_decision_date' => 'nullable|date',
+            'needs' => 'nullable|string',
+            'lead_source' => 'nullable|string',
+            'category' => 'required|in:entreprise,particulier',
+            'company_type' => 'nullable|in:flotte,apporteur,garage',
+
+            // Infos Correspondant
+            'contact_first_name' => 'required|string|max:100',
+            'contact_last_name' => 'required|string|max:100',
+            'contact_position' => 'nullable|string|max:100',
+            'contact_phone' => 'nullable|string',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($validated, $company) {
+                $requestUser = request()->user();
+
+                $commercialId = $validated['commercial_id'] ?? $company->commercial_id;
+                if ($requestUser && $requestUser->role === 'commercial') {
+                    $commercialId = $requestUser->id;
+                }
+
+                if ($commercialId) {
+                    $assignee = User::find($commercialId);
+                    if (!$assignee || !in_array($assignee->role, ['admin_commercial', 'super_admin', 'commercial'], true)) {
+                        abort(422, "commercial_id invalide: l'utilisateur assigné doit être admin ou commercial.");
+                    }
+                }
+
+                $company->update([
+                    'name' => $validated['name'],
+                    'rccm' => $validated['rccm'] ?? null,
+                    'sector' => $validated['sector'] ?? null,
+                    'address' => $validated['address'] ?? null,
+                    'city' => $validated['city'] ?? null,
+                    'zip_code' => $validated['zip_code'] ?? null,
+                    'phone' => $validated['phone'] ?? null,
+                    'email' => $validated['email'] ?? null,
+                    'commercial_id' => $commercialId,
+                    'category' => $validated['category'],
+                    'company_type' => $validated['company_type'] ?? null,
+                    'temperature' => $validated['temperature'],
+                    'estimated_potential' => $validated['estimated_potential'] ?? 0,
+                    'estimated_decision_date' => $validated['estimated_decision_date'] ?? null,
+                    'needs' => $validated['needs'] ?? null,
+                    'lead_source' => $validated['lead_source'] ?? null,
+                ]);
+
+                $mainContact = $company->contacts()->where('is_main_contact', true)->first();
+                if ($mainContact) {
+                    $mainContact->update([
+                        'first_name' => $validated['contact_first_name'],
+                        'last_name' => $validated['contact_last_name'],
+                        'phone' => $validated['contact_phone'] ?? null,
+                    ]);
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Prospect mis à jour avec succès',
+                    'data' => $company->fresh()->load('contacts')
+                ]);
+            });
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Erreur lors de la mise à jour : ' . $e->getMessage()
             ], 500);
         }
     }
@@ -291,6 +396,8 @@ class ProspectController extends Controller
             'kanban_stage' => 'client_actif',
             'converted_at' => now(),
         ]);
+
+        \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, 'converted_to_client');
 
         // Envoyer un email à TOUS les correspondants de l'entreprise
         foreach ($allContacts as $contact) {

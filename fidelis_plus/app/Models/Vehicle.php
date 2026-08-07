@@ -34,7 +34,9 @@ class Vehicle extends Model
         'last_visit_date',
         'next_ct_date',
         'next_pollution_date',
-        'status'
+        'status',
+        'created_via_odoo',
+        'odoo_vehicle_id',
     ];
 
     protected $casts = [
@@ -47,6 +49,8 @@ class Vehicle extends Model
         'last_visit_date' => 'date',
         'next_ct_date' => 'date',
         'next_pollution_date' => 'date',
+        'created_via_odoo' => 'boolean',
+        'odoo_synced_at' => 'datetime',
     ];
 
     protected $appends = ['has_required_doc'];

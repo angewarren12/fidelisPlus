@@ -56,6 +56,10 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         Route::put('/loyalty/{siraClientId}/vehicles', [\App\Http\Controllers\Api\LoyaltySiraIntegrationController::class, 'syncVehicles'])->name('loyalty.vehicles.sync');
     });
 
+    // Intégration entrante Odoo : remplacée par un cron de pull côté FidelisPlus
+    // (voir app/Console/Commands/SyncFromOdoo.php) suite au compte-rendu de la séance
+    // de travail avec leur équipe — Odoo n'appelle plus FidelisPlus directement.
+
     Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
@@ -146,6 +150,8 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::get('/sectors', [ProspectController::class, 'getSectors'])->name('sectors');
             Route::get('/lead-sources', [ProspectController::class, 'getLeadSources'])->name('lead-sources');
             Route::post('/', [ProspectController::class, 'store'])->name('store');
+            Route::get('/{id}', [ProspectController::class, 'show'])->name('show');
+            Route::put('/{id}', [ProspectController::class, 'update'])->name('update');
             Route::patch('/{id}/temperature', [ProspectController::class, 'updateTemperature'])->name('temperature');
             Route::patch('/{id}/convert', [ProspectController::class, 'convertToClient'])->name('convert');
         });

@@ -244,6 +244,8 @@ class QuoteController extends Controller
 
             $quote->update(['total_amount' => $total]);
 
+            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_created');
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Devis créé avec succès.',
@@ -388,6 +390,16 @@ class QuoteController extends Controller
 
         $quote->update(['status' => $newStatus]);
 
+        // Notifie Odoo à chaque étape clé du cycle de vie du devis : envoi au client,
+        // puis acceptation finale (validation du bon de commande par le commercial —
+        // pas le simple upload, cf. uploadBonDeCommande() qui a son propre événement).
+        if ($oldStatus !== 'sent' && $newStatus === 'sent') {
+            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_sent');
+        }
+        if ($oldStatus !== 'accepted' && $newStatus === 'accepted') {
+            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_accepted');
+        }
+
         // Si le devis est rattaché à une demande, on la marque comme traitée dès qu'il est envoyé / signé.
         if (in_array($newStatus, ['sent', 'accepted'], true) && $quote->quote_request_id) {
             $req = \App\Models\QuoteRequest::find($quote->quote_request_id);
@@ -489,6 +501,8 @@ class QuoteController extends Controller
         // L'upload n'accepte PAS automatiquement le devis : le commercial doit
         // analyser le document reçu puis décider (Accepter / Refuser) via updateStatus.
         $quote->update(['bon_de_commande_url' => $path]);
+
+        \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'bon_de_commande_uploaded');
 
         $uploadedByClient = $user && $user->role === 'client';
 

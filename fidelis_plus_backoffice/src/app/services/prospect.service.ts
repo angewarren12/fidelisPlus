@@ -86,6 +86,18 @@ export class ProspectService {
     );
   }
 
+  getProspect(id: number): Observable<Prospect> {
+    return this.http.get<{data: Prospect}>(`${this.API_URL}/${id}`).pipe(
+      map((res: {data: Prospect}) => res.data)
+    );
+  }
+
+  updateProspect(id: number, data: Omit<CreateProspectDto, 'contact_email'>): Observable<Prospect> {
+    return this.http.put<{data: Prospect}>(`${this.API_URL}/${id}`, data).pipe(
+      map((res: {data: Prospect}) => res.data)
+    );
+  }
+
   convertToClient(id: number): Observable<Prospect> {
     return this.http.patch<{data: Prospect}>(`${this.API_URL}/${id}/convert`, {}).pipe(
       map((res: {data: Prospect}) => res.data)

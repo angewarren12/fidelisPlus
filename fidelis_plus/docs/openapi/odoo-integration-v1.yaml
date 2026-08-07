@@ -1,0 +1,489 @@
+openapi: 3.0.3
+info:
+  title: Intégration FidelisPlus ↔ Odoo — API à implémenter côté Odoo
+  description: |
+    Ce document décrit les **6 endpoints qu'Odoo doit exposer** pour l'intégration avec
+    FidelisPlus (CRM commercial Mayelia). FidelisPlus est toujours à l'initiative des
+    appels — Odoo n'appelle jamais FidelisPlus :
+
+    - **3 endpoints POST (push)** : FidelisPlus vous notifie en temps réel de chaque
+      création/modification (prospects, clients, devis, véhicules de flotte).
+    - **3 endpoints GET (pull)** : un cron côté FidelisPlus interroge ces endpoints
+      toutes les 15 minutes pour récupérer ce qui a été créé/modifié directement chez
+      Odoo, filtré par le paramètre `since`.
+
+    Authentification unique dans les deux cas : jeton de service partagé, transmis en
+    en-tête `Authorization: Bearer {token}` (pas de session utilisateur).
+
+    Contexte complet et exemples : voir la spécification d'intégration transmise
+    séparément (document de travail HTML), et côté FidelisPlus
+    `app/Services/Odoo/OdooClient.php` / `app/Console/Commands/SyncFromOdoo.php` /
+    `app/Services/Odoo/OdooIngestService.php`.
+
+    **Chemins, noms de champs et objets Odoo cibles provisoires** — à valider ensemble
+    avant mise en production. Voir la section "Points à valider" de la spécification.
+  version: "1.0.0"
+
+servers:
+  - url: "{odooBaseUrl}"
+    variables:
+      odooBaseUrl:
+        default: https://odoo.example.com
+        description: URL de base de l'API Odoo (ODOO_OUTBOUND_BASE_URL côté FidelisPlus)
+
+tags:
+  - name: Sortant
+    description: FidelisPlus → Odoo (push, temps réel, à chaque création/modification)
+  - name: Entrant
+    description: Odoo → FidelisPlus (pull, cron FidelisPlus toutes les 15 minutes)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Jeton de service partagé (ODOO_OUTBOUND_TOKEN côté FidelisPlus)
+
+  schemas:
+    CompanyContext:
+      type: object
+      description: |
+        Identification de l'entreprise propriétaire, incluse dans les payloads véhicules
+        et devis pour qu'Odoo puisse toujours la retrouver (ou la créer si nécessaire)
+        sans dépendre d'un précédent appel à /fidelis/companies/sync — utile notamment si
+        cette entreprise n'a pas encore d'odoo_partner_id connu (sync pas encore passée,
+        ou en échec).
+      properties:
+        fidelis_company_id:
+          type: integer
+        odoo_partner_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        category:
+          type: string
+          enum: [entreprise, particulier]
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+
+    SyncAck:
+      type: object
+      description: Réponse attendue par FidelisPlus après un push réussi.
+      properties:
+        odoo_partner_id:
+          type: string
+          description: Présent uniquement en réponse à /fidelis/companies/sync
+        odoo_quote_id:
+          type: string
+          description: Présent uniquement en réponse à /fidelis/quotes/sync
+        odoo_vehicle_id:
+          type: string
+          description: Présent uniquement en réponse à /fidelis/vehicles/sync
+
+    CompanySync:
+      type: object
+      required: [event, fidelis_company_id, name]
+      properties:
+        event:
+          type: string
+          enum: [prospect_created, converted_to_client, company_archived, company_restored]
+        fidelis_company_id:
+          type: integer
+          description: Identifiant stable côté FidelisPlus — à utiliser comme clé d'idempotence
+        odoo_partner_id:
+          type: string
+          nullable: true
+          description: Votre identifiant, si déjà connu d'un envoi précédent
+        is_archived:
+          type: boolean
+          description: État courant (soft delete FidelisPlus)
+        name:
+          type: string
+        category:
+          type: string
+          enum: [entreprise, particulier]
+        company_type:
+          type: string
+          nullable: true
+          enum: [flotte, apporteur, garage]
+        sector:
+          type: string
+          nullable: true
+        rccm:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        zip_code:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        estimated_potential:
+          type: number
+          nullable: true
+        contact_first_name:
+          type: string
+          nullable: true
+        contact_last_name:
+          type: string
+          nullable: true
+        contact_email:
+          type: string
+          nullable: true
+          description: Obligatoire et unique de notre côté — identifiant de correspondance recommandé
+        contact_phone:
+          type: string
+          nullable: true
+
+    QuoteItem:
+      type: object
+      properties:
+        description:
+          type: string
+        quantity:
+          type: integer
+        price:
+          type: number
+
+    QuoteSync:
+      type: object
+      required: [event, fidelis_quote_id, fidelis_quote_number]
+      properties:
+        event:
+          type: string
+          enum: [quote_created, quote_sent, bon_de_commande_uploaded, quote_accepted]
+        fidelis_quote_id:
+          type: integer
+          description: Clé d'idempotence
+        fidelis_quote_number:
+          type: string
+        fidelis_company_id:
+          type: integer
+        odoo_partner_id:
+          type: string
+          nullable: true
+        company:
+          allOf:
+            - $ref: "#/components/schemas/CompanyContext"
+          description: Entreprise cliente pour ce devis — présent à chaque envoi, redondant avec fidelis_company_id/odoo_partner_id mais toujours à jour
+        odoo_quote_id:
+          type: string
+          nullable: true
+          description: Votre référence, si déjà connue (renvoyée via le pull /fidelis/quotes/updated)
+        status:
+          type: string
+          enum: [draft, sent, accepted, declined, expired]
+        currency:
+          type: string
+          example: XOF
+        total_amount:
+          type: number
+        valid_until:
+          type: string
+          format: date
+          nullable: true
+        payment_term:
+          type: string
+          nullable: true
+          description: Libellé de la condition de paiement (ex. "30 jours")
+        bon_de_commande_url:
+          type: string
+          nullable: true
+          description: Lien vers le document uploadé, dès qu'il existe
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItem"
+
+    VehicleSync:
+      type: object
+      required: [event, fidelis_vehicle_id, license_plate]
+      properties:
+        event:
+          type: string
+          enum: [vehicle_created, vehicle_updated]
+        fidelis_vehicle_id:
+          type: integer
+          description: Clé d'idempotence
+        odoo_vehicle_id:
+          type: string
+          nullable: true
+        odoo_partner_id:
+          type: string
+          nullable: true
+          description: Propriétaire (client)
+        fidelis_company_id:
+          type: integer
+        company:
+          allOf:
+            - $ref: "#/components/schemas/CompanyContext"
+          description: Entreprise propriétaire de ce véhicule — présent à chaque envoi
+        license_plate:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        vehicle_type:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        fuel_type:
+          type: string
+          nullable: true
+        usage_type:
+          type: string
+          nullable: true
+          enum: [transport, personnel]
+        status:
+          type: string
+          description: Statut de conformité contrôle technique côté FidelisPlus
+
+    CompanyUpdated:
+      type: object
+      required: [odoo_partner_id, name]
+      description: Élément du tableau `data` renvoyé par GET /fidelis/companies/updated
+      properties:
+        odoo_partner_id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [prospect, client]
+        category:
+          type: string
+          enum: [entreprise, particulier]
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        sector:
+          type: string
+          nullable: true
+        contact_first_name:
+          type: string
+          nullable: true
+        contact_last_name:
+          type: string
+          nullable: true
+        contact_email:
+          type: string
+          nullable: true
+          description: Requis pour que FidelisPlus crée/mette à jour le correspondant
+        contact_phone:
+          type: string
+          nullable: true
+        commercial_first_name:
+          type: string
+          nullable: true
+          description: Pour rapprochement automatique avec un commercial FidelisPlus existant (nom+prénom exacts)
+        commercial_last_name:
+          type: string
+          nullable: true
+        is_archived:
+          type: boolean
+
+    VehicleUpdated:
+      type: object
+      required: [fidelis_vehicle_id]
+      description: |
+        Élément du tableau `data` renvoyé par GET /fidelis/vehicles/updated. Référence
+        uniquement — les véhicules sont toujours créés côté FidelisPlus (jamais côté
+        Odoo), donc ceci ne fait que corréler notre identifiant avec le vôtre, exactement
+        comme QuoteUpdated pour les devis. Toute correspondance sans fidelis_vehicle_id
+        connu de nous est ignorée et journalisée, jamais créée.
+      properties:
+        fidelis_vehicle_id:
+          type: integer
+          description: Corrélation avec le véhicule transmis via POST /fidelis/vehicles/sync
+        odoo_vehicle_id:
+          type: string
+          nullable: true
+
+    QuoteUpdated:
+      type: object
+      required: [fidelis_quote_id]
+      description: Élément du tableau `data` renvoyé par GET /fidelis/quotes/updated
+      properties:
+        fidelis_quote_id:
+          type: integer
+          description: Corrélation avec le devis transmis via POST /fidelis/quotes/sync
+        odoo_quote_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+
+paths:
+  /fidelis/companies/sync:
+    post:
+      tags: [Sortant]
+      summary: Prospect/client créé, converti, archivé ou restauré
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanySync"
+      responses:
+        "200":
+          description: Synchronisé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncAck"
+        "401":
+          description: Jeton invalide ou manquant
+
+  /fidelis/quotes/sync:
+    post:
+      tags: [Sortant]
+      summary: Devis créé, envoyé, bon de commande enregistré, ou accepté
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteSync"
+      responses:
+        "200":
+          description: Synchronisé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncAck"
+        "401":
+          description: Jeton invalide ou manquant
+
+  /fidelis/vehicles/sync:
+    post:
+      tags: [Sortant]
+      summary: Véhicule de flotte créé ou modifié
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleSync"
+      responses:
+        "200":
+          description: Synchronisé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncAck"
+        "401":
+          description: Jeton invalide ou manquant
+
+  /fidelis/companies/updated:
+    get:
+      tags: [Entrant]
+      summary: Prospects/clients créés ou modifiés côté Odoo depuis `since`
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: Date ISO 8601 de la dernière synchronisation réussie ; absent au tout premier appel
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Liste des enregistrements modifiés (vide si rien de nouveau)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CompanyUpdated"
+
+  /fidelis/vehicles/updated:
+    get:
+      tags: [Entrant]
+      summary: Référence Odoo des véhicules précédemment poussés (jamais de création)
+      description: |
+        Les véhicules ne sont jamais créés côté Odoo — c'est toujours FidelisPlus qui les
+        crée (voir /fidelis/vehicles/sync). Ce pull sert uniquement à récupérer votre
+        odoo_vehicle_id sur un véhicule que nous vous avons déjà envoyé, même principe
+        que /fidelis/quotes/updated pour les devis.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Liste des références modifiées (vide si rien de nouveau)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/VehicleUpdated"
+
+  /fidelis/quotes/updated:
+    get:
+      tags: [Entrant]
+      summary: Référence/statut des devis mis à jour côté Odoo depuis `since`
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Liste des devis modifiés (vide si rien de nouveau)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/QuoteUpdated"

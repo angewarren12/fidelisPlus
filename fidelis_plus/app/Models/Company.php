@@ -17,6 +17,8 @@ class Company extends Model
         'category',
         'company_type',
         'created_via_marketing',
+        'created_via_odoo',
+        'odoo_partner_id',
         'name',
         'email',
         'phone',
@@ -44,12 +46,14 @@ class Company extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'created_via_marketing' => 'boolean',
+        'created_via_odoo' => 'boolean',
         'last_contact_date' => 'datetime',
         'converted_at' => 'datetime',
         'account_balance' => 'decimal:2',
         'bonus_fleet_awarded_at' => 'datetime',
         'bonus_profile_completed_awarded_at' => 'datetime',
         'bonus_referral_awarded_at' => 'datetime',
+        'odoo_synced_at' => 'datetime',
     ];
 
     public function isIndividual(): bool

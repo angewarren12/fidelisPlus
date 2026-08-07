@@ -138,12 +138,13 @@ const STATUSES_PRIORITAIRE = 'en_retard,bientot';
                 <th class="px-6 py-4 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Carburant</th>
                 <th class="px-6 py-4 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Dernière Visite</th>
                 <th class="px-6 py-4 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Statut</th>
+                <th class="px-6 py-4 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Provenance</th>
                 <th class="px-6 py-4"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-surface-container/50">
               <tr *ngIf="loading()">
-                <td colspan="7" class="px-6 py-16 text-center">
+                <td colspan="8" class="px-6 py-16 text-center">
                   <span class="material-symbols-outlined animate-spin text-primary text-4xl block mb-2">sync</span>
                   <p class="text-outline font-medium">Chargement des données de la flotte...</p>
                 </td>
@@ -170,6 +171,10 @@ const STATUSES_PRIORITAIRE = 'en_retard,bientot';
                   <td class="px-6 py-4">
                     <span class="px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-tighter" [ngClass]="statusBadgeClass(v.status)">{{ statusLabel(v.status) }}</span>
                   </td>
+                  <td class="px-6 py-4">
+                    <span *ngIf="v.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#714B67]/10 text-[#714B67]">Odoo</span>
+                    <span *ngIf="!v.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary">FidelisPlus</span>
+                  </td>
                   <td class="px-6 py-4 text-right">
                     <button type="button" (click)="deleteVehicle(v, $event)" class="p-2 text-outline hover:text-error transition-colors opacity-0 group-hover:opacity-100">
                       <span class="material-symbols-outlined text-sm">delete</span>
@@ -178,7 +183,7 @@ const STATUSES_PRIORITAIRE = 'en_retard,bientot';
                 </tr>
               </ng-container>
               <tr *ngIf="!loading() && vehiclesPage().length === 0">
-                <td colspan="7" class="px-6 py-20 text-center">
+                <td colspan="8" class="px-6 py-20 text-center">
                   <span class="material-symbols-outlined text-6xl text-outline/30 block mb-3">no_crash</span>
                   <p class="text-on-surface font-bold text-lg mb-1">Aucun véhicule</p>
                   <p class="text-outline text-sm">Ajustez vos filtres ou ajoutez des véhicules depuis le profil client.</p>
@@ -225,6 +230,10 @@ const STATUSES_PRIORITAIRE = 'en_retard,bientot';
                   </span>
                 </div>
                 <span class="px-2.5 py-1 text-[9px] font-black rounded-full uppercase tracking-tighter" [ngClass]="statusBadgeClass(v.status)">{{ statusLabel(v.status) }}</span>
+              </div>
+              <div>
+                <span *ngIf="v.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#714B67]/10 text-[#714B67]">Odoo</span>
+                <span *ngIf="!v.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary">FidelisPlus</span>
               </div>
             </div>
             <div *ngIf="vehiclesPage().length === 0" class="col-span-full py-20 text-center">

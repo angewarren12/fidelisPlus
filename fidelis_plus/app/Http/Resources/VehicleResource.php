@@ -40,6 +40,7 @@ class VehicleResource extends JsonResource
             'next_ct_date' => $this->next_ct_date ? Carbon::parse($this->next_ct_date)->toDateString() : null,
             'next_pollution_date' => $this->next_pollution_date ? Carbon::parse($this->next_pollution_date)->toDateString() : null,
             'status' => $this->status,
+            'created_via_odoo' => (bool) $this->created_via_odoo,
             'visits' => $this->whenLoaded('visits', function() {
                 return $this->visits->map(fn($v) => [
                     'id' => $v->id,
