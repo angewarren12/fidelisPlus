@@ -5,28 +5,31 @@ namespace App\Services\Odoo;
 use App\Models\Company;
 use App\Models\Quote;
 use App\Models\Vehicle;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Client HTTP vers l'API d'Odoo (service commercial uniquement), dans les deux sens
- * mais toujours à l'initiative de Fidelis (Odoo n'appelle jamais Fidelis, suite au
- * compte-rendu de la séance de travail avec leur équipe) :
- * - sortant : Fidelis pousse les prospects/clients/flottes créés ou modifiés, et les
- *   devis créés/envoyés/acceptés. Odoo vérifie de son côté si l'enregistrement existe
- *   déjà et l'enregistre sinon.
- * - pull : Fidelis interroge périodiquement Odoo (voir
- *   app/Console/Commands/SyncFromOdoo.php) pour récupérer ce qui a été créé/modifié
- *   directement côté Odoo.
+ * Client HTTP vers l'API Odoo (Sale Odoo API v1), dans les deux sens
+ * mais toujours à l'initiative de Fidelis (Odoo n'appelle jamais Fidelis).
  *
- * Contrat attendu côté Odoo (provisoire, à valider avec leur équipe) :
- * - POST {base}/fidelis/companies/sync -> { odoo_partner_id: string }
- * - POST {base}/fidelis/quotes/sync -> { odoo_quote_id: string }
- * - POST {base}/fidelis/vehicles/sync -> { odoo_vehicle_id: string }
- * - GET  {base}/fidelis/companies/updated?since=... -> { data: [...] }
- * - GET  {base}/fidelis/vehicles/updated?since=... -> { data: [...] } (référence uniquement,
- *   voir fetchUpdatedVehicles() : les véhicules ne sont jamais créés depuis Odoo)
- * - GET  {base}/fidelis/quotes/updated?since=... -> { data: [...] }
+ * Authentification : header X-API-Key (supporté en parallèle de Bearer).
+ * Format de réponse uniforme : { "success": bool, "data": {...}, "message": "..." }
+ *
+ * Endpoints utilisés :
+ *   Partners   : GET|POST /api/sale_odoo/v1/partners
+ *                GET|PUT  /api/sale_odoo/v1/partners/{id}
+ *                POST     /api/sale_odoo/v1/partners/by-ref/{ref}
+ *                POST     /api/sale_odoo/v1/partners/{id}/archive|unarchive|promote-to-customer
+ *   Vehicles   : GET|POST /api/sale_odoo/v1/vehicles
+ *                GET|PUT  /api/sale_odoo/v1/vehicles/{id}
+ *                POST     /api/sale_odoo/v1/vehicles/{id}/archive
+ *   Sale Orders: GET|POST /api/sale_odoo/v1/sale_orders
+ *                GET|PUT  /api/sale_odoo/v1/sale_orders/{id}
+ *
+ * Prévention des doublons : chaque ressource porte un external_ref stable
+ * ("fidelis-company-{id}", "fidelis-vehicle-{id}", "fidelis-quote-{id}")
+ * permettant le lookup by-ref avant toute création.
  */
 class OdooClient
 {
@@ -35,251 +38,474 @@ class OdooClient
         private readonly ?string $token = null,
     ) {}
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Infrastructure HTTP
+    // ─────────────────────────────────────────────────────────────────────────
+
     private function http()
     {
         return Http::baseUrl($this->baseUrl ?? (string) config('services.odoo.outbound_base_url'))
-            ->withToken($this->token ?? (string) config('services.odoo.outbound_token'))
+            ->withHeaders([
+                // L'API Odoo supporte X-API-Key OU Authorization: Bearer.
+                'X-API-Key' => $this->token ?? (string) config('services.odoo.outbound_token'),
+            ])
             ->acceptJson()
-            ->timeout(8);
+            ->timeout(12);
     }
 
     /**
-     * @return array{odoo_partner_id: string}|null null si l'appel échoue (Odoo indisponible).
+     * Extrait le tableau `data` de { "success": true, "data": ... }.
+     * Retourne null et journalise en cas d'échec.
+     */
+    private function extractData(Response $response, string $label): ?array
+    {
+        if (! $response->successful()) {
+            Log::warning("OdooClient::{$label} — HTTP {$response->status()}", [
+                'body' => mb_substr($response->body(), 0, 500),
+            ]);
+            return null;
+        }
+
+        $json = $response->json();
+        if (! ($json['success'] ?? false)) {
+            Log::warning("OdooClient::{$label} — success=false", [
+                'error' => $json['error'] ?? $json,
+            ]);
+            return null;
+        }
+
+        return $json['data'] ?? [];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Lookups par référence externe (anti-doublons)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function findPartnerByRef(string $ref): ?int
+    {
+        try {
+            $data = $this->extractData(
+                $this->http()->get("/api/sale_odoo/v1/partners/by-ref/{$ref}"),
+                'findPartnerByRef'
+            );
+            return isset($data['id']) ? (int) $data['id'] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::findPartnerByRef exception', ['message' => $e->getMessage(), 'ref' => $ref]);
+            return null;
+        }
+    }
+
+    private function findVehicleByRef(string $ref): ?int
+    {
+        try {
+            $data = $this->extractData(
+                $this->http()->get("/api/sale_odoo/v1/vehicles/by-ref/{$ref}"),
+                'findVehicleByRef'
+            );
+            return isset($data['id']) ? (int) $data['id'] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::findVehicleByRef exception', ['message' => $e->getMessage(), 'ref' => $ref]);
+            return null;
+        }
+    }
+
+    private function findSaleOrderByRef(string $ref): ?int
+    {
+        try {
+            $data = $this->extractData(
+                $this->http()->get("/api/sale_odoo/v1/sale_orders/by-ref/{$ref}"),
+                'findSaleOrderByRef'
+            );
+            return isset($data['id']) ? (int) $data['id'] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::findSaleOrderByRef exception', ['message' => $e->getMessage(), 'ref' => $ref]);
+            return null;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sync sortant : Company (Prospect / Client → res.partner)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Synchronise une fiche Société/Prospect/Client vers Odoo (res.partner).
+     *
+     * Évènements gérés :
+     *   company_archived     → POST /partners/{id}/archive
+     *   company_restored     → POST /partners/{id}/unarchive
+     *   converted_to_client  → PUT /partners/{id}  + POST /partners/{id}/promote-to-customer
+     *   prospect_created     → POST /partners  (ou PUT si déjà connu par by-ref lookup)
+     *   (tout autre)         → PUT /partners/{id}  |  POST /partners
+     *
+     * @return array{odoo_partner_id: int}|null  null = Odoo indisponible.
      */
     public function syncCompany(Company $company, string $event): ?array
     {
         $mainContact = $company->contacts()->where('is_main_contact', true)->first()
             ?? $company->contacts()->first();
 
+        $ref = 'fidelis-company-' . $company->id;
+
+        // Résolution de l'ID Odoo : persisté en base → lookup by-ref → null (premier push).
+        $odooId = $company->odoo_partner_id
+            ? (int) $company->odoo_partner_id
+            : $this->findPartnerByRef($ref);
+
+        // --- Archivage ---
+        if ($event === 'company_archived') {
+            if (! $odooId) {
+                return ['odoo_partner_id' => 0]; // Pas encore synchronisé → rien à faire.
+            }
+            return $this->archivePartner($odooId, $company->id);
+        }
+
+        // --- Restauration ---
+        if ($event === 'company_restored') {
+            if (! $odooId) {
+                return ['odoo_partner_id' => 0];
+            }
+            return $this->unarchivePartner($odooId, $company->id);
+        }
+
+        $payload = [
+            'external_ref'  => $ref,
+            'name'          => $company->name,
+            'email'         => $company->email,
+            'phone'         => $company->phone,
+            'street'        => $company->address,
+            'city'          => $company->city,
+            'zip'           => $company->zip_code,
+            'is_company'    => $company->category === 'entreprise',
+            'vat'           => $company->rccm,
+            'contact_name'  => $mainContact
+                ? trim(($mainContact->first_name ?? '') . ' ' . ($mainContact->last_name ?? ''))
+                : null,
+            'contact_email' => $mainContact?->email,
+            'contact_phone' => $mainContact?->phone,
+        ];
+
         try {
-            $response = $this->http()->post('/fidelis/companies/sync', [
-                'event' => $event,
-                'fidelis_company_id' => $company->id,
-                'odoo_partner_id' => $company->odoo_partner_id,
-                'is_archived' => $company->trashed(),
-                'name' => $company->name,
-                'category' => $company->category,
-                'company_type' => $company->company_type,
-                'sector' => $company->sector,
-                'rccm' => $company->rccm,
-                'address' => $company->address,
-                'city' => $company->city,
-                'zip_code' => $company->zip_code,
-                'phone' => $company->phone,
-                'email' => $company->email,
-                'estimated_potential' => $company->estimated_potential,
-                'contact_first_name' => $mainContact?->first_name,
-                'contact_last_name' => $mainContact?->last_name,
-                'contact_email' => $mainContact?->email,
-                'contact_phone' => $mainContact?->phone,
-            ]);
+            if ($odooId) {
+                $data = $this->extractData(
+                    $this->http()->put("/api/sale_odoo/v1/partners/{$odooId}", $payload),
+                    'syncCompany/PUT'
+                );
+                if ($data === null) {
+                    return null;
+                }
+                if ($event === 'converted_to_client') {
+                    $this->promoteToCustomer($odooId, $company->id);
+                }
+                return ['odoo_partner_id' => $odooId];
+            }
 
-            if (! $response->successful()) {
-                Log::warning('OdooClient::syncCompany a échoué', [
-                    'status' => $response->status(),
-                    'company_id' => $company->id,
-                    'event' => $event,
-                ]);
-
+            // Création.
+            $data = $this->extractData(
+                $this->http()->post('/api/sale_odoo/v1/partners', $payload),
+                'syncCompany/POST'
+            );
+            if ($data === null) {
                 return null;
             }
 
-            return [
-                'odoo_partner_id' => (string) $response->json('odoo_partner_id'),
-            ];
+            $newId = (int) ($data['id'] ?? 0);
+            if ($event === 'converted_to_client' && $newId) {
+                $this->promoteToCustomer($newId, $company->id);
+            }
+
+            return ['odoo_partner_id' => $newId];
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncCompany exception', [
-                'message' => $e->getMessage(),
-                'company_id' => $company->id,
-                'event' => $event,
+                'message' => $e->getMessage(), 'company_id' => $company->id, 'event' => $event,
             ]);
-
             return null;
         }
     }
 
-    /**
-     * Identification de l'entreprise propriétaire, incluse dans les payloads véhicules et
-     * devis pour qu'Odoo puisse toujours la retrouver (ou la créer si nécessaire) sans
-     * dépendre d'un précédent appel à /fidelis/companies/sync — utile notamment si cette
-     * entreprise n'a pas encore d'odoo_partner_id connu (sync pas encore passée, ou en échec).
-     */
-    private function companyContext(?Company $company): ?array
+    private function archivePartner(int $odooId, int $companyId): ?array
     {
-        if ($company === null) {
+        try {
+            $data = $this->extractData(
+                $this->http()->post("/api/sale_odoo/v1/partners/{$odooId}/archive"),
+                'archivePartner'
+            );
+            return $data !== null ? ['odoo_partner_id' => $odooId] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::archivePartner exception', ['message' => $e->getMessage(), 'company_id' => $companyId]);
             return null;
         }
-
-        return [
-            'fidelis_company_id' => $company->id,
-            'odoo_partner_id' => $company->odoo_partner_id,
-            'name' => $company->name,
-            'category' => $company->category,
-            'email' => $company->email,
-            'phone' => $company->phone,
-        ];
     }
 
+    private function unarchivePartner(int $odooId, int $companyId): ?array
+    {
+        try {
+            $data = $this->extractData(
+                $this->http()->post("/api/sale_odoo/v1/partners/{$odooId}/unarchive"),
+                'unarchivePartner'
+            );
+            return $data !== null ? ['odoo_partner_id' => $odooId] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::unarchivePartner exception', ['message' => $e->getMessage(), 'company_id' => $companyId]);
+            return null;
+        }
+    }
+
+    private function promoteToCustomer(int $odooId, int $companyId): void
+    {
+        try {
+            $response = $this->http()->post("/api/sale_odoo/v1/partners/{$odooId}/promote-to-customer");
+            if (! $response->successful()) {
+                Log::warning('OdooClient::promoteToCustomer a échoué', [
+                    'odoo_id' => $odooId, 'company_id' => $companyId, 'status' => $response->status(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::promoteToCustomer exception', ['message' => $e->getMessage(), 'company_id' => $companyId]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sync sortant : Vehicle (Flotte → fleet.vehicle)
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
-     * @return array{odoo_vehicle_id: string}|null null si l'appel échoue (Odoo indisponible).
+     * Synchronise un véhicule de flotte vers Odoo (fleet.vehicle).
+     *
+     * Note model_id : l'API Odoo requiert normalement un model_id entier.
+     * On envoie brand_name/model_name en texte — si Odoo refuse (422), le
+     * sync_status passera à 'failed' et sera journalisé. À clarifier avec
+     * l'équipe Odoo si nécessaire.
+     *
+     * @return array{odoo_vehicle_id: int}|null
      */
     public function syncVehicle(Vehicle $vehicle, string $event): ?array
     {
+        $ref = 'fidelis-vehicle-' . $vehicle->id;
+
+        $odooId = $vehicle->odoo_vehicle_id
+            ? (int) $vehicle->odoo_vehicle_id
+            : $this->findVehicleByRef($ref);
+
+        if ($event === 'vehicle_archived') {
+            if (! $odooId) {
+                return ['odoo_vehicle_id' => 0];
+            }
+            return $this->archiveVehicle($odooId, $vehicle->id);
+        }
+
+        $payload = [
+            'external_ref'  => $ref,
+            'license_plate' => $vehicle->license_plate,
+            'brand_name'    => $vehicle->brand,
+            'model_name'    => $vehicle->model,
+            'year'          => $vehicle->year,
+            'fuel'          => $vehicle->fuel_type,
+            'state_name'    => $vehicle->status,
+            'partner_id'    => $vehicle->company?->odoo_partner_id
+                ? (int) $vehicle->company->odoo_partner_id
+                : null,
+            'partner_ref'   => $vehicle->company_id
+                ? 'fidelis-company-' . $vehicle->company_id
+                : null,
+        ];
+
         try {
-            $response = $this->http()->post('/fidelis/vehicles/sync', [
-                'event' => $event,
-                'fidelis_vehicle_id' => $vehicle->id,
-                'odoo_vehicle_id' => $vehicle->odoo_vehicle_id,
-                // Identifiants à plat (compat) + objet complet pour identifier/créer
-                // l'entreprise propriétaire sans dépendance d'ordre entre les syncs.
-                'odoo_partner_id' => $vehicle->company?->odoo_partner_id,
-                'fidelis_company_id' => $vehicle->company_id,
-                'company' => $this->companyContext($vehicle->company),
-                'license_plate' => $vehicle->license_plate,
-                'brand' => $vehicle->brand,
-                'model' => $vehicle->model,
-                'vehicle_type' => $vehicle->vehicle_type,
-                'year' => $vehicle->year,
-                'fuel_type' => $vehicle->fuel_type,
-                'usage_type' => $vehicle->usage_type,
-                'status' => $vehicle->status,
-            ]);
-
-            if (! $response->successful()) {
-                Log::warning('OdooClient::syncVehicle a échoué', [
-                    'status' => $response->status(),
-                    'vehicle_id' => $vehicle->id,
-                    'event' => $event,
-                ]);
-
-                return null;
+            if ($odooId) {
+                $data = $this->extractData(
+                    $this->http()->put("/api/sale_odoo/v1/vehicles/{$odooId}", $payload),
+                    'syncVehicle/PUT'
+                );
+                return $data !== null ? ['odoo_vehicle_id' => $odooId] : null;
             }
 
-            return [
-                'odoo_vehicle_id' => (string) $response->json('odoo_vehicle_id'),
-            ];
+            $data = $this->extractData(
+                $this->http()->post('/api/sale_odoo/v1/vehicles', $payload),
+                'syncVehicle/POST'
+            );
+            return $data !== null ? ['odoo_vehicle_id' => (int) ($data['id'] ?? 0)] : null;
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncVehicle exception', [
-                'message' => $e->getMessage(),
-                'vehicle_id' => $vehicle->id,
-                'event' => $event,
+                'message' => $e->getMessage(), 'vehicle_id' => $vehicle->id, 'event' => $event,
             ]);
-
             return null;
         }
     }
 
+    private function archiveVehicle(int $odooId, int $vehicleId): ?array
+    {
+        try {
+            $data = $this->extractData(
+                $this->http()->post("/api/sale_odoo/v1/vehicles/{$odooId}/archive"),
+                'archiveVehicle'
+            );
+            return $data !== null ? ['odoo_vehicle_id' => $odooId] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::archiveVehicle exception', ['message' => $e->getMessage(), 'vehicle_id' => $vehicleId]);
+            return null;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sync sortant : Quote (Devis → sale.order)
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
-     * @return array{odoo_quote_id: string}|null null si l'appel échoue (Odoo indisponible).
+     * Synchronise un devis vers Odoo (sale.order).
+     * États Odoo : draft | sent | sale (accepté) | done | cancel.
+     *
+     * @return array{odoo_quote_id: int}|null
      */
     public function syncQuote(Quote $quote, string $event): ?array
     {
+        $ref = 'fidelis-quote-' . $quote->id;
+
+        $odooId = $quote->odoo_quote_id
+            ? (int) $quote->odoo_quote_id
+            : $this->findSaleOrderByRef($ref);
+
+        $payload = [
+            'external_ref'     => $ref,
+            'client_order_ref' => $quote->quote_number,
+            'partner_id'       => $quote->company?->odoo_partner_id
+                ? (int) $quote->company->odoo_partner_id
+                : null,
+            'partner_ref'      => $quote->company_id
+                ? 'fidelis-company-' . $quote->company_id
+                : null,
+            'state'            => $this->mapQuoteStatus($quote->status),
+            'validity_date'    => $quote->valid_until?->format('Y-m-d'),
+            'note'             => $quote->bon_de_commande_url
+                ? 'Bon de commande : ' . $quote->bon_de_commande_url
+                : null,
+            'order_line'       => $quote->items->map(fn ($item) => [
+                'name'            => $item->description,
+                'product_uom_qty' => (float) $item->quantity,
+                'price_unit'      => (float) $item->price,
+            ])->all(),
+        ];
+
         try {
-            $response = $this->http()->post('/fidelis/quotes/sync', [
-                'event' => $event,
-                'fidelis_quote_id' => $quote->id,
-                'fidelis_quote_number' => $quote->quote_number,
-                // Identifiants à plat (compat) + objet complet pour identifier/créer
-                // l'entreprise propriétaire sans dépendance d'ordre entre les syncs.
-                'fidelis_company_id' => $quote->company_id,
-                'odoo_partner_id' => $quote->company?->odoo_partner_id,
-                'company' => $this->companyContext($quote->company),
-                'odoo_quote_id' => $quote->odoo_quote_id,
-                'status' => $quote->status,
-                'currency' => $quote->currency,
-                'total_amount' => $quote->total_amount,
-                'valid_until' => $quote->valid_until,
-                'payment_term' => $quote->paymentTerm?->label,
-                'bon_de_commande_url' => $quote->bon_de_commande_url,
-                'items' => $quote->items->map(fn ($item) => [
-                    'description' => $item->description,
-                    'quantity' => $item->quantity,
-                    'price' => $item->price,
-                ])->all(),
-            ]);
-
-            if (! $response->successful()) {
-                Log::warning('OdooClient::syncQuote a échoué', [
-                    'status' => $response->status(),
-                    'quote_id' => $quote->id,
-                    'event' => $event,
-                ]);
-
-                return null;
+            if ($odooId) {
+                $data = $this->extractData(
+                    $this->http()->put("/api/sale_odoo/v1/sale_orders/{$odooId}", $payload),
+                    'syncQuote/PUT'
+                );
+                return $data !== null ? ['odoo_quote_id' => $odooId] : null;
             }
 
-            return [
-                'odoo_quote_id' => (string) $response->json('odoo_quote_id'),
-            ];
+            $data = $this->extractData(
+                $this->http()->post('/api/sale_odoo/v1/sale_orders', $payload),
+                'syncQuote/POST'
+            );
+            return $data !== null ? ['odoo_quote_id' => (int) ($data['id'] ?? 0)] : null;
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncQuote exception', [
-                'message' => $e->getMessage(),
-                'quote_id' => $quote->id,
-                'event' => $event,
+                'message' => $e->getMessage(), 'quote_id' => $quote->id, 'event' => $event,
             ]);
-
             return null;
         }
     }
 
+    private function mapQuoteStatus(string $status): string
+    {
+        return match ($status) {
+            'draft'            => 'draft',
+            'sent'             => 'sent',
+            'accepted'         => 'sale',
+            'rejected',
+            'expired'          => 'cancel',
+            default            => 'draft',
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Pull entrant (Odoo → FidelisPlus) — appelé par le cron SyncFromOdoo
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
-     * Récupère les prospects/clients créés ou modifiés côté Odoo depuis $since.
+     * Récupère toutes les pages de partenaires Odoo modifiés depuis $since.
      *
-     * @return array[]|null tableau d'enregistrements bruts (voir OdooIngestService::ingestCompany),
-     *                       null si l'appel échoue.
+     * @return array[]|null  null si Odoo est indisponible.
      */
     public function fetchUpdatedCompanies(?string $since): ?array
     {
-        return $this->fetchUpdated('/fidelis/companies/updated', $since, 'fetchUpdatedCompanies');
+        return $this->fetchAllPages('/api/sale_odoo/v1/partners', $since, 'fetchUpdatedCompanies');
     }
 
-    /**
-     * Récupère la référence Odoo des véhicules précédemment poussés (voir syncVehicle()).
-     * Les véhicules ne sont jamais créés côté Odoo — c'est toujours FidelisPlus qui les
-     * crée — donc ce pull ne fait que corréler fidelis_vehicle_id <-> odoo_vehicle_id,
-     * jamais une création (voir OdooIngestService::ingestVehicle()).
-     *
-     * @return array[]|null
-     */
+    /** @return array[]|null */
     public function fetchUpdatedVehicles(?string $since): ?array
     {
-        return $this->fetchUpdated('/fidelis/vehicles/updated', $since, 'fetchUpdatedVehicles');
+        return $this->fetchAllPages('/api/sale_odoo/v1/vehicles', $since, 'fetchUpdatedVehicles');
+    }
+
+    /** @return array[]|null */
+    public function fetchUpdatedQuotes(?string $since): ?array
+    {
+        return $this->fetchAllPages('/api/sale_odoo/v1/sale_orders', $since, 'fetchUpdatedQuotes');
     }
 
     /**
-     * Récupère les devis créés ou modifiés côté Odoo depuis $since.
+     * Pagination transparente : appelle autant de pages que nécessaire.
+     * Paramètre delta : `modified_since` (ISO 8601) — nom réel côté Odoo.
+     * Limite par page : 200 (max autorisé par l'API).
      *
      * @return array[]|null
      */
-    public function fetchUpdatedQuotes(?string $since): ?array
+    private function fetchAllPages(string $path, ?string $since, string $label): ?array
     {
-        return $this->fetchUpdated('/fidelis/quotes/updated', $since, 'fetchUpdatedQuotes');
-    }
+        $limit = 200;
+        $page  = 1;
+        $all   = [];
 
-    /**
-     * @return array[]|null
-     */
-    private function fetchUpdated(string $path, ?string $since, string $callerLabel): ?array
-    {
+        $params = array_filter(['modified_since' => $since, 'limit' => $limit]);
+
         try {
-            $response = $this->http()->get($path, array_filter(['since' => $since]));
+            do {
+                $params['page'] = $page;
+                $response = $this->http()->get($path, $params);
 
-            if (! $response->successful()) {
-                Log::warning("OdooClient::{$callerLabel} a échoué", [
-                    'status' => $response->status(),
-                    'since' => $since,
-                ]);
+                if (! $response->successful()) {
+                    Log::warning("OdooClient::{$label} — HTTP {$response->status()}", [
+                        'page' => $page, 'since' => $since,
+                    ]);
+                    return $page === 1 ? null : $all;
+                }
 
-                return null;
-            }
+                $json = $response->json();
+                if (! ($json['success'] ?? false)) {
+                    Log::warning("OdooClient::{$label} — success=false", ['page' => $page]);
+                    return $page === 1 ? null : $all;
+                }
 
-            return (array) $response->json('data', []);
+                // L'API peut renvoyer data sous forme de liste directe ou de { records, total }.
+                $data    = $json['data'] ?? [];
+                $records = is_array($data) && array_key_exists('records', $data)
+                    ? (array) ($data['records'] ?? [])
+                    : (array) $data;
+
+                // Cas d'un objet unique retourné à la place d'un tableau.
+                if (isset($records['id'])) {
+                    $records = [$records];
+                }
+
+                if (empty($records)) {
+                    break;
+                }
+
+                $all  = array_merge($all, $records);
+                $page++;
+
+                // Fin de pagination : réponse incomplète = dernière page.
+                if (count($records) < $limit) {
+                    break;
+                }
+            } while (true);
+
+            return $all;
         } catch (\Throwable $e) {
-            Log::warning("OdooClient::{$callerLabel} exception", [
-                'message' => $e->getMessage(),
-                'since' => $since,
+            Log::warning("OdooClient::{$label} exception", [
+                'message' => $e->getMessage(), 'since' => $since,
             ]);
-
             return null;
         }
     }

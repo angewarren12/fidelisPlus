@@ -1,0 +1,33 @@
+Objet: [ACTION REQUISE] Permissions API Odoo - FidelisPlus
+
+Bonjour,
+
+Pour pouvoir tester la synchronisation FidelisPlus ↔ Odoo, nous avons besoin que 
+vous configuriez les permissions pour l'utilisateur API.
+
+════════════════════════════════════════════════════════════════════════════════
+
+📝 CE QUE VOUS DEVEZ FAIRE:
+
+1. Allez dans: Paramètres → Utilisateurs et sociétés → Utilisateurs
+
+2. Cherchez l'utilisateur: moustapha.camara@cieria.com
+
+3. Cliquez sur l'onglet "Groupes d'accès"
+
+4. Ajoutez ces 3 groupes:
+   ✓ Parc automobile / Administrateur
+   ✓ Ventes / Administrateur
+   ✓ Contact / Création
+
+5. Cliquez sur "Enregistrer"
+
+════════════════════════════════════════════════════════════════════════════════
+
+Ça devrait prendre 2 minutes max. Une fois fait, confirmez-nous par email et 
+nous pourrons tester la synchronisation complète.
+
+Merci !
+
+Cordialement,
+[DevOps Team]

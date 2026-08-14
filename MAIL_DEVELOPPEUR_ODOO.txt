@@ -1,0 +1,224 @@
+═════════════════════════════════════════════════════════════════════════════
+OBJET: [SYNC FIDELIS-ODOO] Rapport de test - État de la synchronisation
+De: DevOps / Integration Team
+Date: 2026-08-14
+═════════════════════════════════════════════════════════════════════════════
+
+Bonjour [Développeur Odoo],
+
+Nous avons effectué un diagnostic complet de la synchronisation bidirectionnelle 
+entre FidelisPlus (ERP des ventes) et Odoo Preprod (ERP de gestion).
+
+Vous trouverez ci-dessous un résumé technique des points fonctionnels et des 
+blocages identifiés.
+
+---
+
+## 1. ARCHITECTURE DE SYNCHRONISATION
+
+### Direction 1: FidelisPlus → Odoo (Push)
+- Trigger: Création d'un prospect ou d'un client dans FidelisPlus
+- Mécanisme: Job Laravel asynchrone + Queue
+- Endpoint: POST /api/sale_odoo/v1/partners
+- Idempotence: Chaque ressource porte un external_ref stable
+- Format: { "external_ref": "fidelis-company-{id}", "name": ..., "email": ..., ... }
+
+### Direction 2: Odoo → FidelisPlus (Pull)
+- Trigger: Cron planifié (à configurer)
+- Commande: php artisan odoo:sync
+- Endpoints: 
+  - GET /api/sale_odoo/v1/partners (prospects/clients)
+  - GET /api/sale_odoo/v1/vehicles (flottes)
+  - GET /api/sale_odoo/v1/sale_orders (devis)
+- Tracking: Curseur de dernière synchro par resource (table odoo_sync_cursors)
+
+---
+
+## 2. TESTS EFFECTUÉS - RÉSULTATS
+
+### ✅ FONCTIONNEL
+
+#### 2.1 Authentification API
+- ✅ Token valide et actif
+- ✅ Appels simples sans paramètres: HTTP 200 OK
+- ✅ Récupération de 50 partners: Réussi
+- Status: OPÉRATIONNEL
+
+#### 2.2 Validation des données côté FidelisPlus
+- ✅ Email rendu obligatoire (migration appliquée)
+- ✅ Migration: placeholder généré pour fiches sans email (prospect-{id}@fidelis.local)
+- ✅ Validation au niveau contrôleur (ProspectController)
+- Status: OPÉRATIONNEL
+
+#### 2.3 Curseurs de synchronisation
+- ✅ Réinitialisés (OdooSyncCursor::truncate())
+- ✅ Prêts pour un pull complet depuis Odoo
+- Status: OPÉRATIONNEL
+
+---
+
+### ❌ BLOCAGES IDENTIFIÉS
+
+#### 2.4 Erreur HTTP 500 sur paramètre modified_since
+- Issue: GET /api/sale_odoo/v1/partners?modified_since=2026-08-13T15:36:12+00:00
+- Statut: HTTP 500 Internal Server Error
+- Message: "An unexpected error occurred"
+- Cause: Problème côté Odoo lors du parsing du timestamp ISO 8601
+- Impact: Impossible de faire un pull incrémental (modified_since)
+- Workaround: Utiliser modified_since=null → pull complet
+- Status: À CORRIGER (Côté Odoo)
+
+#### 2.5 Erreur HTTP 403 - Permissions insuffisantes (Vehicles)
+- Issue: GET /api/sale_odoo/v1/vehicles
+- Statut: HTTP 403 Access Denied
+- Message: "Vous n'êtes pas autorisé à accéder aux enregistrements 'Véhicule' (fleet.vehicle)"
+- Cause: L'utilisateur API n'a pas le groupe "Parc automobile / Administrateur"
+- Impact: Impossible de synchroniser les flottes depuis Odoo
+- Required groups: 
+  - "Parc automobile / Administrateur"
+  - "Parc automobile / Gestionnaire : Gérer tous les véhicules"
+- Status: À CORRIGER (Configuration Odoo)
+
+#### 2.6 Erreur HTTP 403 - Permissions insuffisantes (Sale Orders)
+- Issue: GET /api/sale_odoo/v1/sale_orders
+- Statut: HTTP 403 Access Denied
+- Message: "Vous n'êtes pas autorisé à accéder aux enregistrements 'Commande client' (sale.order)"
+- Cause: L'utilisateur API n'a pas les permissions Ventes
+- Impact: Impossible de synchroniser les devis depuis Odoo
+- Required groups:
+  - "Comptabilité / Facturation" (optionnel)
+  - "Ventes / Administrateur"
+  - "Ventes / Utilisateur : mes documents seulement"
+- Status: À CORRIGER (Configuration Odoo)
+
+#### 2.7 Pas de partners FidelisPlus dans Odoo
+- Observation: Aucun partner avec external_ref commençant par "fidelis-"
+- Cause probable: 
+  - Aucun prospect créé en FidelisPlus, OU
+  - Queue worker n'a pas exécuté les jobs de sync, OU
+  - Créations de prospects avant la validation email obligatoire
+- Impact: Synchronisation FidelisPlus → Odoo non testée
+- Next step: Créer un prospect via interface et observer les logs
+- Status: À TESTER
+
+---
+
+## 3. RÉSUMÉ DES ACTIONS
+
+### ✅ COMPLÉTÉES (Côté FidelisPlus)
+1. Email rendu obligatoire en validation
+2. Migration appliquée (placeholder pour fiches sans email)
+3. Curseurs de sync réinitialisés
+4. Tests API Odoo effectués
+
+### 🔴 À FAIRE (Côté Odoo)
+
+#### Immédiat
+1. Ajouter les groupes de permission à l'utilisateur API:
+   - Parc automobile / Administrateur
+   - Ventes / Administrateur
+   - Contact / Création (pour POST /partners)
+
+2. Corriger le bug HTTP 500 sur modified_since
+   - Vérifier le parsing du timestamp ISO 8601
+   - Ou proposer un format alternatif
+
+#### Après permissions
+1. Tester la synchronisation pull (php artisan odoo:sync)
+2. Vérifier que les 3 endpoints retournent HTTP 200
+
+---
+
+## 4. PLAN DE TEST
+
+### Test A: Push (FidelisPlus → Odoo)
+```
+1. Créer un prospect dans FidelisPlus (name, email)
+   → Observer le job SyncCompanyToOdoo dans la queue
+   → Vérifier les logs: should see "syncCompany/POST — HTTP 201"
+   → Vérifier dans Odoo: partner créé avec external_ref="fidelis-company-X"
+```
+
+### Test B: Pull (Odoo → FidelisPlus)
+```
+Prérequis: Permissions Odoo configurées + HTTP 500 réparé
+1. Créer un client dans Odoo
+2. Exécuter: php artisan odoo:sync
+   → Should fetch partners depuis GET /api/sale_odoo/v1/partners
+   → Should create/update en table companies
+   → Vérifier logs: "odoo:sync [companies] : X/Y enregistrement(s)"
+```
+
+---
+
+## 5. POINTS D'ATTENTION TECHNIQUES
+
+### Authentification
+- Type: X-API-Key header (pas Bearer)
+- Token: foTcUtgNdL-qJPCFWQ5u6cb2YxMSbZ8ZBuzZIyzPETg
+- URL: https://preprod-mayelia.odoo-saas.veone.net
+
+### Idempotence
+- FidelisPlus utilise external_ref pour éviter les doublons
+- Exemple: "fidelis-company-{fidelis_id}"
+- Odoo doit garantir l'unicité de external_ref
+
+### Pagination API
+- Limite par défaut: 200 records/page
+- FidelisPlus gère la pagination automatiquement
+- Paramètre: ?page=1&limit=200
+
+### Champs requis (POST /partners)
+- name: string (requis)
+- email: string (requis - validé côté FidelisPlus)
+- external_ref: string (requis pour idempotence)
+- is_company: boolean (true=entreprise, false=particulier)
+
+---
+
+## 6. RESSOURCES
+
+- OpenAPI/Swagger: https://preprod-mayelia.odoo-saas.veone.net/api/sale_odoo/docs
+- Documentation code FidelisPlus:
+  - app/Jobs/SyncCompanyToOdoo.php
+  - app/Services/Odoo/OdooClient.php
+  - app/Console/Commands/SyncFromOdoo.php
+  - database/migrations/*odoo*
+
+- Scripts de diagnostic:
+  - fidelis_plus/test-odoo-api.php (test direct API)
+  - fidelis_plus/verify-odoo-sync.php (vérification partners)
+
+---
+
+## 7. PROCHAINES ÉTAPES
+
+**URGENTES** (bloques la synchronisation):
+1. ⚡ Ajouter groupes de permission à l'utilisateur API
+2. ⚡ Corriger HTTP 500 sur modified_since
+
+**APRÈS CORRECTIONS**:
+1. Tester les 2 directions de sync
+2. Configurer le cron automatique
+3. Mettre en place le monitoring
+
+---
+
+## CONTACTS
+
+- **Email API Odoo**: moustapha.camara@cieria.com
+- **URL Preprod**: https://preprod-mayelia.odoo-saas.veone.net
+- **Responsable FidelisPlus**: [DevOps Team]
+
+---
+
+Merci de nous confirmer la mise en place des permissions et la résolution du bug 
+HTTP 500. Nous attendons votre retour pour procéder aux tests complets.
+
+Bien cordialement,
+[DevOps / Integration Team]
+
+═════════════════════════════════════════════════════════════════════════════
+Date d'envoi: 2026-08-14
+Status: Prêt pour transmission
+═════════════════════════════════════════════════════════════════════════════
