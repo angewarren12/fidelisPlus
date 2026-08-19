@@ -170,18 +170,27 @@ class OdooClient
         $payload = [
             'external_ref'  => $ref,
             'name'          => $company->name,
-            'email'         => $company->email,
+            'email'         => $mainContact?->email ?? $company->email,
             'phone'         => $company->phone,
             'street'        => $company->address,
             'city'          => $company->city,
             'zip'           => $company->zip_code,
             'is_company'    => $company->category === 'entreprise',
+            'category'      => $company->category,
+            'sector'        => $company->sector,
             'vat'           => $company->rccm,
+            'rcm'           => $company->rccm,
             'contact_name'  => $mainContact
                 ? trim(($mainContact->first_name ?? '') . ' ' . ($mainContact->last_name ?? ''))
                 : null,
-            'contact_email' => $mainContact?->email,
+            'contact_first_name' => $mainContact?->first_name,
+            'contact_last_name'  => $mainContact?->last_name,
+            'contact_email' => $mainContact?->email ?? $company->email,
             'contact_phone' => $mainContact?->phone,
+            'commercial_email' => $company->commercial?->email,
+            'commercial_first_name' => $company->commercial?->first_name,
+            'commercial_last_name' => $company->commercial?->last_name,
+            'commercial_name' => $company->commercial ? trim($company->commercial->first_name . ' ' . $company->commercial->last_name) : null,
         ];
 
         try {
@@ -299,9 +308,14 @@ class OdooClient
             'brand_name'    => $vehicle->brand,
             'model_name'    => $vehicle->model,
             'year'          => $vehicle->year,
+            'model_year'    => $vehicle->year ? (string) $vehicle->year : null,
             'fuel'          => $vehicle->fuel_type,
+            'fuel_type'     => $vehicle->fuel_type,
             'state_name'    => $vehicle->status,
             'partner_id'    => $vehicle->company?->odoo_partner_id
+                ? (int) $vehicle->company->odoo_partner_id
+                : null,
+            'owner_id'      => $vehicle->company?->odoo_partner_id
                 ? (int) $vehicle->company->odoo_partner_id
                 : null,
             'partner_ref'   => $vehicle->company_id
@@ -377,7 +391,8 @@ class OdooClient
             'note'             => $quote->bon_de_commande_url
                 ? 'Bon de commande : ' . $quote->bon_de_commande_url
                 : null,
-            'order_line'       => $quote->items->map(fn ($item) => [
+            'order_lines'      => $quote->items->map(fn ($item) => [
+                'product_id'      => $this->resolveProductId($item->description),
                 'name'            => $item->description,
                 'product_uom_qty' => (float) $item->quantity,
                 'price_unit'      => (float) $item->price,
@@ -390,14 +405,27 @@ class OdooClient
                     $this->http()->put("/api/sale_odoo/v1/sale_orders/{$odooId}", $payload),
                     'syncQuote/PUT'
                 );
-                return $data !== null ? ['odoo_quote_id' => $odooId] : null;
+                if ($data !== null) {
+                    if ($quote->bon_de_commande_url) {
+                        $this->syncQuoteAttachments($odooId, $quote->bon_de_commande_url);
+                    }
+                    return ['odoo_quote_id' => $odooId];
+                }
+                return null;
             }
 
             $data = $this->extractData(
                 $this->http()->post('/api/sale_odoo/v1/sale_orders', $payload),
                 'syncQuote/POST'
             );
-            return $data !== null ? ['odoo_quote_id' => (int) ($data['id'] ?? 0)] : null;
+            if ($data !== null) {
+                $newId = (int) ($data['id'] ?? 0);
+                if ($newId && $quote->bon_de_commande_url) {
+                    $this->syncQuoteAttachments($newId, $quote->bon_de_commande_url);
+                }
+                return ['odoo_quote_id' => $newId];
+            }
+            return null;
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncQuote exception', [
                 'message' => $e->getMessage(), 'quote_id' => $quote->id, 'event' => $event,
@@ -508,5 +536,64 @@ class OdooClient
             ]);
             return null;
         }
+    }
+
+    public function syncQuoteAttachments(int $odooQuoteId, string $url): bool
+    {
+        try {
+            $response = $this->http()->post("/api/sale_odoo/v1/sale_orders/{$odooQuoteId}/attachments", [
+                'url' => $url,
+            ]);
+            if (! $response->successful()) {
+                Log::warning('OdooClient::syncQuoteAttachments a échoué', [
+                    'odoo_quote_id' => $odooQuoteId,
+                    'url'           => $url,
+                    'status'        => $response->status(),
+                ]);
+                return false;
+            }
+            return $response->json()['success'] ?? false;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::syncQuoteAttachments exception', [
+                'message'       => $e->getMessage(),
+                'odoo_quote_id' => $odooQuoteId,
+                'url'           => $url,
+            ]);
+            return false;
+        }
+    }
+
+    private function resolveProductId(string $description): int
+    {
+        $desc = mb_strtolower($description);
+
+        if (str_contains($desc, 'révisite') || str_contains($desc, 'revisite')) {
+            if (str_contains($desc, 'pl')) {
+                return 337; // Revisite PL
+            }
+            return 336; // Revisite VL
+        }
+
+        if (str_contains($desc, 'vignette')) {
+            if (str_contains($desc, 'moto')) {
+                return 311; // Vignette Moto
+            }
+        }
+
+        if (str_contains($desc, 'visite pl')) {
+            if (str_contains($desc, 'pl2')) return 334;
+            return 332; // Visite PL1
+        }
+
+        if (str_contains($desc, 'visite tp')) {
+            if (str_contains($desc, 'tp4')) return 335;
+            return 333; // Visite TP3
+        }
+
+        if (str_contains($desc, 'visite vl2')) {
+            return 331; // Visite VL2-TP2
+        }
+
+        return 330; // Visite VL1-TP1 (Default Fallback)
     }
 }

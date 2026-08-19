@@ -119,18 +119,28 @@ class OdooIngestService
             $company->restore();
         }
 
-        // Correspondant principal : contact_name peut être "Prénom Nom" — on split.
+        // Correspondant principal
         $contactEmail = $payload['contact_email'] ?? null;
-        $contactName  = $payload['contact_name'] ?? null;
-        $contactPhone = $payload['contact_phone'] ?? null;
+        $isFallback   = $payload['contact_is_fallback_company'] ?? false;
 
         if ($contactEmail) {
-            $nameParts = $contactName ? explode(' ', trim($contactName), 2) : [];
+            $firstName = $payload['contact_first_name'] ?? null;
+            $lastName  = $payload['contact_last_name'] ?? null;
+
+            // Si Odoo n'a pas renvoyé firstName/lastName (ou fallback), on split contact_name
+            if (!$firstName && !$lastName) {
+                $contactName = $payload['contact_name'] ?? null;
+                $nameParts   = $contactName ? explode(' ', trim($contactName), 2) : [];
+                $firstName   = $nameParts[0] ?? ($contactName ?? 'Contact');
+                $lastName    = $nameParts[1] ?? '';
+            }
+
             $this->syncMainContact($company, [
-                'contact_first_name' => $nameParts[0] ?? ($contactName ?? 'Contact'),
-                'contact_last_name'  => $nameParts[1] ?? '',
+                'contact_first_name' => $firstName ?? 'Contact',
+                'contact_last_name'  => $lastName ?? '',
                 'contact_email'      => $contactEmail,
-                'contact_phone'      => $contactPhone,
+                'contact_phone'      => $payload['contact_mobile'] ?? $payload['contact_phone'] ?? null,
+                'is_fallback'        => $isFallback, // Optionnel, pour log/trace
             ]);
         }
 

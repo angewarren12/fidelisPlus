@@ -4,7 +4,7 @@
  * Script de test direct de l'API Odoo
  */
 
-$token = 'foTcUtgNdL-qJPCFWQ5u6cb2YxMSbZ8ZBuzZIyzPETg';
+$token = 'foTcUtgNdL-qJPCFWQ5u6cb2YxMSbZ8ZBuzZlyzPETg';
 $baseUrl = 'https://preprod-mayelia.odoo-saas.veone.net';
 
 echo "═══════════════════════════════════════════\n";
@@ -59,7 +59,7 @@ function testEndpoint($url, $token)
     }
 
     echo "HTTP Status: {$httpCode}\n";
-    
+
     if ($httpCode == 200) {
         $data = json_decode($response, true);
         if ($data && isset($data['success'])) {

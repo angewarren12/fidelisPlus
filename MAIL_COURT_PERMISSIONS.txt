@@ -1,33 +1,45 @@
-Objet: [ACTION REQUISE] Permissions API Odoo - FidelisPlus
+Objet: [URGENT] Permissions API Odoo manquantes - Synchronisation bloquee
 
 Bonjour,
 
-Pour pouvoir tester la synchronisation FidelisPlus ↔ Odoo, nous avons besoin que 
-vous configuriez les permissions pour l'utilisateur API.
+Nous avons teste aujourd'hui 18/08/2026 la synchronisation FidelisPlus <-> Odoo.
+Les tests echouent car l'utilisateur API n'a pas les permissions necessaires.
 
-════════════════════════════════════════════════════════════════════════════════
+---------------------------------------------------
 
-📝 CE QUE VOUS DEVEZ FAIRE:
+RESULTATS DES TESTS D'AUJOURD'HUI:
 
-1. Allez dans: Paramètres → Utilisateurs et sociétés → Utilisateurs
+[X] POST /partners (creation contact) -> HTTP 403
+    -> Bloque: prospect FidelisPlus -> Odoo ET prospect Odoo -> FidelisPlus
 
-2. Cherchez l'utilisateur: moustapha.camara@cieria.com
+[X] GET /sale_orders (devis) -> HTTP 403
+    -> Bloque: synchronisation des devis
 
-3. Cliquez sur l'onglet "Groupes d'accès"
+[X] GET /vehicles (flotte) -> HTTP 403
+    -> Bloque: synchronisation de la flotte
 
-4. Ajoutez ces 3 groupes:
-   ✓ Parc automobile / Administrateur
-   ✓ Ventes / Administrateur
-   ✓ Contact / Création
+[OK] GET /partners (lecture) -> HTTP 200 OK (fonctionne)
 
-5. Cliquez sur "Enregistrer"
+---------------------------------------------------
 
-════════════════════════════════════════════════════════════════════════════════
+ACTION REQUISE DANS ODOO PREPROD (2 minutes):
 
-Ça devrait prendre 2 minutes max. Une fois fait, confirmez-nous par email et 
-nous pourrons tester la synchronisation complète.
+1. Allez dans: Parametres -> Utilisateurs et societes -> Utilisateurs
+2. Cherchez: moustapha.camara@cieria.com
+3. Onglet "Groupes d'acces", ajoutez :
+
+   [ ] Contact / Creation                 <- CRITIQUE (cree les prospects/clients)
+   [ ] Ventes / Administrateur            <- pour les devis
+   [ ] Ventes / Utilisateur : mes documents seulement
+   [ ] Parc automobile / Administrateur   <- pour la flotte
+
+4. Cliquez sur "Enregistrer"
+
+---------------------------------------------------
+
+Une fois fait, confirmez-nous et nous relancerons les tests complets.
 
 Merci !
-
-Cordialement,
 [DevOps Team]
+</｜｜DSML｜｜>
+</write_to_file>
