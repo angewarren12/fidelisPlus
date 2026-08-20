@@ -108,7 +108,7 @@ jobs:
           lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
             set sftp:auto-confirm yes
             set net:max-retries 2
-            mirror -R --parallel=4 --verbose --size-only release ${{ secrets.DEPLOY_PATH }}
+            mirror -R --parallel=4 --verbose --ignore-time release ${{ secrets.DEPLOY_PATH }}
             quit
           "
 
