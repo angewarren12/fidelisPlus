@@ -32,6 +32,12 @@ class SyncCompanyToOdoo implements ShouldQueue
             return;
         }
 
+        // Fallback: générer un email placeholder si absent pour éviter l'erreur 422 côté Odoo
+        if (!$company->email) {
+            $company->email = "prospect-{$company->id}@fidelis.local";
+            $company->save();
+        }
+
         $result = $odoo->syncCompany($company, $this->event);
 
         if ($result === null) {

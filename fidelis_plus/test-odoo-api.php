@@ -4,7 +4,7 @@
  * Script de test direct de l'API Odoo
  */
 
-$token = 'foTcUtgNdL-qJPCFWQ5u6cb2YxMSbZ8ZBuzZlyzPETg';
+$token = 'foTcUtgNdL-qJPCFWQ5u6cb2YxMSbZ8ZBuzZIyzPETg';
 $baseUrl = 'https://preprod-mayelia.odoo-saas.veone.net';
 
 echo "═══════════════════════════════════════════\n";
