@@ -12,203 +12,344 @@ import { MarketingBgPatternComponent } from '../../ui/marketing-bg-pattern/marke
   imports: [CommonModule, RouterModule, MarketingBgPatternComponent],
   template: `
     <app-marketing-bg-pattern></app-marketing-bg-pattern>
-    <div class="max-w-7xl mx-auto px-6 md:px-10 py-10 space-y-8 relative z-[1] animate-fade-in">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 md:px-10 py-8 sm:py-10 space-y-8 relative z-[1] animate-fade-in">
 
       <!-- HEADER -->
-      <header class="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div class="flex items-center gap-4">
-          <img *ngIf="currentUser()?.avatar_url" [src]="currentUser()?.avatar_url" class="w-14 h-14 rounded-2xl object-cover hidden sm:block">
+      <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] border border-outline-variant/10 shadow-sm">
+        <div class="flex items-center gap-5">
+          <div class="relative">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-secondary p-0.5 shadow-lg shadow-primary/20">
+              <img *ngIf="currentUser()?.avatar_url" [src]="currentUser()?.avatar_url" class="w-full h-full rounded-[0.9rem] object-cover">
+              <div *ngIf="!currentUser()?.avatar_url" class="w-full h-full rounded-[0.9rem] bg-surface-container-high flex items-center justify-center text-primary font-black text-xl">
+                {{ (currentUser()?.first_name?.charAt(0) || 'M') }}
+              </div>
+            </div>
+            <span class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center" title="En ligne">
+              <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+            </span>
+          </div>
           <div>
-            <p class="text-[11px] font-black uppercase tracking-[0.2em] text-primary mb-1">Espace marketing</p>
-            <h1 class="text-3xl md:text-4xl font-headline font-black text-on-surface tracking-tight">
-              Bonjour, {{ currentUser()?.first_name || 'Marketing' }}
+            <div class="flex items-center gap-2.5 mb-1">
+              <span class="px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] shadow-sm">Espace Marketing & Fidélité</span>
+              <span class="hidden sm:inline-block text-xs font-semibold text-outline/60">• Mayelia Mobility</span>
+            </div>
+            <h1 class="text-2xl sm:text-3xl md:text-4xl font-headline font-black text-on-surface tracking-tight">
+              Bonjour, {{ currentUser()?.first_name || 'Marketing' }} 👋
             </h1>
-            <p class="text-outline text-sm font-medium mt-1">Vue d'ensemble du programme de fidélité Mayelia.</p>
+            <p class="text-outline text-xs sm:text-sm font-medium mt-1">Supervision globale du programme de fidélité et activité des stations.</p>
           </div>
         </div>
-        <button (click)="refresh()" [disabled]="loading()"
-                class="h-11 px-5 rounded-2xl bg-white border border-outline-variant/15 shadow-sm text-xs font-black uppercase tracking-widest text-outline hover:text-primary transition-colors flex items-center gap-2 disabled:opacity-50">
-          <span class="material-symbols-outlined text-sm" [class.animate-spin]="loading()">refresh</span>
-          Actualiser
-        </button>
+        
+        <div class="flex items-center gap-3">
+          <button (click)="refresh()" [disabled]="loading()"
+                  class="h-12 px-6 rounded-2xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/10 shadow-sm text-xs font-black uppercase tracking-widest text-on-surface hover:text-primary transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95">
+            <span class="material-symbols-outlined text-base" [class.animate-spin]="loading()">refresh</span>
+            <span>Actualiser</span>
+          </button>
+        </div>
       </header>
 
       <!-- SKELETON -->
       <div *ngIf="loading() && !stats()" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="h-44 rounded-[2rem] bg-white/60 animate-pulse"></div>
-        <div class="h-44 rounded-[2rem] bg-white/60 animate-pulse"></div>
-        <div class="h-44 rounded-[2rem] bg-white/60 animate-pulse"></div>
+        <div class="h-52 rounded-[2.5rem] bg-white/60 animate-pulse"></div>
+        <div class="h-52 rounded-[2.5rem] bg-white/60 animate-pulse"></div>
+        <div class="h-52 rounded-[2.5rem] bg-white/60 animate-pulse"></div>
       </div>
 
       <!-- ERROR -->
-      <div *ngIf="!loading() && error()" class="bg-white rounded-[2rem] border border-error/20 p-10 text-center space-y-3">
-        <span class="material-symbols-outlined text-4xl text-error">error</span>
-        <p class="text-sm font-bold text-on-surface">Impossible de charger le tableau de bord.</p>
-        <button (click)="refresh()" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest">Réessayer</button>
+      <div *ngIf="!loading() && error()" class="bg-white rounded-[2.5rem] border border-error/20 p-12 text-center space-y-4 shadow-xl shadow-error/5">
+        <div class="w-16 h-16 rounded-2xl bg-error/10 text-error flex items-center justify-center mx-auto">
+          <span class="material-symbols-outlined text-3xl">wifi_off</span>
+        </div>
+        <h3 class="text-lg font-headline font-extrabold text-on-surface">Impossible de charger les données marketing</h3>
+        <p class="text-xs text-outline max-w-md mx-auto">Une erreur réseau est survenue. Vérifiez votre connexion puis réessayez.</p>
+        <button (click)="refresh()" class="px-6 py-3 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">
+          Réessayer
+        </button>
       </div>
 
       <ng-container *ngIf="!loading() && stats() as s">
 
-        <!-- HERO : comptes fidélité -->
+        <!-- HERO CARDS GRID -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="lg:col-span-2 relative overflow-hidden rounded-[2rem] p-8 md:p-10 text-white bg-gradient-to-br from-[#15b9a3] to-[#046656] shadow-lg shadow-primary/20">
-            <div class="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/10 blur-2xl"></div>
-            <div class="absolute -bottom-20 -left-10 w-48 h-48 rounded-full bg-[#003a32]/40 blur-2xl"></div>
-            <div class="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-8">
-              <div>
-                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/70 mb-2">Comptes fidélité actifs</p>
-                <p class="text-5xl font-headline font-black">{{ s.accounts.total }}</p>
-                <div class="flex items-center gap-5 mt-5 text-xs font-bold">
-                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-white"></span>{{ s.accounts.particulier }} particulier{{ s.accounts.particulier > 1 ? 's' : '' }}</span>
-                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-white/50"></span>{{ s.accounts.entreprise }} entreprise{{ s.accounts.entreprise > 1 ? 's' : '' }}</span>
+          
+          <!-- MAIN HERO: COMPTES FIDÉLITÉ -->
+          <div class="lg:col-span-2 relative overflow-hidden rounded-[2.5rem] p-8 sm:p-10 text-white bg-gradient-to-br from-[#15b9a3] via-[#0b8e7c] to-[#046656] shadow-xl shadow-primary/20 flex flex-col justify-between group">
+            <!-- Decorative Glow Elements -->
+            <div class="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-white/10 blur-3xl group-hover:bg-white/15 transition-all duration-700"></div>
+            <div class="absolute -bottom-24 -left-16 w-60 h-60 rounded-full bg-[#003a32]/40 blur-3xl"></div>
+            
+            <div class="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-8">
+              <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-pulse"></span>
+                  <p class="text-[11px] font-black uppercase tracking-[0.2em] text-white/80">Comptes Fidélité Actifs</p>
                 </div>
-                <!-- Barre segmentée FID-/ENT- -->
-                <div class="mt-3 h-2 w-56 max-w-full rounded-full bg-white/20 overflow-hidden flex">
-                  <div class="h-full bg-white" [style.width.%]="segmentPct(s.accounts.particulier, s.accounts.total)"></div>
-                  <div class="h-full bg-white/50" [style.width.%]="segmentPct(s.accounts.entreprise, s.accounts.total)"></div>
+                <div class="flex items-baseline gap-3">
+                  <p class="text-5xl sm:text-6xl font-headline font-black tracking-tight leading-none">{{ s.accounts.total }}</p>
+                  <span class="text-xs font-bold px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur-md">
+                    Total membres
+                  </span>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-6 pt-2 text-xs font-bold">
+                  <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10">
+                    <span class="w-2.5 h-2.5 rounded-full bg-white"></span>
+                    <span>{{ s.accounts.particulier }} Particuliers ({{ segmentPct(s.accounts.particulier, s.accounts.total) | number:'1.0-0' }}%)</span>
+                  </div>
+                  <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-200"></span>
+                    <span>{{ s.accounts.entreprise }} Entreprises ({{ segmentPct(s.accounts.entreprise, s.accounts.total) | number:'1.0-0' }}%)</span>
+                  </div>
+                </div>
+
+                <!-- Progress Segmented Bar -->
+                <div class="h-2.5 w-full rounded-full bg-black/20 overflow-hidden flex p-0.5 gap-0.5">
+                  <div class="h-full rounded-full bg-white transition-all duration-1000 shadow-sm" [style.width.%]="segmentPct(s.accounts.particulier, s.accounts.total)"></div>
+                  <div class="h-full rounded-full bg-emerald-200 transition-all duration-1000 shadow-sm" [style.width.%]="segmentPct(s.accounts.entreprise, s.accounts.total)"></div>
                 </div>
               </div>
-              <div class="text-left md:text-right">
-                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/70 mb-1">Points en circulation</p>
-                <p class="text-3xl font-headline font-black">{{ s.points_in_circulation | number:'1.0-0' }}</p>
-                <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}" class="inline-flex items-center gap-1 mt-3 text-[11px] font-black uppercase tracking-widest text-white/90 hover:text-white">
-                  Voir les comptes <span class="material-symbols-outlined text-sm">arrow_forward</span>
+
+              <div class="text-left md:text-right space-y-3 shrink-0 bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/15">
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">Points en circulation</p>
+                <p class="text-3xl font-headline font-black text-amber-300 drop-shadow-sm">{{ s.points_in_circulation | number:'1.0-0' }} <span class="text-xs font-bold text-white/80">pts</span></p>
+                <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}"
+                   class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-primary text-[11px] font-black uppercase tracking-widest hover:bg-surface-container transition-all shadow-md active:scale-95 no-underline mt-2">
+                  <span>Gérer les comptes</span>
+                  <span class="material-symbols-outlined text-sm">arrow_forward</span>
                 </a>
               </div>
             </div>
           </div>
 
-          <!-- Semaine : scans -->
-          <div class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm p-8 flex flex-col">
-            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-1">7 derniers jours</p>
-            <div class="flex items-baseline gap-2">
-              <p class="text-3xl font-headline font-black text-on-surface">{{ s.week.scans_count }}</p>
-              <p class="text-xs font-bold text-outline">passages</p>
+          <!-- WEEK SCANS CARD -->
+          <div class="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm p-8 flex flex-col justify-between hover:border-primary/30 transition-all">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">Activité 7 Derniers Jours</p>
+                <span class="material-symbols-outlined text-primary text-xl">auto_graph</span>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <p class="text-4xl font-headline font-black text-on-surface">{{ s.week.scans_count }}</p>
+                <p class="text-xs font-bold text-outline">passages en station</p>
+              </div>
+              <div class="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-xs font-extrabold">
+                <span class="material-symbols-outlined text-xs">add_circle</span>
+                <span>+{{ s.week.points_credited | number:'1.0-0' }} pts crédités</span>
+              </div>
             </div>
-            <p class="text-xs font-bold text-primary mt-0.5">+{{ s.week.points_credited | number:'1.0-0' }} pts distribués</p>
-            <!-- Mini barres -->
-            <div class="flex items-end gap-1.5 h-16 mt-5 flex-1">
-              <div *ngFor="let d of weekBars(s.week.by_day)" class="flex-1 flex flex-col items-center justify-end gap-1 group">
-                <div class="w-full rounded-t-md bg-primary/15 group-hover:bg-primary/30 transition-colors" [style.height.%]="d.pct" [title]="d.count + ' scan(s)'"></div>
-                <span class="text-[8px] font-bold text-outline/70 uppercase">{{ d.label }}</span>
+
+            <!-- Graphique Barres Horizontales / Verticales -->
+            <div class="flex items-end gap-2 h-24 mt-6">
+              <div *ngFor="let d of weekBars(s.week.by_day)" class="flex-1 flex flex-col items-center justify-end gap-1.5 group h-full">
+                <span class="text-[9px] font-black text-primary opacity-0 group-hover:opacity-100 transition-opacity">{{ d.count }}</span>
+                <div class="w-full rounded-t-lg bg-gradient-to-t from-primary/20 to-primary group-hover:brightness-110 transition-all shadow-sm"
+                     [style.height.%]="d.pct"
+                     [title]="d.count + ' passage(s)'"></div>
+                <span class="text-[9px] font-black text-outline uppercase">{{ d.label }}</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- LIGNE 2 : à traiter / stock cartes / top stations -->
+        <!-- LIGNE 2 : Demandes & Stock & Top Stations -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          <!-- À TRAITER -->
-          <div class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm p-8 space-y-4">
-            <div class="flex items-center justify-between">
-              <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">À traiter</p>
-              <span *ngIf="totalPending(s) > 0" class="w-6 h-6 rounded-full bg-error text-white text-[10px] font-black flex items-center justify-center">{{ totalPending(s) }}</span>
+          <!-- DEMANDES À TRAITER -->
+          <div class="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm p-8 space-y-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">Traitements en Attente</p>
+                </div>
+                <span *ngIf="totalPending(s) > 0" class="px-3 py-1 rounded-full bg-error text-white text-[10px] font-black shadow-md shadow-error/20 animate-pulse">
+                  {{ totalPending(s) }} Action{{ totalPending(s) > 1 ? 's' : '' }}
+                </span>
+              </div>
+
+              <div class="space-y-3">
+                <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'requests'}"
+                   class="flex items-center justify-between p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/5 transition-all group no-underline">
+                  <span class="flex items-center gap-3 text-sm font-extrabold text-on-surface">
+                    <span class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-sm">
+                      <span class="material-symbols-outlined text-lg">inbox</span>
+                    </span>
+                    <span>Demandes Cartes SIRA</span>
+                  </span>
+                  <span class="px-3 py-1 rounded-xl text-xs font-black"
+                        [class]="s.pending.member_requests > 0 ? 'bg-amber-500 text-white shadow-sm' : 'bg-surface-container text-outline'">
+                    {{ s.pending.member_requests }}
+                  </span>
+                </a>
+
+                <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'redemptions'}"
+                   class="flex items-center justify-between p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/5 transition-all group no-underline">
+                  <span class="flex items-center gap-3 text-sm font-extrabold text-on-surface">
+                    <span class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-sm">
+                      <span class="material-symbols-outlined text-lg">redeem</span>
+                    </span>
+                    <span>Récompenses à Livrer</span>
+                  </span>
+                  <span class="px-3 py-1 rounded-xl text-xs font-black"
+                        [class]="s.pending.redemptions > 0 ? 'bg-primary text-white shadow-sm' : 'bg-surface-container text-outline'">
+                    {{ s.pending.redemptions }}
+                  </span>
+                </a>
+
+                <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}"
+                   class="flex items-center justify-between p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/5 transition-all group no-underline">
+                  <span class="flex items-center gap-3 text-sm font-extrabold text-on-surface">
+                    <span class="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center shrink-0 shadow-sm">
+                      <span class="material-symbols-outlined text-lg">sync_problem</span>
+                    </span>
+                    <span>Erreurs Provisioning SIRA</span>
+                  </span>
+                  <span class="px-3 py-1 rounded-xl text-xs font-black"
+                        [class]="s.pending.sira_failed > 0 ? 'bg-error text-white shadow-sm' : 'bg-surface-container text-outline'">
+                    {{ s.pending.sira_failed }}
+                  </span>
+                </a>
+              </div>
             </div>
-
-            <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'requests'}"
-               class="flex items-center justify-between p-3.5 rounded-2xl hover:bg-surface-container-low transition-colors group">
-              <span class="flex items-center gap-3 text-sm font-bold text-on-surface">
-                <span class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><span class="material-symbols-outlined text-lg">inbox</span></span>
-                Demandes SIRA
-              </span>
-              <span class="text-sm font-black" [class.text-error]="s.pending.member_requests > 0" [class.text-outline]="s.pending.member_requests === 0">{{ s.pending.member_requests }}</span>
-            </a>
-
-            <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'redemptions'}"
-               class="flex items-center justify-between p-3.5 rounded-2xl hover:bg-surface-container-low transition-colors group">
-              <span class="flex items-center gap-3 text-sm font-bold text-on-surface">
-                <span class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center"><span class="material-symbols-outlined text-lg">redeem</span></span>
-                Lots à livrer
-              </span>
-              <span class="text-sm font-black" [class.text-error]="s.pending.redemptions > 0" [class.text-outline]="s.pending.redemptions === 0">{{ s.pending.redemptions }}</span>
-            </a>
-
-            <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}"
-               class="flex items-center justify-between p-3.5 rounded-2xl hover:bg-surface-container-low transition-colors group">
-              <span class="flex items-center gap-3 text-sm font-bold text-on-surface">
-                <span class="w-9 h-9 rounded-xl bg-error/10 text-error flex items-center justify-center"><span class="material-symbols-outlined text-lg">sync_problem</span></span>
-                Provisioning SIRA échoué
-              </span>
-              <span class="text-sm font-black" [class.text-error]="s.pending.sira_failed > 0" [class.text-outline]="s.pending.sira_failed === 0">{{ s.pending.sira_failed }}</span>
-            </a>
           </div>
 
-          <!-- STOCK CARTES -->
-          <div class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm p-8 space-y-5">
-            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">Studio Cartes</p>
-            <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <span class="material-symbols-outlined">badge</span>
+          <!-- STUDIO CARTES & STOCK -->
+          <div class="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm p-8 space-y-6 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">Stock & Impression Cartes</p>
+                <span class="material-symbols-outlined text-primary text-xl">badge</span>
               </div>
-              <div>
-                <p class="text-2xl font-headline font-black text-on-surface">{{ s.card_stock.blank_available }}</p>
-                <p class="text-xs font-bold text-outline">carte{{ s.card_stock.blank_available > 1 ? 's' : '' }} vierge{{ s.card_stock.blank_available > 1 ? 's' : '' }} en stock</p>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/5 flex flex-col justify-between space-y-2">
+                  <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                    <span class="material-symbols-outlined text-lg">style</span>
+                  </div>
+                  <div>
+                    <p class="text-3xl font-headline font-black text-on-surface">{{ s.card_stock.blank_available }}</p>
+                    <p class="text-[11px] font-bold text-outline uppercase tracking-wider mt-0.5">Cartes vierges</p>
+                  </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/5 flex flex-col justify-between space-y-2">
+                  <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-lg">print</span>
+                  </div>
+                  <div>
+                    <p class="text-3xl font-headline font-black text-on-surface">{{ s.card_stock.batches_to_print }}</p>
+                    <p class="text-[11px] font-bold text-outline uppercase tracking-wider mt-0.5">Lots à imprimer</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                <span class="material-symbols-outlined">print</span>
-              </div>
-              <div>
-                <p class="text-2xl font-headline font-black text-on-surface">{{ s.card_stock.batches_to_print }}</p>
-                <p class="text-xs font-bold text-outline">lot{{ s.card_stock.batches_to_print > 1 ? 's' : '' }} à imprimer</p>
-              </div>
-            </div>
+
             <a routerLink="/marketing/studio-carte"
-               class="w-full h-11 rounded-xl bg-[#1b1932] text-white text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:brightness-110 transition-all">
-              Ouvrir Studio Cartes <span class="material-symbols-outlined text-sm">arrow_forward</span>
+               class="w-full h-12 rounded-2xl bg-[#1a1831] hover:bg-[#2a2745] text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-black/10 hover:brightness-110 active:scale-95 transition-all no-underline">
+              <span class="material-symbols-outlined text-base">style</span>
+              <span>Ouvrir Studio Cartes 3D</span>
+              <span class="material-symbols-outlined text-sm">arrow_forward</span>
             </a>
           </div>
 
-          <!-- TOP STATIONS -->
-          <div class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm p-8 space-y-4">
-            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">Top stations · 7 jours</p>
-            <div *ngIf="s.top_stations.length === 0" class="py-8 text-center text-outline text-xs italic">Aucun passage cette semaine.</div>
-            <div *ngFor="let st of s.top_stations; let i = index" class="flex items-center gap-3">
-              <span class="w-6 h-6 rounded-lg bg-surface-container-low flex items-center justify-center text-[10px] font-black text-outline shrink-0">{{ i + 1 }}</span>
-              <span class="flex-1 text-sm font-bold text-on-surface truncate">{{ st.station_name }}</span>
-              <span class="text-xs font-black text-primary shrink-0">{{ st.scans_count }}</span>
+          <!-- TOP STATIONS DES PASSEMENTS -->
+          <div class="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm p-8 space-y-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">Top Stations (7 jours)</p>
+                <span class="material-symbols-outlined text-primary text-xl">local_gas_station</span>
+              </div>
+
+              <div *ngIf="s.top_stations.length === 0" class="py-10 text-center text-outline text-xs italic">
+                Aucun passage enregistré en station cette semaine.
+              </div>
+
+              <div class="space-y-3">
+                <div *ngFor="let st of s.top_stations; let i = index" 
+                     class="flex items-center gap-3 p-3 rounded-2xl bg-surface-container-low/60 border border-outline-variant/5">
+                  <span class="w-7 h-7 rounded-xl bg-primary text-white text-xs font-black flex items-center justify-center shrink-0 shadow-sm">
+                    {{ i + 1 }}
+                  </span>
+                  <span class="flex-1 text-sm font-extrabold text-on-surface truncate">{{ st.station_name }}</span>
+                  <span class="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-black">
+                    {{ st.scans_count }} scans
+                  </span>
+                </div>
+              </div>
             </div>
+
             <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'reports'}"
-               class="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-widest text-primary hover:underline pt-2">
-              Voir l'analytics complet <span class="material-symbols-outlined text-sm">arrow_forward</span>
+               class="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-primary hover:text-secondary transition-colors pt-2 no-underline">
+              <span>Voir le rapport complet des stations</span>
+              <span class="material-symbols-outlined text-sm">arrow_forward</span>
             </a>
           </div>
         </div>
 
-        <!-- ACCÈS RAPIDES -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}" class="quick-link">
-            <span class="material-symbols-outlined text-primary text-2xl">person_add</span>
-            <span>Nouveau client</span>
-          </a>
-          <a routerLink="/marketing/studio-carte" class="quick-link">
-            <span class="material-symbols-outlined text-primary text-2xl">badge</span>
-            <span>Studio Cartes</span>
-          </a>
-          <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'rewards'}" class="quick-link">
-            <span class="material-symbols-outlined text-primary text-2xl">card_giftcard</span>
-            <span>Catalogue ({{ s.active_rewards }})</span>
-          </a>
-          <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'reminders'}" class="quick-link">
-            <span class="material-symbols-outlined text-primary text-2xl">build_circle</span>
-            <span>Rappels CT</span>
-          </a>
+        <!-- RUBAN D'ACTIONS RAPIDES (QUICK ACTION RIBBON) -->
+        <div class="space-y-3 pt-4">
+          <p class="text-[11px] font-black uppercase tracking-[0.2em] text-outline ml-1">Raccourcis & Actions Rapides</p>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'accounts'}" class="quick-link group">
+              <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                <span class="material-symbols-outlined text-2xl">person_add</span>
+              </div>
+              <div>
+                <span class="text-sm font-headline font-black text-on-surface block">Nouveau Client</span>
+                <span class="text-xs font-medium text-outline">Créer au guichet</span>
+              </div>
+            </a>
+
+            <a routerLink="/marketing/studio-carte" class="quick-link group">
+              <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                <span class="material-symbols-outlined text-2xl">badge</span>
+              </div>
+              <div>
+                <span class="text-sm font-headline font-black text-on-surface block">Studio Cartes 3D</span>
+                <span class="text-xs font-medium text-outline">Impression & visuels</span>
+              </div>
+            </a>
+
+            <a routerLink="/marketing/fidelite" [queryParams]="{tab: 'rewards'}" class="quick-link group">
+              <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <span class="material-symbols-outlined text-2xl">card_giftcard</span>
+              </div>
+              <div>
+                <span class="text-sm font-headline font-black text-on-surface block">Catalogue Récompenses</span>
+                <span class="text-xs font-medium text-outline">{{ s.active_rewards }} offre(s) active(s)</span>
+              </div>
+            </a>
+
+            <a routerLink="/marketing/scanner" class="quick-link group">
+              <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <span class="material-symbols-outlined text-2xl">qr_code_scanner</span>
+              </div>
+              <div>
+                <span class="text-sm font-headline font-black text-on-surface block">Scanner QR Code</span>
+                <span class="text-xs font-medium text-outline">Test direct station</span>
+              </div>
+            </a>
+          </div>
         </div>
+
       </ng-container>
     </div>
   `,
   styles: [`
-    .animate-fade-in { animation: fadeIn 0.4s ease-out both; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     .quick-link {
-      display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem;
-      padding: 1.25rem; border-radius: 1.5rem; background: #fff;
-      border: 1px solid rgba(0,0,0,0.06); font-size: 0.75rem; font-weight: 800;
-      color: #4b5b56; transition: all 0.15s ease;
+      display: flex; align-items: center; gap: 1rem;
+      padding: 1.25rem; border-radius: 1.75rem; background: #ffffff;
+      border: 1px solid rgba(0,0,0,0.06); text-decoration: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03); transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .quick-link:hover { border-color: rgba(21,185,163,0.4); box-shadow: 0 4px 14px rgba(21,185,163,0.12); }
+    .quick-link:hover {
+      border-color: rgba(21,185,163,0.3);
+      box-shadow: 0 8px 24px rgba(21,185,163,0.12);
+      transform: translateY(-2px);
+    }
   `],
 })
 export class MarketingDashboardComponent implements OnInit {

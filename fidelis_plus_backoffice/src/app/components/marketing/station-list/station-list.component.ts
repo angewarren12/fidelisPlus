@@ -25,45 +25,58 @@ import { MarketingBgPatternComponent } from '../../ui/marketing-bg-pattern/marke
         </button>
       </header>
 
-      <div class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
-        <div *ngIf="loading()" class="p-16 text-center text-outline">
-          <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
+      <div *ngIf="loading()" class="py-20 text-center text-outline bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm">
+        <span class="material-symbols-outlined animate-spin text-primary text-4xl mb-2">sync</span>
+        <p class="text-xs font-semibold text-outline">Chargement des stations d'inspection...</p>
+      </div>
+
+      <div *ngIf="!loading()" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div *ngFor="let s of stations()"
+               class="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30 transition-all p-7 flex flex-col justify-between group relative overflow-hidden">
+            <!-- Background accent glow -->
+            <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-primary/5 via-transparent to-transparent rounded-bl-full pointer-events-none"></div>
+
+            <div class="space-y-4 relative z-10">
+              <div class="flex items-start justify-between gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-sm group-hover:scale-110 transition-transform">
+                  <span class="material-symbols-outlined text-2xl">local_gas_station</span>
+                </div>
+                <span [class]="s.is_active ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'" 
+                      class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border flex items-center gap-1.5 shadow-sm">
+                  <span class="w-1.5 h-1.5 rounded-full" [class]="s.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                  {{ s.is_active ? 'Active' : 'Inactive' }}
+                </span>
+              </div>
+
+              <div>
+                <h3 class="text-lg font-headline font-black text-on-surface tracking-tight group-hover:text-primary transition-colors">{{ s.name }}</h3>
+                <p class="text-xs font-medium text-outline flex items-center gap-1 mt-1">
+                  <span class="material-symbols-outlined text-sm text-outline/60">location_on</span>
+                  <span>{{ s.location || 'Localisation non renseignée' }}</span>
+                </p>
+              </div>
+            </div>
+
+            <div class="pt-6 mt-6 border-t border-outline-variant/10 flex items-center justify-between relative z-10">
+              <span class="text-[11px] font-bold text-outline uppercase tracking-wider">Station #{{ s.id }}</span>
+              
+              <div *ngIf="isAdmin()" class="flex items-center gap-2">
+                <button (click)="openForm(s)" class="w-9 h-9 rounded-xl bg-surface-container-low text-primary hover:bg-primary hover:text-white transition-colors flex items-center justify-center shadow-sm" title="Modifier">
+                  <span class="material-symbols-outlined text-base">edit</span>
+                </button>
+                <button (click)="deleteStation(s)" class="w-9 h-9 rounded-xl bg-error/10 text-error hover:bg-error hover:text-white transition-colors flex items-center justify-center shadow-sm" title="Supprimer">
+                  <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div *ngIf="!loading()" class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-surface-container-low text-[10px] font-black uppercase tracking-widest text-outline">
-              <tr>
-                <th class="px-6 py-4">Nom</th>
-                <th class="px-6 py-4">Localisation</th>
-                <th class="px-6 py-4">Statut</th>
-                <th *ngIf="isAdmin()" class="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-outline-variant/10">
-              <tr *ngFor="let s of stations()" class="hover:bg-surface-container-low/40 transition-colors">
-                <td class="px-6 py-4 font-bold text-on-surface">{{ s.name }}</td>
-                <td class="px-6 py-4 text-outline text-xs">{{ s.location || '—' }}</td>
-                <td class="px-6 py-4">
-                  <span [class]="s.is_active ? 'bg-secondary/10 text-secondary' : 'bg-outline/10 text-outline'" 
-                        class="px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
-                    {{ s.is_active ? 'Active' : 'Inactive' }}
-                  </span>
-                </td>
-                <td *ngIf="isAdmin()" class="px-6 py-4 text-right">
-                  <div class="flex items-center justify-end gap-2">
-                    <button (click)="openForm(s)" class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Modifier">
-                      <span class="material-symbols-outlined text-sm">edit</span>
-                    </button>
-                    <button (click)="deleteStation(s)" class="p-2 text-error hover:bg-error/10 rounded-lg transition-colors" title="Supprimer">
-                      <span class="material-symbols-outlined text-sm">delete</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div *ngIf="stations().length === 0" class="p-12 text-center text-outline text-sm italic font-medium">Aucune station configurée.</div>
+        <div *ngIf="stations().length === 0" class="py-16 text-center bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm space-y-3">
+          <span class="material-symbols-outlined text-5xl text-outline/30">wrong_location</span>
+          <p class="text-on-surface font-bold text-base">Aucune station d'inspection configurée</p>
+          <p class="text-outline text-xs">Cliquez sur "Nouvelle Station" pour ajouter un point de scan.</p>
         </div>
       </div>
 

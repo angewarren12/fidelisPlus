@@ -127,28 +127,69 @@ function defaultLayout(): LoyaltyCardTemplateLayout {
           </div>
         </div>
 
-        <!-- Colonne droite : aperçu -->
+        <!-- Colonne droite : aperçu 3D & impression -->
         <div class="lg:col-span-7">
-          <div class="bg-surface-container-low rounded-[2rem] p-10 flex items-center justify-center min-h-[420px]">
-            <div *ngIf="!selectedMember()" class="text-outline text-sm italic">Sélectionne un client pour prévisualiser sa carte.</div>
-            <div *ngIf="selectedMember() && !selectedTemplate()" class="text-outline text-sm italic">Choisis un modèle de carte.</div>
+          <div class="bg-gradient-to-br from-surface-container-low to-surface-container-high/50 rounded-[2.5rem] p-8 sm:p-12 flex flex-col items-center justify-center min-h-[460px] border border-outline-variant/10 shadow-inner relative overflow-hidden">
+            <div *ngIf="!selectedMember()" class="text-center space-y-3 p-8">
+              <span class="material-symbols-outlined text-5xl text-outline/30">badge</span>
+              <p class="text-outline text-sm font-semibold">Sélectionnez un client dans la colonne de gauche pour prévisualiser sa carte fidélité.</p>
+            </div>
+            <div *ngIf="selectedMember() && !selectedTemplate()" class="text-center space-y-3 p-8">
+              <span class="material-symbols-outlined text-5xl text-outline/30">style</span>
+              <p class="text-outline text-sm font-semibold">Sélectionnez un modèle de visuel pour afficher le rendu.</p>
+            </div>
 
+            <!-- CARTE 3D PREVIEW -->
             <div id="printable-card" *ngIf="selectedMember() && selectedTemplate() as t"
-                 class="relative rounded-2xl overflow-hidden shadow-2xl" style="width: 400px; aspect-ratio: 1.586;">
+                 class="relative rounded-2xl overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] group transition-all duration-500 hover:scale-[1.02] border border-white/20"
+                 style="width: 420px; aspect-ratio: 1.586;">
+              <!-- Visual background -->
               <img [src]="t.background_url" class="absolute inset-0 w-full h-full object-cover">
-              <div class="absolute font-bold font-mono" [style.left.%]="t.layout_json.card_number_x" [style.top.%]="t.layout_json.card_number_y"
-                   [style.color]="t.layout_json.card_number_color" [style.fontSize.px]="t.layout_json.card_number_size">
-                N° {{ selectedMember()?.loyalty_account?.card_number || '—' }}
+              
+              <!-- Metallic Glossy Foil Overlay -->
+              <div class="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 pointer-events-none"></div>
+
+              <!-- Puce dorée fictive -->
+              <div class="absolute top-6 left-8 w-11 h-8 rounded-md bg-gradient-to-tr from-amber-300 via-amber-200 to-yellow-400 border border-amber-400/50 shadow-sm flex items-center justify-center opacity-85">
+                <div class="w-full h-full border border-amber-500/20 rounded-md grid grid-cols-2 gap-0.5 p-0.5">
+                  <div class="bg-amber-400/30 rounded-sm"></div>
+                  <div class="bg-amber-400/30 rounded-sm"></div>
+                </div>
               </div>
-              <img *ngIf="cardQrDataUrl()" [src]="cardQrDataUrl()!"
-                   class="absolute bg-white p-1 rounded"
-                   [style.left.%]="t.layout_json.qr_x" [style.top.%]="t.layout_json.qr_y" [style.width.%]="t.layout_json.qr_size">
-              <div *ngIf="t.layout_json.holder_name_enabled" class="absolute font-bold whitespace-nowrap"
-                   [style.left.%]="t.layout_json.holder_name_x" [style.top.%]="t.layout_json.holder_name_y"
-                   [style.color]="t.layout_json.holder_name_color" [style.fontSize.px]="t.layout_json.holder_name_size">
+
+              <!-- Numéro de carte -->
+              <div class="absolute font-headline font-black tracking-widest uppercase drop-shadow-md"
+                   [style.left.%]="t.layout_json.card_number_x"
+                   [style.top.%]="t.layout_json.card_number_y"
+                   [style.color]="t.layout_json.card_number_color"
+                   [style.fontSize.px]="t.layout_json.card_number_size">
+                N° {{ selectedMember()?.loyalty_account?.card_number || 'FID-00000' }}
+              </div>
+
+              <!-- QR Code -->
+              <div *ngIf="cardQrDataUrl()"
+                   class="absolute bg-white p-1.5 rounded-xl shadow-lg border border-surface-container"
+                   [style.left.%]="t.layout_json.qr_x"
+                   [style.top.%]="t.layout_json.qr_y"
+                   [style.width.%]="t.layout_json.qr_size">
+                <img [src]="cardQrDataUrl()!" class="w-full h-full object-contain">
+              </div>
+
+              <!-- Nom du titulaire -->
+              <div *ngIf="t.layout_json.holder_name_enabled"
+                   class="absolute font-headline font-extrabold whitespace-nowrap tracking-wide uppercase drop-shadow-sm"
+                   [style.left.%]="t.layout_json.holder_name_x"
+                   [style.top.%]="t.layout_json.holder_name_y"
+                   [style.color]="t.layout_json.holder_name_color"
+                   [style.fontSize.px]="t.layout_json.holder_name_size">
                 {{ displayName(selectedMember()!) }}
               </div>
             </div>
+
+            <p *ngIf="selectedMember() && selectedTemplate()" class="text-xs font-bold text-outline mt-6 flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm text-primary">verified</span>
+              Rendu d'impression HD conforme — ISO/IEC 7810 ID-1
+            </p>
           </div>
         </div>
       </section>
