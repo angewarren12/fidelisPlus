@@ -92,6 +92,7 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-center">Flotte</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Secteur</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Provenance</th>
+                <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Dernière Modification</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Statut</th>
               </tr>
             </thead>
@@ -129,6 +130,11 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
                   <span *ngIf="!c.created_via_odoo" class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary">FidelisPlus</span>
                 </td>
                 <td class="px-6 py-4">
+                  <span class="text-xs font-semibold text-on-surface">
+                    {{ (c.updated_at || c.created_at) | date:'dd/MM/yyyy HH:mm' }}
+                  </span>
+                </td>
+                <td class="px-6 py-4">
                   <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
                         [ngClass]="c.is_active ? 'bg-primary-container/20 text-primary' : 'bg-slate-100 text-slate-500'">
                     {{ c.is_active ? 'Actif' : 'Inactif' }}
@@ -138,14 +144,14 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
 
               <!-- Loading -->
               <tr *ngIf="loading()">
-                <td colspan="6" class="px-6 py-16 text-center">
+                <td colspan="7" class="px-6 py-16 text-center">
                   <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
                   <p class="text-outline font-medium mt-2">Chargement des clients...</p>
                 </td>
               </tr>
               <!-- Error -->
               <tr *ngIf="!loading() && error()">
-                <td colspan="6" class="px-6 py-20 text-center">
+                <td colspan="7" class="px-6 py-20 text-center">
                   <span class="material-symbols-outlined text-6xl text-error/40 block mb-3">cloud_off</span>
                   <p class="text-on-surface font-bold text-lg mb-1">Impossible de charger les clients</p>
                   <p class="text-outline text-sm mb-6">Une erreur réseau est survenue. Vérifiez votre connexion et réessayez.</p>
@@ -157,7 +163,7 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
               </tr>
               <!-- Empty -->
               <tr *ngIf="!loading() && !error() && filteredClients().length === 0">
-                <td colspan="6" class="px-6 py-20 text-center">
+                <td colspan="7" class="px-6 py-20 text-center">
                   <span class="material-symbols-outlined text-6xl text-outline/30 block mb-3">group_off</span>
                   <p class="text-on-surface font-bold text-lg mb-1">Aucun client trouvé</p>
                   <p class="text-outline text-sm mb-6">Convertissez un prospect chaud ou créez un client directement.</p>

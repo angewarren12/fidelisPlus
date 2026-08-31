@@ -15,6 +15,8 @@ class CompanyFactory extends Factory
             'name' => $this->faker->company,
             'type' => $this->faker->randomElement(['prospect', 'client']),
             'category' => $this->faker->randomElement(['entreprise', 'particulier']),
+            'email' => $this->faker->unique()->companyEmail,
+            'phone' => $this->faker->phoneNumber,
             'rccm' => $this->faker->unique()->numerify('CI-ABJ-'.date('Y').'-#-#####'),
             'address' => $this->faker->address,
             'account_balance' => $this->faker->randomFloat(2, 0, 100000),

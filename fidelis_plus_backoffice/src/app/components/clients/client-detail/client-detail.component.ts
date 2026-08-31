@@ -34,6 +34,21 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
               <div class="flex items-center gap-4 mb-4">
                 <h2 class="text-3xl md:text-5xl font-headline font-extrabold tracking-tight text-on-surface">{{ client()?.name }}</h2>
                 <span class="px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-black uppercase tracking-widest shadow-sm">Actif</span>
+                <!-- Badge Code Client Odoo -->
+                <ng-container *ngIf="client()?.odoo_client_code">
+                  <span class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5"
+                    [class]="client()?.odoo_is_mayelia_customer
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200'">
+                    <span class="material-symbols-outlined text-xs">verified</span>
+                    {{ client()?.odoo_client_code }}
+                  </span>
+                  <span *ngIf="client()?.odoo_is_mayelia_customer"
+                    class="px-3 py-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-md shadow-emerald-200 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-xs">workspace_premium</span>
+                    Client Officiel Mayelia
+                  </span>
+                </ng-container>
               </div>
               <div class="flex flex-wrap items-center gap-6 text-outline font-semibold text-sm">
                 <div class="flex items-center gap-2 px-3 py-1 bg-surface-container-low rounded-lg" *ngIf="client()?.contacts?.length">
@@ -140,11 +155,23 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
                   <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 block">Adresse siège</span>
                   <p class="font-bold text-on-surface leading-relaxed">{{ client()?.address || 'Non renseignée' }}</p>
                 </div>
-                <div class="p-6" *ngIf="client()?.city || client()?.country">
+                <div class="p-6" *ngIf="client()?.city || client()?.zip_code">
                   <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 block">Localisation</span>
                   <p class="font-bold text-on-surface leading-relaxed">
-                    {{ client()?.city || '' }}<span *ngIf="client()?.city && client()?.country">, </span>{{ client()?.country || '' }}
+                    <span *ngIf="client()?.city">{{ client()?.city }}</span><span *ngIf="client()?.city && client()?.zip_code">, </span><span *ngIf="client()?.zip_code">{{ client()?.zip_code }}</span>
                   </p>
+                </div>
+                <!-- Code Client Odoo -->
+                <div class="p-6 bg-emerald-50/50 rounded-b-3xl" *ngIf="client()?.odoo_client_code">
+                  <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 block">Code Client Odoo</span>
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-600 text-base">lan</span>
+                    <p class="font-bold text-emerald-700 font-mono">{{ client()?.odoo_client_code }}</p>
+                    <span *ngIf="client()?.odoo_is_mayelia_customer"
+                      class="ml-auto px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase tracking-widest">
+                      Mayelia Officiel
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -167,31 +167,26 @@ class OdooClient
             return $this->unarchivePartner($odooId, $company->id);
         }
 
-        $payload = [
-            'external_ref'  => $ref,
-            'name'          => $company->name,
-            'email'         => $mainContact?->email ?? $company->email,
-            'phone'         => $company->phone,
-            'street'        => $company->address,
-            'city'          => $company->city,
-            'zip'           => $company->zip_code,
-            'is_company'    => $company->category === 'entreprise',
-            'category'      => $company->category,
-            'sector'        => $company->sector,
-            'vat'           => $company->rccm,
-            'rcm'           => $company->rccm,
-            'contact_name'  => $mainContact
-                ? trim(($mainContact->first_name ?? '') . ' ' . ($mainContact->last_name ?? ''))
-                : null,
-            'contact_first_name' => $mainContact?->first_name,
-            'contact_last_name'  => $mainContact?->last_name,
-            'contact_email' => $mainContact?->email ?? $company->email,
-            'contact_phone' => $mainContact?->phone,
-            'commercial_email' => $company->commercial?->email,
+        $payload = array_filter([
+            'external_ref'          => $ref,
+            'name'                  => $company->name,
+            'email'                 => $mainContact?->email ?? $company->email,
+            'phone'                 => $company->phone,
+            'street'                => $company->address,
+            'city'                  => $company->city,
+            'zip'                   => $company->zip_code,
+            'country_id'            => 67, // Côte d'Ivoire
+            'is_company'            => $company->category === 'entreprise',
+            'vat'                   => $company->rccm,
+            'ref'                   => $company->rccm,
+            'comment'               => $company->observations,
+            'commercial_email'      => $company->commercial?->email,
             'commercial_first_name' => $company->commercial?->first_name,
-            'commercial_last_name' => $company->commercial?->last_name,
-            'commercial_name' => $company->commercial ? trim($company->commercial->first_name . ' ' . $company->commercial->last_name) : null,
-        ];
+            'commercial_last_name'  => $company->commercial?->last_name,
+            'commercial_name'       => $company->commercial
+                ? trim($company->commercial->first_name . ' ' . $company->commercial->last_name)
+                : null,
+        ], fn ($val) => $val !== null && $val !== '');
 
         try {
             if ($odooId) {
@@ -302,6 +297,10 @@ class OdooClient
             return $this->archiveVehicle($odooId, $vehicle->id);
         }
 
+        $ownerOdooId = $vehicle->company?->odoo_partner_id
+            ? (int) $vehicle->company->odoo_partner_id
+            : null;
+
         $payload = [
             'external_ref'  => $ref,
             'license_plate' => $vehicle->license_plate,
@@ -311,13 +310,11 @@ class OdooClient
             'model_year'    => $vehicle->year ? (string) $vehicle->year : null,
             'fuel'          => $vehicle->fuel_type,
             'fuel_type'     => $vehicle->fuel_type,
-            'state_name'    => $vehicle->status,
-            'partner_id'    => $vehicle->company?->odoo_partner_id
-                ? (int) $vehicle->company->odoo_partner_id
-                : null,
-            'owner_id'      => $vehicle->company?->odoo_partner_id
-                ? (int) $vehicle->company->odoo_partner_id
-                : null,
+            // BUG CORRIGÉ : l'API Odoo attend state_id (integer), pas state_name (string).
+            // resolveVehicleStateId() mappe nos statuts vers les IDs Odoo.
+            'state_id'      => $this->resolveVehicleStateId($vehicle->status),
+            'partner_id'    => $ownerOdooId,
+            'owner_id'      => $ownerOdooId,
             'partner_ref'   => $vehicle->company_id
                 ? 'fidelis-company-' . $vehicle->company_id
                 : null,
@@ -391,11 +388,15 @@ class OdooClient
             'note'             => $quote->bon_de_commande_url
                 ? 'Bon de commande : ' . $quote->bon_de_commande_url
                 : null,
+            // payment_term_id : ID Odoo du mode de paiement.
+            // Nécessite que la table payment_terms ait une colonne odoo_payment_term_id.
+            'payment_term_id'  => $quote->paymentTerm?->odoo_payment_term_id ?? null,
             'order_lines'      => $quote->items->map(fn ($item) => [
                 'product_id'      => $this->resolveProductId($item->description),
                 'name'            => $item->description,
                 'product_uom_qty' => (float) $item->quantity,
                 'price_unit'      => (float) $item->price,
+                'discount'        => isset($item->discount) ? (float) $item->discount : null,
             ])->all(),
         ];
 
@@ -443,6 +444,34 @@ class OdooClient
             'rejected',
             'expired'          => 'cancel',
             default            => 'draft',
+        };
+    }
+
+    /**
+     * Mappe les statuts véhicule Fidelis Plus vers les IDs d'état fleet.vehicle.state d'Odoo.
+     *
+     * Ces IDs sont propres à l'instance Odoo Mayelia et doivent être confirmés
+     * via GET /api/sale_odoo/v1/vehicles sur un véhicule existant ayant chaque statut.
+     *
+     * Mapping provisoire basé sur les états standards Odoo Fleet :
+     *   1 = Nouveau / Disponible
+     *   2 = En service
+     *   3 = En contrat
+     *   4 = Fin de vie / Archivé
+     */
+    private function resolveVehicleStateId(?string $status): ?int
+    {
+        if ($status === null) {
+            return null;
+        }
+
+        return match (mb_strtolower(trim($status))) {
+            'nouveau', 'new', 'disponible'       => 1,
+            'en_service', 'actif', 'active'      => 2,
+            'en_contrat', 'loué', 'loue'         => 3,
+            'fin_de_vie', 'archivé', 'archive',
+            'déclassé', 'declasse', 'hors_flotte' => 4,
+            default                              => 1, // Fallback : état "Nouveau"
         };
     }
 

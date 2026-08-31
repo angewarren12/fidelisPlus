@@ -10,6 +10,8 @@ export interface Prospect {
   type: 'prospect' | 'client';
   category: 'entreprise' | 'particulier';
   company_type?: 'flotte' | 'apporteur' | 'garage';
+  email?: string;
+  phone?: string;
   address?: string;
   city?: string;
   zip_code?: string;
@@ -18,11 +20,18 @@ export interface Prospect {
   estimated_potential?: number;
   estimated_decision_date?: string;
   needs?: string;
+  observations?: string;
   temperature: ProspectTemperature;
   kanban_stage: KanbanStage;
   commercial_id: number;
+  commercial_name?: string;
   is_active: boolean;
   created_via_odoo?: boolean;
+  // Champs Odoo
+  odoo_partner_id?: number | null;
+  odoo_client_code?: string | null;
+  odoo_is_mayelia_customer?: boolean;
+  // Dates
   last_contact_date?: string;
   created_at: string;
   updated_at: string;

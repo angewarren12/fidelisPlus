@@ -19,6 +19,8 @@ class Company extends Model
         'created_via_marketing',
         'created_via_odoo',
         'odoo_partner_id',
+        'odoo_client_code',
+        'odoo_is_mayelia_customer',
         'name',
         'email',
         'phone',
@@ -53,7 +55,8 @@ class Company extends Model
         'bonus_fleet_awarded_at' => 'datetime',
         'bonus_profile_completed_awarded_at' => 'datetime',
         'bonus_referral_awarded_at' => 'datetime',
-        'odoo_synced_at' => 'datetime',
+        'odoo_synced_at'            => 'datetime',
+        'odoo_is_mayelia_customer'  => 'boolean',
     ];
 
     public function isIndividual(): bool

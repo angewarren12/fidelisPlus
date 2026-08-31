@@ -127,12 +127,13 @@ import { TeamService } from '../../../services/team.service';
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest text-center">Température</th>
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Provenance</th>
               <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Dernière Activité</th>
+              <th class="px-6 py-4 text-[11px] font-extrabold text-on-surface-variant uppercase tracking-widest">Dernière Modification</th>
               <th class="px-6 py-4"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-surface-container-low">
             <tr *ngIf="loading()">
-              <td colspan="6" class="px-6 py-16 text-center">
+              <td colspan="7" class="px-6 py-16 text-center">
                 <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
                 <p class="text-outline font-medium mt-2">Chargement des prospects...</p>
               </td>
@@ -174,6 +175,11 @@ import { TeamService } from '../../../services/team.service';
                   <div class="flex flex-col">
                     <span class="text-sm font-medium">{{ (p.last_contact_date || p.created_at) | date:'short' }}</span>
                     <span class="text-[11px] text-on-surface-variant italic">{{ p.lead_source }}</span>
+                  </div>
+                </td>
+                <td class="px-6 py-5">
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-[#1a1831]">{{ (p.updated_at || p.created_at) | date:'dd/MM/yyyy HH:mm' }}</span>
                   </div>
                 </td>
                 <td class="px-6 py-5 text-right">

@@ -51,7 +51,9 @@ class OdooIngestService
      *   contact_name  (string|null) — nom complet du correspondant principal
      *   contact_email (string|null)
      *   contact_phone (string|null)
-     *   salesperson_first_name / salesperson_last_name — rapprochement commercial
+     *   customer_code        (string|null) — code client Mayelia (ex: CLT-00001) → odoo_client_code
+     *   is_mayelia_customer  (bool)        — client agréé Mayelia → odoo_is_mayelia_customer
+     *   salesperson_first_name / salesperson_last_name / salesperson_email — rapprochement commercial
      */
     public function ingestCompany(array $payload): ?Company
     {
@@ -78,32 +80,52 @@ class OdooIngestService
         $category = ($payload['is_company'] ?? true) ? 'entreprise' : 'particulier';
 
         $attributes = [
-            'name'             => $name,
-            'type'             => $type,
-            'category'         => $category,
-            'email'            => $payload['email'] ?? null,
-            'phone'            => $payload['phone'] ?? null,
-            'address'          => $payload['street'] ?? null,
-            'city'             => $payload['city'] ?? null,
-            'zip_code'         => $payload['zip'] ?? $payload['zip_code'] ?? null,
-            'kanban_stage'     => $type === 'client' ? 'client_actif' : 'nouveau_lead',
+            'name'                     => $name,
+            'type'                     => $type,
+            'category'                 => $category,
+            'email'                    => $payload['email'] ?? null,
+            'phone'                    => $payload['phone'] ?? null,
+            'address'                  => $payload['street'] ?? null,
+            'city'                     => $payload['city'] ?? null,
+            'zip_code'                 => $payload['zip'] ?? $payload['zip_code'] ?? null,
+            'kanban_stage'             => $type === 'client' ? 'client_actif' : 'nouveau_lead',
             // La température n'a de sens que pour un prospect ; "tiède" par défaut.
-            'temperature'      => $type === 'prospect' ? 'tiede' : null,
-            'is_active'        => $type === 'client',
-            'created_via_odoo' => true,
+            'temperature'              => $type === 'prospect' ? 'tiede' : null,
+            'is_active'                => $type === 'client',
+            'created_via_odoo'         => true,
+            // Champs commerciaux Odoo : code client et flag agrément Mayelia
+            'odoo_client_code'         => $payload['customer_code'] ?? null,
+            'odoo_is_mayelia_customer' => (bool) ($payload['is_mayelia_customer'] ?? false),
         ];
 
-        // Rapprochement du commercial par prénom/nom.
-        $salesFirst = $payload['salesperson_first_name'] ?? null;
-        $salesLast  = $payload['salesperson_last_name'] ?? null;
-        if ($salesFirst && $salesLast) {
+        // Rapprochement du commercial.
+        // PRIORITÉ 1 : par email (plus fiable — correspond à ce qu'on pousse via commercial_email)
+        $commercialEmail = $payload['salesperson_email']
+            ?? $payload['commercial_email']
+            ?? $payload['user_email']
+            ?? null;
+
+        $commercial = null;
+        if ($commercialEmail) {
             $commercial = User::whereIn('role', ['commercial', 'admin_commercial', 'super_admin'])
-                ->whereRaw('LOWER(first_name) = ?', [mb_strtolower(trim($salesFirst))])
-                ->whereRaw('LOWER(last_name) = ?', [mb_strtolower(trim($salesLast))])
+                ->where('email', mb_strtolower(trim($commercialEmail)))
                 ->first();
-            if ($commercial) {
-                $attributes['commercial_id'] = $commercial->id;
+        }
+
+        // PRIORITÉ 2 : fallback par prénom + nom si l'email n'a rien donné
+        if (! $commercial) {
+            $salesFirst = $payload['salesperson_first_name'] ?? null;
+            $salesLast  = $payload['salesperson_last_name'] ?? null;
+            if ($salesFirst && $salesLast) {
+                $commercial = User::whereIn('role', ['commercial', 'admin_commercial', 'super_admin'])
+                    ->whereRaw('LOWER(first_name) = ?', [mb_strtolower(trim($salesFirst))])
+                    ->whereRaw('LOWER(last_name) = ?', [mb_strtolower(trim($salesLast))])
+                    ->first();
             }
+        }
+
+        if ($commercial) {
+            $attributes['commercial_id'] = $commercial->id;
         }
 
         // withTrashed() : retrouver une fiche déjà archivée côté FidelisPlus.
@@ -224,11 +246,11 @@ class OdooIngestService
 
         if ($externalRef && str_starts_with($externalRef, 'fidelis-vehicle-')) {
             $fidelisId = (int) substr($externalRef, strlen('fidelis-vehicle-'));
-            $vehicle   = Vehicle::withTrashed()->find($fidelisId);
+            $vehicle   = Vehicle::find($fidelisId);
         }
 
         if (! $vehicle && $odooVehicleId) {
-            $vehicle = Vehicle::withTrashed()->where('odoo_vehicle_id', (string) $odooVehicleId)->first();
+            $vehicle = Vehicle::where('odoo_vehicle_id', (string) $odooVehicleId)->first();
         }
 
         if (! $vehicle) {
@@ -268,12 +290,10 @@ class OdooIngestService
         $vehicle->odoo_synced_at   = now();
         $vehicle->save();
 
-        // Archivage cohérent.
+        // Archivage cohérent (Suppression physique car pas de SoftDeletes sur Vehicle).
         $isArchived = ! (bool) ($payload['active'] ?? true);
-        if ($isArchived && ! $vehicle->trashed()) {
+        if ($isArchived) {
             $vehicle->delete();
-        } elseif (! $isArchived && $vehicle->trashed()) {
-            $vehicle->restore();
         }
 
         return $vehicle;
@@ -314,9 +334,37 @@ class OdooIngestService
         }
 
         if (! $quote) {
-            Log::info('OdooIngestService::ingestQuote — devis Odoo inconnu dans FidelisPlus, ignoré', [
-                'odoo_quote_id' => $odooQuoteId,
-                'external_ref'  => $externalRef,
+            // Tenter d'associer le devis Odoo à la société correspondante dans FidelisPlus
+            $odooPartnerId = $payload['partner_id'] ?? null;
+            if (is_array($odooPartnerId)) {
+                $odooPartnerId = $odooPartnerId[0] ?? null;
+            }
+
+            $company = null;
+            if ($odooPartnerId) {
+                $company = Company::where('odoo_partner_id', (string) $odooPartnerId)->first();
+            }
+
+            if ($company) {
+                $quote = Quote::create([
+                    'company_id'       => $company->id,
+                    'quote_number'     => $payload['name'] ?? $payload['display_name'] ?? ('OD-' . $odooQuoteId),
+                    'status'           => $this->mapOdooStateToFidelis($payload['state'] ?? 'draft'),
+                    'total_amount'     => $payload['amount_total'] ?? $payload['total_amount'] ?? 0,
+                    'valid_until'      => $payload['validity_date'] ?? null,
+                    'odoo_quote_id'    => (string) $odooQuoteId,
+                    'odoo_sync_status' => 'synced',
+                    'odoo_synced_at'   => now(),
+                ]);
+
+                Log::info("OdooIngestService::ingestQuote — devis Odoo #{$odooQuoteId} créé pour la société {$company->name}");
+                return $quote;
+            }
+
+            Log::info('OdooIngestService::ingestQuote — devis Odoo inconnu sans client correspondant dans FidelisPlus, ignoré', [
+                'odoo_quote_id'   => $odooQuoteId,
+                'odoo_partner_id' => $odooPartnerId,
+                'external_ref'    => $externalRef,
             ]);
             return null;
         }
