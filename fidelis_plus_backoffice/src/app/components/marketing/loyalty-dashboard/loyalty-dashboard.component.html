@@ -21,6 +21,14 @@
             placeholder="Nom, société, clé…"
             class="w-full h-11 pl-10 pr-4 rounded-2xl bg-white border border-outline-variant/15 text-sm font-medium outline-none focus:border-primary/50 shadow-sm transition-all" />
         </div>
+        <div class="min-w-[150px]">
+          <select [(ngModel)]="accountHolderTypeFilter" (ngModelChange)="loadAccounts()"
+            class="w-full h-11 px-3.5 rounded-2xl bg-white border border-outline-variant/15 text-xs font-bold outline-none focus:border-primary/50 shadow-sm transition-all">
+            <option value="all">Tous les titulaires</option>
+            <option value="particulier">Particuliers</option>
+            <option value="entreprise">Entreprises</option>
+          </select>
+        </div>
         <button type="button" (click)="loadAccounts()"
           class="h-11 px-4 rounded-2xl bg-white border border-outline-variant/15 shadow-sm text-outline hover:text-primary transition-colors flex items-center gap-2">
           <span class="material-symbols-outlined text-sm" [class.animate-spin]="loadingAccounts()">refresh</span>

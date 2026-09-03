@@ -104,10 +104,12 @@ import { SendQuoteModalComponent } from './send-quote-modal/send-quote-modal.com
           <div class="w-full sm:w-44">
             <label class="block text-[10px] font-black uppercase text-outline tracking-[0.2em] mb-1.5 ml-0.5">Statut</label>
             <select [value]="filter()" (change)="onStatusFilterChange($any($event.target).value)" class="w-full py-3 px-3 rounded-xl bg-surface-container-low border-none text-sm font-bold outline-none">
-              <option value="all">Tous</option>
+              <option value="all">Tous les statuts</option>
               <option value="draft">Brouillon</option>
               <option value="sent">Envoyé</option>
-              <option value="accepted">Signé</option>
+              <option value="accepted">Signé / Accepté</option>
+              <option value="declined">Refusé</option>
+              <option value="expired">Expiré</option>
             </select>
           </div>
           <div class="w-full sm:w-28">

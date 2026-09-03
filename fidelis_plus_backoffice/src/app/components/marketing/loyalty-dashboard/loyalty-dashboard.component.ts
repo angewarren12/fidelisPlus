@@ -121,6 +121,7 @@ export class LoyaltyDashboardComponent implements OnInit {
   reportLoading = signal(false);
 
   accountSearchQuery = '';
+  accountHolderTypeFilter: 'all' | 'particulier' | 'entreprise' = 'all';
   lastQrPayload = signal<string | null>(null);
   qrDataUrl = signal<string | null>(null);
   qrLoadingId = signal<number | null>(null);
@@ -255,7 +256,10 @@ export class LoyaltyDashboardComponent implements OnInit {
 
   loadAccounts(page = 1): void {
     this.loadingAccounts.set(true);
-    this.loyaltyService.listAccounts(page, 20).subscribe({
+    const holderType = this.accountHolderTypeFilter !== 'all'
+      ? (this.accountHolderTypeFilter === 'entreprise' ? 'company' : 'member')
+      : undefined;
+    this.loyaltyService.listAccounts(page, 20, { holder_type: holderType }).subscribe({
       next: (res) => {
         let items = res.items;
         if (this.accountSearchQuery) {

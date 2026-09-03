@@ -36,7 +36,8 @@ class OdooClient
     public function __construct(
         private readonly ?string $baseUrl = null,
         private readonly ?string $token = null,
-    ) {}
+    ) {
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Infrastructure HTTP
@@ -59,7 +60,7 @@ class OdooClient
      */
     private function extractData(Response $response, string $label): ?array
     {
-        if (! $response->successful()) {
+        if (!$response->successful()) {
             Log::warning("OdooClient::{$label} — HTTP {$response->status()}", [
                 'body' => mb_substr($response->body(), 0, 500),
             ]);
@@ -67,7 +68,7 @@ class OdooClient
         }
 
         $json = $response->json();
-        if (! ($json['success'] ?? false)) {
+        if (!($json['success'] ?? false)) {
             Log::warning("OdooClient::{$label} — success=false", [
                 'error' => $json['error'] ?? $json,
             ]);
@@ -153,7 +154,7 @@ class OdooClient
 
         // --- Archivage ---
         if ($event === 'company_archived') {
-            if (! $odooId) {
+            if (!$odooId) {
                 return ['odoo_partner_id' => 0]; // Pas encore synchronisé → rien à faire.
             }
             return $this->archivePartner($odooId, $company->id);
@@ -161,32 +162,32 @@ class OdooClient
 
         // --- Restauration ---
         if ($event === 'company_restored') {
-            if (! $odooId) {
+            if (!$odooId) {
                 return ['odoo_partner_id' => 0];
             }
             return $this->unarchivePartner($odooId, $company->id);
         }
 
         $payload = array_filter([
-            'external_ref'          => $ref,
-            'name'                  => $company->name,
-            'email'                 => $mainContact?->email ?? $company->email,
-            'phone'                 => $company->phone,
-            'street'                => $company->address,
-            'city'                  => $company->city,
-            'zip'                   => $company->zip_code,
-            'country_id'            => 67, // Côte d'Ivoire
-            'is_company'            => $company->category === 'entreprise',
-            'vat'                   => $company->rccm,
-            'ref'                   => $company->rccm,
-            'comment'               => $company->observations,
-            'commercial_email'      => $company->commercial?->email,
+            'external_ref' => $ref,
+            'name' => $company->name,
+            'email' => $mainContact?->email ?? $company->email,
+            'phone' => $company->phone,
+            'street' => $company->address,
+            'city' => $company->city,
+            'zip' => $company->zip_code,
+            'country_code' => $company->country_code ?? 'CI', // Code ISO-2 (recommandé par Odoo, évite le hardcoding country_id)
+            'is_company' => $company->category === 'entreprise',
+            'vat' => $company->rccm,
+            'ref' => $company->rccm,
+            'comment' => $company->observations,
+            'commercial_email' => $company->commercial?->email,
             'commercial_first_name' => $company->commercial?->first_name,
-            'commercial_last_name'  => $company->commercial?->last_name,
-            'commercial_name'       => $company->commercial
+            'commercial_last_name' => $company->commercial?->last_name,
+            'commercial_name' => $company->commercial
                 ? trim($company->commercial->first_name . ' ' . $company->commercial->last_name)
                 : null,
-        ], fn ($val) => $val !== null && $val !== '');
+        ], fn($val) => $val !== null && $val !== '');
 
         try {
             if ($odooId) {
@@ -220,7 +221,9 @@ class OdooClient
             return ['odoo_partner_id' => $newId];
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncCompany exception', [
-                'message' => $e->getMessage(), 'company_id' => $company->id, 'event' => $event,
+                'message' => $e->getMessage(),
+                'company_id' => $company->id,
+                'event' => $event,
             ]);
             return null;
         }
@@ -258,9 +261,11 @@ class OdooClient
     {
         try {
             $response = $this->http()->post("/api/sale_odoo/v1/partners/{$odooId}/promote-to-customer");
-            if (! $response->successful()) {
+            if (!$response->successful()) {
                 Log::warning('OdooClient::promoteToCustomer a échoué', [
-                    'odoo_id' => $odooId, 'company_id' => $companyId, 'status' => $response->status(),
+                    'odoo_id' => $odooId,
+                    'company_id' => $companyId,
+                    'status' => $response->status(),
                 ]);
             }
         } catch (\Throwable $e) {
@@ -291,7 +296,7 @@ class OdooClient
             : $this->findVehicleByRef($ref);
 
         if ($event === 'vehicle_archived') {
-            if (! $odooId) {
+            if (!$odooId) {
                 return ['odoo_vehicle_id' => 0];
             }
             return $this->archiveVehicle($odooId, $vehicle->id);
@@ -302,20 +307,20 @@ class OdooClient
             : null;
 
         $payload = [
-            'external_ref'  => $ref,
+            'external_ref' => $ref,
             'license_plate' => $vehicle->license_plate,
-            'brand_name'    => $vehicle->brand,
-            'model_name'    => $vehicle->model,
-            'year'          => $vehicle->year,
-            'model_year'    => $vehicle->year ? (string) $vehicle->year : null,
-            'fuel'          => $vehicle->fuel_type,
-            'fuel_type'     => $vehicle->fuel_type,
-            // BUG CORRIGÉ : l'API Odoo attend state_id (integer), pas state_name (string).
-            // resolveVehicleStateId() mappe nos statuts vers les IDs Odoo.
-            'state_id'      => $this->resolveVehicleStateId($vehicle->status),
-            'partner_id'    => $ownerOdooId,
-            'owner_id'      => $ownerOdooId,
-            'partner_ref'   => $vehicle->company_id
+            'brand_name' => $vehicle->brand,
+            'model_name' => $vehicle->model,
+            'year' => $vehicle->year,
+            'model_year' => $vehicle->year ? (string) $vehicle->year : null,
+            'fuel' => $vehicle->fuel_type,
+            'fuel_type' => $vehicle->fuel_type,
+            // NOUVEAU : support du champ symbolique state_name (recommandé) et state_id pour rétrocompatibilité.
+            'state_name' => $this->resolveVehicleStateName($vehicle->status),
+            'state_id' => $this->resolveVehicleStateId($vehicle->status),
+            'partner_id' => $ownerOdooId,
+            'owner_id' => $ownerOdooId,
+            'partner_ref' => $vehicle->company_id
                 ? 'fidelis-company-' . $vehicle->company_id
                 : null,
         ];
@@ -336,7 +341,9 @@ class OdooClient
             return $data !== null ? ['odoo_vehicle_id' => (int) ($data['id'] ?? 0)] : null;
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncVehicle exception', [
-                'message' => $e->getMessage(), 'vehicle_id' => $vehicle->id, 'event' => $event,
+                'message' => $e->getMessage(),
+                'vehicle_id' => $vehicle->id,
+                'event' => $event,
             ]);
             return null;
         }
@@ -375,28 +382,28 @@ class OdooClient
             : $this->findSaleOrderByRef($ref);
 
         $payload = [
-            'external_ref'     => $ref,
+            'external_ref' => $ref,
             'client_order_ref' => $quote->quote_number,
-            'partner_id'       => $quote->company?->odoo_partner_id
+            'partner_id' => $quote->company?->odoo_partner_id
                 ? (int) $quote->company->odoo_partner_id
                 : null,
-            'partner_ref'      => $quote->company_id
+            'partner_ref' => $quote->company_id
                 ? 'fidelis-company-' . $quote->company_id
                 : null,
-            'state'            => $this->mapQuoteStatus($quote->status),
-            'validity_date'    => $quote->valid_until?->format('Y-m-d'),
-            'note'             => $quote->bon_de_commande_url
+            'state' => $this->mapQuoteStatus($quote->status),
+            'validity_date' => $quote->valid_until?->format('Y-m-d'),
+            'note' => $quote->bon_de_commande_url
                 ? 'Bon de commande : ' . $quote->bon_de_commande_url
                 : null,
             // payment_term_id : ID Odoo du mode de paiement.
             // Nécessite que la table payment_terms ait une colonne odoo_payment_term_id.
-            'payment_term_id'  => $quote->paymentTerm?->odoo_payment_term_id ?? null,
-            'order_lines'      => $quote->items->map(fn ($item) => [
-                'product_id'      => $this->resolveProductId($item->description),
-                'name'            => $item->description,
+            'payment_term_id' => $quote->paymentTerm?->odoo_payment_term_id ?? null,
+            'order_lines' => $quote->items->map(fn($item) => [
+                'product_id' => $this->resolveProductId($item->description),
+                'name' => $item->description,
                 'product_uom_qty' => (float) $item->quantity,
-                'price_unit'      => (float) $item->price,
-                'discount'        => isset($item->discount) ? (float) $item->discount : null,
+                'price_unit' => (float) $item->price,
+                'discount' => isset($item->discount) ? (float) $item->discount : null,
             ])->all(),
         ];
 
@@ -429,7 +436,9 @@ class OdooClient
             return null;
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncQuote exception', [
-                'message' => $e->getMessage(), 'quote_id' => $quote->id, 'event' => $event,
+                'message' => $e->getMessage(),
+                'quote_id' => $quote->id,
+                'event' => $event,
             ]);
             return null;
         }
@@ -438,26 +447,42 @@ class OdooClient
     private function mapQuoteStatus(string $status): string
     {
         return match ($status) {
-            'draft'            => 'draft',
-            'sent'             => 'sent',
-            'accepted'         => 'sale',
+            'draft' => 'draft',
+            'sent' => 'sent',
+            'accepted' => 'sale',
             'rejected',
-            'expired'          => 'cancel',
-            default            => 'draft',
+            'expired' => 'cancel',
+            default => 'draft',
+        };
+    }
+
+    /**
+     * Mappe les statuts véhicule Fidelis Plus vers les libellés d'état fleet.vehicle.state d'Odoo.
+     * Libellés exacts Odoo Mayelia (instance FR) :
+     *   1 -> "Nouvelle demande"
+     *   2 -> "À commander"
+     *   3 -> "Inscrit"
+     *   4 -> "Déclassé"
+     */
+    private function resolveVehicleStateName(?string $status): ?string
+    {
+        if ($status === null) {
+            return null;
+        }
+
+        return match (mb_strtolower(trim($status))) {
+            'nouveau', 'new', 'disponible', 'nouvelle_demande' => 'Nouvelle demande',
+            'a_commander', 'a commander', 'commande' => 'À commander',
+            'en_service', 'actif', 'active', 'en_contrat',
+            'loué', 'loue', 'inscrit', 'registered' => 'Inscrit',
+            'fin_de_vie', 'archivé', 'archive',
+            'déclassé', 'declasse', 'hors_flotte' => 'Déclassé',
+            default => 'Inscrit',
         };
     }
 
     /**
      * Mappe les statuts véhicule Fidelis Plus vers les IDs d'état fleet.vehicle.state d'Odoo.
-     *
-     * Ces IDs sont propres à l'instance Odoo Mayelia et doivent être confirmés
-     * via GET /api/sale_odoo/v1/vehicles sur un véhicule existant ayant chaque statut.
-     *
-     * Mapping provisoire basé sur les états standards Odoo Fleet :
-     *   1 = Nouveau / Disponible
-     *   2 = En service
-     *   3 = En contrat
-     *   4 = Fin de vie / Archivé
      */
     private function resolveVehicleStateId(?string $status): ?int
     {
@@ -466,12 +491,13 @@ class OdooClient
         }
 
         return match (mb_strtolower(trim($status))) {
-            'nouveau', 'new', 'disponible'       => 1,
-            'en_service', 'actif', 'active'      => 2,
-            'en_contrat', 'loué', 'loue'         => 3,
+            'nouveau', 'new', 'disponible', 'nouvelle_demande' => 1,
+            'a_commander', 'a commander', 'commande' => 2,
+            'en_service', 'actif', 'active', 'en_contrat',
+            'loué', 'loue', 'inscrit', 'registered' => 3,
             'fin_de_vie', 'archivé', 'archive',
             'déclassé', 'declasse', 'hors_flotte' => 4,
-            default                              => 1, // Fallback : état "Nouveau"
+            default => 3,
         };
     }
 
@@ -501,6 +527,61 @@ class OdooClient
         return $this->fetchAllPages('/api/sale_odoo/v1/sale_orders', $since, 'fetchUpdatedQuotes');
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Bootstrap & Référentiels Odoo (Endpoints GET en lecture)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Récupère la liste des pays depuis Odoo (GET /api/sale_odoo/v1/countries).
+     * @return array[]|null
+     */
+    public function fetchCountries(?string $code = null, ?string $search = null): ?array
+    {
+        try {
+            $params = array_filter(['code' => $code, 'search' => $search]);
+            return $this->extractData(
+                $this->http()->get('/api/sale_odoo/v1/countries', $params),
+                'fetchCountries'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::fetchCountries exception', ['message' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Récupère les détails d'un pays par son code ISO-2 (GET /api/sale_odoo/v1/countries/{code}).
+     */
+    public function fetchCountryByCode(string $code): ?array
+    {
+        try {
+            return $this->extractData(
+                $this->http()->get("/api/sale_odoo/v1/countries/{$code}"),
+                'fetchCountryByCode'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::fetchCountryByCode exception', ['message' => $e->getMessage(), 'code' => $code]);
+            return null;
+        }
+    }
+
+    /**
+     * Récupère la liste des états véhicules depuis Odoo (GET /api/sale_odoo/v1/vehicle-states).
+     * @return array[]|null
+     */
+    public function fetchVehicleStates(): ?array
+    {
+        try {
+            return $this->extractData(
+                $this->http()->get('/api/sale_odoo/v1/vehicle-states'),
+                'fetchVehicleStates'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::fetchVehicleStates exception', ['message' => $e->getMessage()]);
+            return null;
+        }
+    }
+
     /**
      * Pagination transparente : appelle autant de pages que nécessaire.
      * Paramètre delta : `modified_since` (ISO 8601) — nom réel côté Odoo.
@@ -511,8 +592,8 @@ class OdooClient
     private function fetchAllPages(string $path, ?string $since, string $label): ?array
     {
         $limit = 200;
-        $page  = 1;
-        $all   = [];
+        $page = 1;
+        $all = [];
 
         $params = array_filter(['modified_since' => $since, 'limit' => $limit]);
 
@@ -521,21 +602,22 @@ class OdooClient
                 $params['page'] = $page;
                 $response = $this->http()->get($path, $params);
 
-                if (! $response->successful()) {
+                if (!$response->successful()) {
                     Log::warning("OdooClient::{$label} — HTTP {$response->status()}", [
-                        'page' => $page, 'since' => $since,
+                        'page' => $page,
+                        'since' => $since,
                     ]);
                     return $page === 1 ? null : $all;
                 }
 
                 $json = $response->json();
-                if (! ($json['success'] ?? false)) {
+                if (!($json['success'] ?? false)) {
                     Log::warning("OdooClient::{$label} — success=false", ['page' => $page]);
                     return $page === 1 ? null : $all;
                 }
 
                 // L'API peut renvoyer data sous forme de liste directe ou de { records, total }.
-                $data    = $json['data'] ?? [];
+                $data = $json['data'] ?? [];
                 $records = is_array($data) && array_key_exists('records', $data)
                     ? (array) ($data['records'] ?? [])
                     : (array) $data;
@@ -549,7 +631,7 @@ class OdooClient
                     break;
                 }
 
-                $all  = array_merge($all, $records);
+                $all = array_merge($all, $records);
                 $page++;
 
                 // Fin de pagination : réponse incomplète = dernière page.
@@ -561,7 +643,8 @@ class OdooClient
             return $all;
         } catch (\Throwable $e) {
             Log::warning("OdooClient::{$label} exception", [
-                'message' => $e->getMessage(), 'since' => $since,
+                'message' => $e->getMessage(),
+                'since' => $since,
             ]);
             return null;
         }
@@ -573,20 +656,20 @@ class OdooClient
             $response = $this->http()->post("/api/sale_odoo/v1/sale_orders/{$odooQuoteId}/attachments", [
                 'url' => $url,
             ]);
-            if (! $response->successful()) {
+            if (!$response->successful()) {
                 Log::warning('OdooClient::syncQuoteAttachments a échoué', [
                     'odoo_quote_id' => $odooQuoteId,
-                    'url'           => $url,
-                    'status'        => $response->status(),
+                    'url' => $url,
+                    'status' => $response->status(),
                 ]);
                 return false;
             }
             return $response->json()['success'] ?? false;
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncQuoteAttachments exception', [
-                'message'       => $e->getMessage(),
+                'message' => $e->getMessage(),
                 'odoo_quote_id' => $odooQuoteId,
-                'url'           => $url,
+                'url' => $url,
             ]);
             return false;
         }
@@ -610,12 +693,14 @@ class OdooClient
         }
 
         if (str_contains($desc, 'visite pl')) {
-            if (str_contains($desc, 'pl2')) return 334;
+            if (str_contains($desc, 'pl2'))
+                return 334;
             return 332; // Visite PL1
         }
 
         if (str_contains($desc, 'visite tp')) {
-            if (str_contains($desc, 'tp4')) return 335;
+            if (str_contains($desc, 'tp4'))
+                return 335;
             return 333; // Visite TP3
         }
 

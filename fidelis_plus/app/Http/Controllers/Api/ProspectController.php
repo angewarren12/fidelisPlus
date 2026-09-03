@@ -276,7 +276,9 @@ class ProspectController extends Controller
      */
     public function show($id)
     {
-        $company = Company::where('id', $id)->where('type', 'prospect')->with('contacts')->firstOrFail();
+        $query = Company::where('id', $id)->where('type', 'prospect')->with('contacts');
+        $this->scopeForUser($query);
+        $company = $query->firstOrFail();
 
         return response()->json([
             'status' => 'success',
@@ -289,7 +291,9 @@ class ProspectController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $company = Company::where('id', $id)->where('type', 'prospect')->firstOrFail();
+        $query = Company::where('id', $id)->where('type', 'prospect');
+        $this->scopeForUser($query);
+        $company = $query->firstOrFail();
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -379,7 +383,9 @@ class ProspectController extends Controller
      */
     public function convertToClient($id)
     {
-        $company = Company::where('id', $id)->where('type', 'prospect')->firstOrFail();
+        $query = Company::where('id', $id)->where('type', 'prospect');
+        $this->scopeForUser($query);
+        $company = $query->firstOrFail();
 
         // Vérifier qu'il y a au moins un correspondant avant de convertir
         $allContacts = $company->contacts()->get();
@@ -425,7 +431,9 @@ class ProspectController extends Controller
             'temperature' => 'required|in:froid,tiede,chaud'
         ]);
 
-        $prospect = \App\Models\Company::where('id', $id)->where('type', 'prospect')->firstOrFail();
+        $query = \App\Models\Company::where('id', $id)->where('type', 'prospect');
+        $this->scopeForUser($query);
+        $prospect = $query->firstOrFail();
         $prospect->update(['temperature' => $request->temperature]);
 
         return response()->json([

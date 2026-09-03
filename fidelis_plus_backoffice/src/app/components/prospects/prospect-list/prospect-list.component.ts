@@ -77,6 +77,13 @@ import { TeamService } from '../../../services/team.service';
             <option *ngFor="let s of sectors()" [value]="s">{{ s }}</option>
           </select>
         </div>
+        <div class="w-full sm:w-36">
+          <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1 ml-0.5">Source Lead</label>
+          <select [(ngModel)]="filterLeadSource" (ngModelChange)="onFilterChange()" class="w-full py-3 px-3 rounded-xl bg-surface-container-low border-none text-sm font-semibold outline-none">
+            <option value="">Toutes sources</option>
+            <option *ngFor="let ls of leadSources()" [value]="ls">{{ ls }}</option>
+          </select>
+        </div>
         
         <div class="w-full sm:w-24">
           <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1 ml-0.5">Par page</label>

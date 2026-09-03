@@ -324,6 +324,11 @@ class AccountController extends Controller
     {
         $account = Company::findOrFail($id);
 
+        $user = request()->user();
+        if ($user && $user->role === 'commercial' && (int) $account->commercial_id !== (int) $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'Action refusée : Ce compte appartient à un autre commercial.'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',

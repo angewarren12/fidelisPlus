@@ -24,17 +24,33 @@ import { openReportPreviewWindow } from '../../../utils/report-preview-window';
                    class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20">
           </div>
         </div>
-        <div class="min-w-[200px]">
-          <label for="filter-vehicle-count" class="sr-only">Filtrer par nombre de véhicules</label>
-          <div class="relative">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]" aria-hidden="true">filter_list</span>
-            <select id="filter-vehicle-count" [(ngModel)]="vehicleCountFilter" class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium appearance-none">
-              <option value="all">Tous les véhicules</option>
-              <option value="1-5">1 à 5 véhicules</option>
-              <option value="6-20">6 à 20 véhicules</option>
-              <option value="20+">Plus de 20 véhicules</option>
-            </select>
-          </div>
+        <div class="min-w-[150px]">
+          <select [(ngModel)]="vehicleCountFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+            <option value="all">Toutes les flottes</option>
+            <option value="1-5">1 à 5 véhicules</option>
+            <option value="6-20">6 à 20 véhicules</option>
+            <option value="20+">Plus de 20 véhicules</option>
+          </select>
+        </div>
+        <div class="min-w-[140px]">
+          <select [(ngModel)]="statusFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+            <option value="all">Tous statuts</option>
+            <option value="active">Actifs</option>
+            <option value="inactive">Inactifs</option>
+          </select>
+        </div>
+        <div class="min-w-[150px]">
+          <select [(ngModel)]="sourceFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+            <option value="all">Toutes sources</option>
+            <option value="odoo">Via Odoo</option>
+            <option value="fidelis">FidelisPlus direct</option>
+          </select>
+        </div>
+        <div class="min-w-[150px]">
+          <select [(ngModel)]="sectorFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+            <option value="all">Tous secteurs</option>
+            <option *ngFor="let s of availableSectors()" [value]="s">{{ s }}</option>
+          </select>
         </div>
         <div class="flex items-center gap-3 ml-auto">
           <button type="button" (click)="exportClientsCsv()" class="px-5 py-2 border-2 border-outline-variant text-on-surface font-bold text-sm rounded-xl hover:bg-surface-container transition-colors flex items-center gap-2">
@@ -186,24 +202,56 @@ export class ClientListComponent implements OnInit {
   loading = signal(true);
   error = signal(false);
   vehicleCountFilter = signal<'all' | '1-5' | '6-20' | '20+'>('all');
+  statusFilter = signal<'all' | 'active' | 'inactive'>('all');
+  sourceFilter = signal<'all' | 'odoo' | 'fidelis'>('all');
+  sectorFilter = signal<string>('all');
   searchQuery = signal('');
 
   private accountService = inject(AccountService);
   private toastService = inject(ToastService);
 
+  availableSectors = computed(() => {
+    const list = this.clients();
+    const set = new Set<string>();
+    for (const c of list) {
+      if (c.sector) set.add(c.sector);
+    }
+    return Array.from(set).sort();
+  });
+
   filteredClients = computed(() => {
-    const filter = this.vehicleCountFilter();
     let list = this.clients();
 
-    if (filter !== 'all') {
+    // Filtre véhicules
+    const filterVehicles = this.vehicleCountFilter();
+    if (filterVehicles !== 'all') {
       list = list.filter((c: any) => {
         const count = c.vehicles_count || 0;
-        if (filter === '1-5') return count >= 1 && count <= 5;
-        if (filter === '6-20') return count >= 6 && count <= 20;
+        if (filterVehicles === '1-5') return count >= 1 && count <= 5;
+        if (filterVehicles === '6-20') return count >= 6 && count <= 20;
         return count > 20;
       });
     }
 
+    // Filtre statut d'activité
+    const st = this.statusFilter();
+    if (st !== 'all') {
+      list = list.filter((c: any) => st === 'active' ? c.is_active : !c.is_active);
+    }
+
+    // Filtre provenance Odoo vs Fidelis
+    const src = this.sourceFilter();
+    if (src !== 'all') {
+      list = list.filter((c: any) => src === 'odoo' ? !!c.created_via_odoo : !c.created_via_odoo);
+    }
+
+    // Filtre secteur
+    const sec = this.sectorFilter();
+    if (sec !== 'all') {
+      list = list.filter((c: any) => c.sector === sec);
+    }
+
+    // Recherche textuelle
     const q = this.searchQuery().trim().toLowerCase();
     if (q) {
       list = list.filter((c: any) => {
