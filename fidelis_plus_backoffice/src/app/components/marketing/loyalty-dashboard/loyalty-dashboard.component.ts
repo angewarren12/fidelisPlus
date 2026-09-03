@@ -568,9 +568,9 @@ export class LoyaltyDashboardComponent implements OnInit {
     }
     this.claimSaving.set(true);
     this.loyaltyService.claimReward(acc.id, this.claimRewardId).subscribe({
-      next: () => {
+      next: (res: any) => {
         this.claimSaving.set(false);
-        this.toastService.success('Lot attribué — demande enregistrée.');
+        this.toastService.success(res?.message || 'Lot attribué avec succès.');
         this.closeClaimModal();
         this.loadAccounts();
         if (this.tab() === 'redemptions') this.loadRedemptions();

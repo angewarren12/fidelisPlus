@@ -104,35 +104,35 @@
 
         <div class="p-6 space-y-4">
           <!-- Header row -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex items-center gap-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
               <!-- Avatar -->
-              <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shrink-0"
+              <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-black text-xs shrink-0"
                 [class]="a.holder_type === 'company' ? 'bg-gradient-to-br from-[#15b9a3] to-[#0891b2]' : 'bg-gradient-to-br from-violet-500 to-purple-600'">
                 {{ holderLabel(a).substring(0, 2).toUpperCase() }}
               </div>
-              <div class="min-w-0">
-                <h3 class="font-black text-on-surface text-sm truncate">{{ holderLabel(a) }}</h3>
+              <div class="min-w-0 flex-1">
+                <h3 class="font-black text-on-surface text-sm truncate" [title]="holderLabel(a)">{{ holderLabel(a) }}</h3>
                 <p class="text-[10px] font-mono text-outline truncate">N° {{ a.card_number }}</p>
               </div>
             </div>
             <!-- Type badge -->
             <div class="flex flex-col items-end gap-1 shrink-0">
-              <span class="px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest"
+              <span class="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider whitespace-nowrap"
                 [class]="a.holder_type === 'unassigned' ? 'bg-amber-50 text-amber-700' : holderTypeBadge(a) === 'Entreprise' ? 'bg-teal-50 text-teal-700' : 'bg-violet-50 text-violet-700'">
                 {{ holderTypeBadge(a) }}
               </span>
               <span *ngIf="a.company?.created_via_marketing"
-                class="px-2 py-0.5 rounded-lg bg-violet-100 text-violet-700 text-[8px] font-black uppercase tracking-widest">
+                class="px-2 py-0.5 rounded-lg bg-violet-100 text-violet-700 text-[8px] font-black uppercase tracking-wider whitespace-nowrap">
                 Créé par marketing
               </span>
-              <span *ngIf="a.holder_type === 'member' && a.member" class="px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest"
+              <span *ngIf="a.holder_type === 'member' && a.member" class="px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider whitespace-nowrap"
                 [class]="a.member.sira_provisioning_status === 'provisioned' ? 'bg-primary/10 text-primary' : a.member.sira_provisioning_status === 'pending' ? 'bg-amber-100 text-amber-700' : a.member.sira_provisioning_status === 'failed' ? 'bg-error/10 text-error' : 'bg-surface-container-low text-outline'">
                 {{ a.member.sira_provisioning_status === 'provisioned' ? 'SIRA lié' : a.member.sira_provisioning_status === 'pending' ? 'SIRA en cours' : a.member.sira_provisioning_status === 'failed' ? 'Échec SIRA' : 'SIRA n/a' }}
               </span>
               <button *ngIf="a.holder_type === 'member' && a.member?.sira_provisioning_status === 'failed'"
                 (click)="$event.stopPropagation(); retryMemberProvisioning(a)"
-                class="text-[8px] font-black text-primary underline">Réessayer</button>
+                class="text-[8px] font-black text-primary underline whitespace-nowrap">Réessayer</button>
             </div>
           </div>
 
