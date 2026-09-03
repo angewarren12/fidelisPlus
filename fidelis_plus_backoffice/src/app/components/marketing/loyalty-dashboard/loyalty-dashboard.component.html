@@ -230,15 +230,40 @@
   <section *ngIf="tab() === 'requests' && canManageLoyalty()" class="space-y-6">
     <p class="text-xs text-outline -mt-2">Demandes de carte soumises depuis l'app SIRA, en attente de validation.</p>
 
+    <!-- BARRE DE RECHERCHE ET FILTRES -->
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-outline-variant/10 shadow-sm">
+      <div class="relative flex-1">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+        <input type="text"
+               [ngModel]="requestSearchFilter()"
+               (ngModelChange)="requestSearchFilter.set($event)"
+               placeholder="Rechercher par nom, email, contact, ID SIRA..."
+               class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border-none rounded-xl text-xs focus:ring-2 focus:ring-primary/20 outline-none">
+      </div>
+
+      <div class="flex items-center gap-2">
+        <label class="text-[11px] font-bold text-outline whitespace-nowrap">Type :</label>
+        <select [ngModel]="requestTypeFilter()"
+                (ngModelChange)="requestTypeFilter.set($event)"
+                class="px-3 py-2.5 bg-surface-container-low border-none rounded-xl text-xs font-bold text-on-surface focus:ring-2 focus:ring-primary/20 outline-none">
+          <option value="all">Tous les types</option>
+          <option value="particulier">Particulier</option>
+          <option value="entreprise">Entreprise</option>
+        </select>
+      </div>
+    </div>
+
     <div *ngIf="loadingMemberRequests()" class="py-24 flex flex-col items-center justify-center text-outline">
       <span class="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
     </div>
-    <div *ngIf="!loadingMemberRequests() && memberRequests().length === 0" class="py-24 flex flex-col items-center justify-center bg-surface-container-low rounded-[2rem] border-2 border-dashed border-outline-variant/20 text-outline">
+    <div *ngIf="!loadingMemberRequests() && filteredMemberRequests().length === 0" class="py-24 flex flex-col items-center justify-center bg-surface-container-low rounded-[2rem] border-2 border-dashed border-outline-variant/20 text-outline">
       <span class="material-symbols-outlined text-5xl mb-3 opacity-30">inbox</span>
-      <p class="font-bold opacity-40 text-sm">Aucune demande en attente.</p>
+      <p class="font-bold opacity-40 text-sm">
+        {{ memberRequests().length === 0 ? 'Aucune demande en attente.' : 'Aucune demande ne correspond à votre recherche.' }}
+      </p>
     </div>
 
-    <div *ngIf="!loadingMemberRequests() && memberRequests().length > 0" class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
+    <div *ngIf="!loadingMemberRequests() && filteredMemberRequests().length > 0" class="bg-white rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
           <thead>
@@ -251,7 +276,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-outline-variant/10">
-            <tr *ngFor="let m of memberRequests()" class="hover:bg-surface-container-low/50 transition-colors">
+            <tr *ngFor="let m of filteredMemberRequests()" class="hover:bg-surface-container-low/50 transition-colors">
               <td class="px-6 py-4 text-sm font-bold text-on-surface">{{ memberDisplayName(m) }}</td>
               <td class="px-6 py-4">
                 <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest"

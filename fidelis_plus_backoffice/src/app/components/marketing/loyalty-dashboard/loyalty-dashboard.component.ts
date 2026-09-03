@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
@@ -84,6 +84,29 @@ export class LoyaltyDashboardComponent implements OnInit {
 
   // Demandes de carte SIRA en attente (fusionné depuis "Mes Clients")
   memberRequests = signal<LoyaltyMemberRow[]>([]);
+  requestSearchFilter = signal<string>('');
+  requestTypeFilter = signal<'all' | 'particulier' | 'entreprise'>('all');
+
+  filteredMemberRequests = computed(() => {
+    const list = this.memberRequests();
+    const search = this.requestSearchFilter().trim().toLowerCase();
+    const type = this.requestTypeFilter();
+
+    return list.filter((m) => {
+      if (type !== 'all' && m.type !== type) return false;
+      if (!search) return true;
+      const name = this.memberDisplayName(m).toLowerCase();
+      const contact = (m.contact ?? '').toLowerCase();
+      const email = (m.email ?? '').toLowerCase();
+      const siraId = (m.sira_client_id ?? '').toLowerCase();
+      return (
+        name.includes(search) ||
+        contact.includes(search) ||
+        email.includes(search) ||
+        siraId.includes(search)
+      );
+    });
+  });
 
   // Clients fidélité validés mais sans carte associée (affichés dans "Comptes Fidélité"
   // en plus des vrais comptes, avec un bouton "Associer une carte" à la place des actions).
