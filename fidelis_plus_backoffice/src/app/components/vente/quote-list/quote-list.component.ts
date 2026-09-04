@@ -163,6 +163,12 @@ import { SendQuoteModalComponent } from './send-quote-modal/send-quote-modal.com
                              class="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-surface-container-high">
                           {{ getStatusLabel(quote.status) }}
                        </span>
+                       <span *ngIf="quote.odoo_quote_id || quote.odoo_sync_status" class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-50 text-purple-700 border border-purple-200/50">
+                          ODOO
+                       </span>
+                       <span *ngIf="!quote.odoo_quote_id && !quote.odoo_sync_status" class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-teal-50 text-teal-700 border border-teal-200/50">
+                          FIDELIS
+                       </span>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                        <p class="text-sm font-bold text-outline mr-2">{{ quote.company?.name }}</p>

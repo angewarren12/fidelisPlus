@@ -373,6 +373,9 @@ class OdooIngestService
                     ]);
                 }
 
+                // Sycnronisation des lignes d'articles si présentes dans le payload Odoo
+                $this->ingestQuoteItems($quote, $payload);
+
                 Log::info("OdooIngestService::ingestQuote — devis Odoo #{$odooQuoteId} ingéré pour la société {$company->name}");
                 return $quote;
             }
@@ -393,10 +396,50 @@ class OdooIngestService
         if (! empty($payload['state'])) {
             $quote->status = $this->mapOdooStateToFidelis($payload['state']);
         }
+        if (isset($payload['amount_total']) || isset($payload['total_amount'])) {
+            $quote->total_amount = $payload['amount_total'] ?? $payload['total_amount'];
+        }
 
         $quote->odoo_sync_status = 'synced';
         $quote->odoo_synced_at   = now();
         $quote->save();
+
+        $this->ingestQuoteItems($quote, $payload);
+        return $quote;
+    }
+
+    /**
+     * Traite et enregistre les lignes d'un devis Odoo (order_line).
+     */
+    private function ingestQuoteItems(Quote $quote, array $payload): void
+    {
+        $lines = $payload['order_line'] ?? $payload['order_lines'] ?? $payload['lines'] ?? $payload['items'] ?? null;
+        if (! is_array($lines) || empty($lines)) {
+            return;
+        }
+
+        $quote->items()->delete();
+        foreach ($lines as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            $description = $line['name'] ?? $line['description'] ?? null;
+            if (!$description && isset($line['product_id']) && is_array($line['product_id'])) {
+                $description = $line['product_id'][1] ?? null;
+            }
+            $description = $description ?? 'Prestation / Article Odoo';
+
+            $qty   = (float) ($line['product_uom_qty'] ?? $line['product_uops_qty'] ?? $line['quantity'] ?? $line['qty'] ?? 1);
+            $price = (float) ($line['price_unit'] ?? $line['price'] ?? 0);
+
+            $quote->items()->create([
+                'description' => $description,
+                'quantity'    => $qty > 0 ? $qty : 1,
+                'price'       => $price,
+            ]);
+        }
+    }
 
         return $quote;
     }

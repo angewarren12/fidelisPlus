@@ -220,15 +220,44 @@ export class QuotePreviewModalComponent {
   today = new Date();
 
   totalHT = computed(() => {
-    if (!this.quoteData || !this.quoteData.items) return 0;
-    return this.quoteData.items.reduce((sum: number, item: any) => sum + (item.price * (item.quantity || 1)), 0);
+    if (this.quoteData?.items && this.quoteData.items.length > 0) {
+      return this.quoteData.items.reduce((sum: number, item: any) => sum + (item.price * (item.quantity || 1)), 0);
+    }
+    const totalTtc = Number(this.quoteData?.total_amount) || 0;
+    return totalTtc > 0 ? totalTtc / (1 + (this.tvaRate() / 100)) : 0;
   });
 
-  totalTVA = computed(() => this.totalHT() * (this.tvaRate() / 100));
-  totalTTC = computed(() => this.totalHT() + this.totalTVA());
+  totalTVA = computed(() => {
+    if (this.quoteData?.items && this.quoteData.items.length > 0) {
+      return this.totalHT() * (this.tvaRate() / 100);
+    }
+    const totalTtc = Number(this.quoteData?.total_amount) || 0;
+    return totalTtc > 0 ? totalTtc - this.totalHT() : 0;
+  });
+
+  totalTTC = computed(() => {
+    if (this.quoteData?.items && this.quoteData.items.length > 0) {
+      return this.totalHT() + this.totalTVA();
+    }
+    return Number(this.quoteData?.total_amount) || 0;
+  });
 
   groupedItems = computed(() => {
-    if (!this.quoteData || !this.quoteData.items) return { groups: [], others: [] };
+    if (!this.quoteData || !this.quoteData.items || this.quoteData.items.length === 0) {
+      const fallbackTotalHT = this.totalHT();
+      if (fallbackTotalHT > 0) {
+        return {
+          groups: [],
+          others: [{
+            description: 'Prestation / Devis Odoo',
+            quantity: 1,
+            price: fallbackTotalHT,
+            parsed: { title: 'Prestation / Devis Odoo', plate: '', detail: '' }
+          }]
+        };
+      }
+      return { groups: [], others: [] };
+    }
     
     const groups: { plate: string; vehicleName?: string; items: any[] }[] = [];
     const others: any[] = [];
