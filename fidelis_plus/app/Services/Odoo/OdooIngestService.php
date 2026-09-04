@@ -441,9 +441,6 @@ class OdooIngestService
         }
     }
 
-        return $quote;
-    }
-
     /**
      * Convertit les états Odoo sale.order vers les statuts FidelisPlus.
      * Odoo : draft | sent | sale | done | cancel
