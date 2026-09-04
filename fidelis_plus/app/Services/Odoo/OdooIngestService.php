@@ -67,11 +67,22 @@ class OdooIngestService
             return null;
         }
 
-        // Résoudre le type Fidelis depuis partner_kind Odoo.
-        $partnerKind = $payload['partner_kind'] ?? 'prospect';
-        $type = in_array($partnerKind, ['client', 'customer', 'client_fournisseur'], true)
-            ? 'client'
-            : 'prospect';
+        // Résoudre le type Fidelis :
+        // Un partenaire Odoo est un CLIENT uniquement si is_mayelia_customer === true OU customer_rank > 0.
+        // Si is_mayelia_customer === false et customer_rank === 0 (ou non renseigné), il s'agit d'un PROSPECT.
+        $isMayeliaCustomer = (bool) ($payload['is_mayelia_customer'] ?? false);
+        $customerRank      = (int) ($payload['customer_rank'] ?? 0);
+        $partnerKind       = $payload['partner_kind'] ?? null;
+        $customerCode      = $payload['customer_code'] ?? null;
+
+        if (array_key_exists('is_mayelia_customer', $payload) || array_key_exists('customer_rank', $payload)) {
+            $isClient = $isMayeliaCustomer || ($customerRank > 0);
+        } else {
+            // Fallback rétrocompatible si la version d'Odoo n'envoie ni is_mayelia_customer ni customer_rank
+            $isClient = in_array($partnerKind, ['client', 'customer', 'client_fournisseur'], true);
+        }
+
+        $type = $isClient ? 'client' : 'prospect';
 
         // Archivage : Odoo renvoie active=false pour les enregistrements archivés.
         $isArchived = ! (bool) ($payload['active'] ?? true);
@@ -79,23 +90,27 @@ class OdooIngestService
         // Catégorie : is_company=true → entreprise, false → particulier.
         $category = ($payload['is_company'] ?? true) ? 'entreprise' : 'particulier';
 
+        // Vérifier si la société existe déjà pour préserver son kanban_stage si elle est déjà dans le pipeline
+        $existingCompany = Company::withTrashed()->where('odoo_partner_id', (string) $odooPartnerId)->first();
+        $defaultStage    = $type === 'client' ? 'client_actif' : 'nouveau_lead';
+
         $attributes = [
             'name'                     => $name,
             'type'                     => $type,
             'category'                 => $category,
             'email'                    => $payload['email'] ?? null,
-            'phone'                    => $payload['phone'] ?? null,
+            'phone'                    => $payload['mobile'] ?? $payload['phone'] ?? null,
             'address'                  => $payload['street'] ?? null,
             'city'                     => $payload['city'] ?? null,
             'zip_code'                 => $payload['zip'] ?? $payload['zip_code'] ?? null,
-            'kanban_stage'             => $type === 'client' ? 'client_actif' : 'nouveau_lead',
+            'kanban_stage'             => ($existingCompany && $existingCompany->type === $type) ? $existingCompany->kanban_stage : $defaultStage,
             // La température n'a de sens que pour un prospect ; "tiède" par défaut.
-            'temperature'              => $type === 'prospect' ? 'tiede' : null,
+            'temperature'              => $type === 'prospect' ? ($existingCompany->temperature ?? 'tiede') : null,
             'is_active'                => $type === 'client',
             'created_via_odoo'         => true,
             // Champs commerciaux Odoo : code client et flag agrément Mayelia
-            'odoo_client_code'         => $payload['customer_code'] ?? null,
-            'odoo_is_mayelia_customer' => (bool) ($payload['is_mayelia_customer'] ?? false),
+            'odoo_client_code'         => $customerCode,
+            'odoo_is_mayelia_customer' => $isMayeliaCustomer,
         ];
 
         // Rapprochement du commercial.
@@ -142,16 +157,16 @@ class OdooIngestService
         }
 
         // Correspondant principal
-        $contactEmail = $payload['contact_email'] ?? null;
+        $contactEmail = $payload['contact_email'] ?? $payload['email'] ?? null;
         $isFallback   = $payload['contact_is_fallback_company'] ?? false;
 
         if ($contactEmail) {
             $firstName = $payload['contact_first_name'] ?? null;
             $lastName  = $payload['contact_last_name'] ?? null;
 
-            // Si Odoo n'a pas renvoyé firstName/lastName (ou fallback), on split contact_name
-            if (!$firstName && !$lastName) {
-                $contactName = $payload['contact_name'] ?? null;
+            // Si Odoo n'a pas renvoyé firstName/lastName, on tente de découper contact_name ou name
+            if (! $firstName && ! $lastName) {
+                $contactName = $payload['contact_name'] ?? $payload['name'] ?? null;
                 $nameParts   = $contactName ? explode(' ', trim($contactName), 2) : [];
                 $firstName   = $nameParts[0] ?? ($contactName ?? 'Contact');
                 $lastName    = $nameParts[1] ?? '';
@@ -161,8 +176,8 @@ class OdooIngestService
                 'contact_first_name' => $firstName ?? 'Contact',
                 'contact_last_name'  => $lastName ?? '',
                 'contact_email'      => $contactEmail,
-                'contact_phone'      => $payload['contact_mobile'] ?? $payload['contact_phone'] ?? null,
-                'is_fallback'        => $isFallback, // Optionnel, pour log/trace
+                'contact_phone'      => $payload['contact_mobile'] ?? $payload['contact_phone'] ?? $payload['mobile'] ?? $payload['phone'] ?? null,
+                'is_fallback'        => $isFallback,
             ]);
         }
 
