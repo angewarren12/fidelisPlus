@@ -161,7 +161,12 @@ import { TeamService } from '../../../services/team.service';
                 <td class="px-6 py-5">
                   <div *ngIf="p.contacts && p.contacts.length > 0">
                     <p class="font-semibold text-sm">{{ p.contacts[0].first_name }} {{ p.contacts[0].last_name }}</p>
-                    <p class="text-xs text-on-surface-variant">{{ p.contacts[0].phone }}</p>
+                    <p class="text-xs font-medium text-primary hover:underline" *ngIf="p.contacts[0].email">{{ p.contacts[0].email }}</p>
+                    <p class="text-[11px] text-outline" *ngIf="p.contacts[0].phone && p.contacts[0].phone !== '0'">{{ p.contacts[0].phone }}</p>
+                  </div>
+                  <div *ngIf="(!p.contacts || p.contacts.length === 0) && (p.email || (p.phone && p.phone !== '0'))">
+                    <p class="text-xs font-medium text-primary hover:underline" *ngIf="p.email">{{ p.email }}</p>
+                    <p class="text-[11px] text-outline" *ngIf="p.phone && p.phone !== '0'">{{ p.phone }}</p>
                   </div>
                 </td>
                 <td class="px-6 py-5 text-center">
@@ -248,7 +253,13 @@ import { TeamService } from '../../../services/team.service';
           <div class="bg-surface-container-low rounded-xl p-3" *ngIf="p.contacts && p.contacts.length > 0">
             <p class="text-[10px] font-bold text-outline uppercase tracking-wider mb-0.5">Correspondant</p>
             <p class="text-sm font-semibold">{{ p.contacts[0].first_name }} {{ p.contacts[0].last_name }}</p>
-            <p class="text-xs text-outline">{{ p.contacts[0].phone }}</p>
+            <p class="text-xs text-primary font-medium truncate" *ngIf="p.contacts[0].email">{{ p.contacts[0].email }}</p>
+            <p class="text-xs text-outline" *ngIf="p.contacts[0].phone && p.contacts[0].phone !== '0'">{{ p.contacts[0].phone }}</p>
+          </div>
+          <div class="bg-surface-container-low rounded-xl p-3" *ngIf="(!p.contacts || p.contacts.length === 0) && (p.email || (p.phone && p.phone !== '0'))">
+            <p class="text-[10px] font-bold text-outline uppercase tracking-wider mb-0.5">Contact</p>
+            <p class="text-xs text-primary font-medium truncate" *ngIf="p.email">{{ p.email }}</p>
+            <p class="text-xs text-outline" *ngIf="p.phone && p.phone !== '0'">{{ p.phone }}</p>
           </div>
 
           <div class="flex items-center justify-between text-xs text-outline">
