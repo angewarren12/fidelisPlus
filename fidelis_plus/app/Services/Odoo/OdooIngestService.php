@@ -67,19 +67,21 @@ class OdooIngestService
             return null;
         }
 
-        // Résoudre le type Fidelis :
-        // Un partenaire Odoo est un CLIENT uniquement si is_mayelia_customer === true OU customer_rank > 0.
-        // Si is_mayelia_customer === false et customer_rank === 0 (ou non renseigné), il s'agit d'un PROSPECT.
-        $isMayeliaCustomer = (bool) ($payload['is_mayelia_customer'] ?? false);
-        $customerRank      = (int) ($payload['customer_rank'] ?? 0);
-        $partnerKind       = $payload['partner_kind'] ?? null;
+        // Résoudre le type Fidelis (règles métier Mayelia & Odoo) :
+        // 1. PROSPECT : is_mayelia_customer === false ET partner_kind === 'prospect'
+        // 2. CLIENT   : is_mayelia_customer === true ET partner_kind IN ('prospect', 'client', 'client_fournisseur')
+        $isMayeliaCustomer = isset($payload['is_mayelia_customer']) ? (bool) $payload['is_mayelia_customer'] : null;
+        $partnerKind       = strtolower((string) ($payload['partner_kind'] ?? ''));
         $customerCode      = $payload['customer_code'] ?? null;
 
-        if (array_key_exists('is_mayelia_customer', $payload) || array_key_exists('customer_rank', $payload)) {
-            $isClient = $isMayeliaCustomer || ($customerRank > 0);
+        if ($isMayeliaCustomer === true) {
+            $isClient = true;
+        } elseif ($isMayeliaCustomer === false && ($partnerKind === 'prospect' || empty($partnerKind))) {
+            $isClient = false;
+        } elseif (in_array($partnerKind, ['client', 'customer', 'client_fournisseur'], true) && $isMayeliaCustomer === true) {
+            $isClient = true;
         } else {
-            // Fallback rétrocompatible si la version d'Odoo n'envoie ni is_mayelia_customer ni customer_rank
-            $isClient = in_array($partnerKind, ['client', 'customer', 'client_fournisseur'], true);
+            $isClient = false;
         }
 
         $type = $isClient ? 'client' : 'prospect';
