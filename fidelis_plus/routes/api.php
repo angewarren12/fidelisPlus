@@ -44,9 +44,20 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         ->name('auth.reset-password');
 
     // --- Formulaire public "Fidelis Plus" (QR station, relance visite technique) ---
-    Route::post('/public/technical-visit-reminders', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'store'])
+    Route::post('/technical-visit-reminders', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'store'])
         ->middleware('throttle:20,1')
         ->name('public.technical-visit-reminders.store');
+
+    // --- Déclencheur manuel de synchro Odoo (utilitaire de préproduction) ---
+    Route::get('/public/odoo-sync-trigger', function () {
+        \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
+        $logs = \App\Models\OdooSyncLog::latest('id')->take(6)->get();
+        return response()->json([
+            'success' => true,
+            'message' => 'Synchronisation Odoo exécutée avec succès.',
+            'recent_logs' => $logs,
+        ]);
+    })->name('public.odoo-sync-trigger');
 
     // --- Intégration app mobile client SIRA (jeton de service, pas de session utilisateur) ---
     Route::prefix('integrations/sira')->middleware(['sira.token', 'throttle:120,1'])->name('integrations.sira.')->group(function () {

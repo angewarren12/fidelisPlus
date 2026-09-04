@@ -32,6 +32,7 @@ class SyncFromOdoo extends Command
 
         if (! $lock->get()) {
             $this->warn('odoo:sync — Une synchronisation est déjà en cours. Opération ignorée.');
+            Log::info('odoo:sync — Lock odoo_sync_lock actif, saut de ce passage.');
             return Command::SUCCESS;
         }
 
@@ -78,12 +79,17 @@ class SyncFromOdoo extends Command
         $sinceStr = $syncedFrom?->toIso8601String();
         $syncedTo = now();
 
+        Log::info("odoo:sync [{$resource}] Démarrage du pull", [
+            'since' => $sinceStr ?? 'NULL (Import Complet)',
+        ]);
+
         try {
             $records = $odoo->{$fetchMethod}($sinceStr);
 
             if ($records === null) {
                 $duration = (int) round((microtime(true) - $startTime) * 1000);
                 $this->warn("odoo:sync [{$resource}] indisponible, réessai au prochain passage.");
+                Log::warning("odoo:sync [{$resource}] API Odoo indisponible ou erreur HTTP", ['duration_ms' => $duration]);
 
                 OdooSyncLog::create([
                     'resource'        => $resource,
@@ -126,10 +132,16 @@ class SyncFromOdoo extends Command
                 'synced_to'       => $syncedTo,
             ]);
 
-            $this->info("odoo:sync [{$resource}] : {$syncedCount}/{$fetchedCount} enregistrement(s) synchronisé(s) en {$duration}ms.");
+            $msg = "odoo:sync [{$resource}] : {$syncedCount}/{$fetchedCount} enregistrement(s) synchronisé(s) en {$duration}ms.";
+            $this->info($msg);
+            Log::info($msg, [
+                'records_fetched' => $fetchedCount,
+                'records_synced' => $syncedCount,
+                'duration_ms' => $duration,
+            ]);
         } catch (\Throwable $e) {
             $duration = (int) round((microtime(true) - $startTime) * 1000);
-            Log::warning("SyncFromOdoo::syncResource [{$resource}] exception", ['message' => $e->getMessage()]);
+            Log::error("SyncFromOdoo::syncResource [{$resource}] exception", ['message' => $e->getMessage()]);
 
             OdooSyncLog::create([
                 'resource'        => $resource,
