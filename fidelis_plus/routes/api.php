@@ -50,6 +50,11 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
 
     // --- Déclencheur manuel de synchro Odoo (utilitaire de préproduction) ---
     Route::get('/sync-odoo', function () {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('queue:work', ['--stop-when-empty' => true, '--tries' => 1]);
+        } catch (\Throwable $e) {
+            // Ignorer si déjà en cours
+        }
         \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
         $logs = \App\Models\OdooSyncLog::latest('id')->take(6)->get();
         return response()->json([

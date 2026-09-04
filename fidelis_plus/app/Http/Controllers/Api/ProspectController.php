@@ -255,7 +255,12 @@ class ProspectController extends Controller
                     'must_change_password' => true,
                 ]);
 
-                \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, 'prospect_created');
+                try {
+                    \App\Jobs\SyncCompanyToOdoo::dispatchSync($company->id, 'prospect_created');
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('SyncCompanyToOdoo inline sync warning: ' . $e->getMessage());
+                    \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, 'prospect_created');
+                }
 
                 return response()->json([
                     'status' => 'success',
@@ -403,7 +408,12 @@ class ProspectController extends Controller
             'converted_at' => now(),
         ]);
 
-        \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, 'converted_to_client');
+        try {
+            \App\Jobs\SyncCompanyToOdoo::dispatchSync($company->id, 'converted_to_client');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncCompanyToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, 'converted_to_client');
+        }
 
         // Envoyer un email à TOUS les correspondants de l'entreprise
         foreach ($allContacts as $contact) {
