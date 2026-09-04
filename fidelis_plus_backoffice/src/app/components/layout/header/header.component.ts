@@ -1,11 +1,14 @@
 import { Component, OnInit, OnDestroy, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../services/auth.service';
 import { Router } from '@angular/router';
 import { RealtimeService } from '../../../services/realtime.service';
 import { NotificationService, NotificationItem } from '../../../services/notification.service';
+import { ToastService } from '../../../services/toast.service';
 import { LayoutService } from '../../../services/layout.service';
 import { UserRoles } from '../../../models/user-roles';
+import { environment } from '../../../environments/environment';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -22,6 +25,12 @@ import { Subscription } from 'rxjs';
       </div>
 
       <div class="flex items-center gap-2 sm:gap-4 shrink-0">
+        <!-- Bouton Synchronisation Odoo -->
+        <button (click)="openOdooSyncModal()" title="Synchroniser Odoo" aria-label="Synchroniser Odoo" class="hover:bg-teal-50/50 rounded-full p-2 transition-all group relative text-outline hover:text-[#15b9a3]">
+          <span class="material-symbols-outlined text-outline group-hover:text-primary" [class.animate-spin]="isSyncing()" aria-hidden="true">sync</span>
+        </button>
+
+        <!-- Dropdown Notifications -->
         <div class="relative">
           <button (click)="toggleNotifications($event)" aria-label="Notifications" [attr.aria-expanded]="showNotifications()" class="hover:bg-teal-50/50 rounded-full p-2 transition-all group relative">
             <span class="material-symbols-outlined text-outline group-hover:text-primary" aria-hidden="true">notifications</span>
@@ -76,6 +85,35 @@ import { Subscription } from 'rxjs';
           <span class="text-xs font-bold font-headline uppercase tracking-wider hidden md:inline">Déconnexion</span>
         </button>
       </div>
+
+      <!-- Modal Confirmation Synchronisation Odoo -->
+      <div *ngIf="showOdooSyncModal()" (click)="closeOdooSyncModal()" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+        <div (click)="$event.stopPropagation()" class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 animate-scale-up">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-teal-50 text-[#15b9a3] flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-2xl" [class.animate-spin]="isSyncing()">sync</span>
+            </div>
+            <div>
+              <h3 class="font-headline font-black text-lg text-on-surface">Synchronisation Odoo</h3>
+              <p class="text-xs text-outline font-medium">Synchronisation bidirectionnelle des données</p>
+            </div>
+          </div>
+
+          <p class="text-sm text-slate-600 leading-relaxed">
+            Voulez-vous lancer la synchronisation immédiate des prospects, clients, flottes et devis depuis Odoo ?
+          </p>
+
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <button (click)="closeOdooSyncModal()" [disabled]="isSyncing()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">
+              Annuler
+            </button>
+            <button (click)="triggerOdooSync()" [disabled]="isSyncing()" class="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-[#15b9a3] hover:bg-[#119684] transition-all flex items-center gap-2 shadow-lg shadow-teal-500/20">
+              <span *ngIf="isSyncing()" class="material-symbols-outlined text-sm animate-spin">sync</span>
+              <span>{{ isSyncing() ? 'Synchronisation en cours...' : 'Lancer la synchro' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </header>
   `,
   styles: [`
@@ -83,9 +121,16 @@ import { Subscription } from 'rxjs';
     .animate-fade-in-up {
       animation: fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
+    .animate-scale-up {
+      animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleUp {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
     }
   `]
 })
@@ -93,7 +138,12 @@ export class HeaderComponent implements OnInit, OnDestroy {
   showNotifications = signal(false);
   notifications = signal<NotificationItem[]>([]);
   unreadCount = signal(0);
+  showOdooSyncModal = signal(false);
+  isSyncing = signal(false);
+
   layoutService = inject(LayoutService);
+  private http = inject(HttpClient);
+  private toast = inject(ToastService);
   private sub?: Subscription;
 
   constructor(
@@ -122,6 +172,35 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.sub?.unsubscribe();
+  }
+
+  openOdooSyncModal() {
+    this.showOdooSyncModal.set(true);
+  }
+
+  closeOdooSyncModal() {
+    if (this.isSyncing()) return;
+    this.showOdooSyncModal.set(false);
+  }
+
+  triggerOdooSync() {
+    this.isSyncing.set(true);
+    this.http.get<any>(`${environment.apiUrl}/api/v1/sync-odoo`).subscribe({
+      next: (res) => {
+        this.isSyncing.set(false);
+        this.showOdooSyncModal.set(false);
+        this.toast.success(res.message || 'Synchronisation Odoo exécutée avec succès !');
+        // Rafraîchir l'écran courant après 1 seconde
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      },
+      error: (err) => {
+        this.isSyncing.set(false);
+        this.showOdooSyncModal.set(false);
+        this.toast.error('Erreur lors du déclenchement de la synchronisation Odoo.');
+      }
+    });
   }
 
   loadUnreadCount() {

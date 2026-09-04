@@ -346,18 +346,34 @@ class OdooIngestService
             }
 
             if ($company) {
-                $quote = Quote::create([
-                    'company_id'       => $company->id,
-                    'quote_number'     => $payload['name'] ?? $payload['display_name'] ?? ('OD-' . $odooQuoteId),
-                    'status'           => $this->mapOdooStateToFidelis($payload['state'] ?? 'draft'),
-                    'total_amount'     => $payload['amount_total'] ?? $payload['total_amount'] ?? 0,
-                    'valid_until'      => $payload['validity_date'] ?? null,
-                    'odoo_quote_id'    => (string) $odooQuoteId,
-                    'odoo_sync_status' => 'synced',
-                    'odoo_synced_at'   => now(),
-                ]);
+                $quoteNumber = $payload['name'] ?? $payload['display_name'] ?? ('OD-' . $odooQuoteId);
+                
+                $quote = Quote::where('quote_number', $quoteNumber)->first();
+                
+                if ($quote) {
+                    $quote->update([
+                        'company_id'       => $company->id,
+                        'status'           => $this->mapOdooStateToFidelis($payload['state'] ?? 'draft'),
+                        'total_amount'     => $payload['amount_total'] ?? $payload['total_amount'] ?? 0,
+                        'valid_until'      => $payload['validity_date'] ?? null,
+                        'odoo_quote_id'    => (string) $odooQuoteId,
+                        'odoo_sync_status' => 'synced',
+                        'odoo_synced_at'   => now(),
+                    ]);
+                } else {
+                    $quote = Quote::create([
+                        'company_id'       => $company->id,
+                        'quote_number'     => $quoteNumber,
+                        'status'           => $this->mapOdooStateToFidelis($payload['state'] ?? 'draft'),
+                        'total_amount'     => $payload['amount_total'] ?? $payload['total_amount'] ?? 0,
+                        'valid_until'      => $payload['validity_date'] ?? null,
+                        'odoo_quote_id'    => (string) $odooQuoteId,
+                        'odoo_sync_status' => 'synced',
+                        'odoo_synced_at'   => now(),
+                    ]);
+                }
 
-                Log::info("OdooIngestService::ingestQuote — devis Odoo #{$odooQuoteId} créé pour la société {$company->name}");
+                Log::info("OdooIngestService::ingestQuote — devis Odoo #{$odooQuoteId} ingéré pour la société {$company->name}");
                 return $quote;
             }
 
