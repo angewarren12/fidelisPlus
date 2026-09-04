@@ -107,7 +107,7 @@ Schedule::command('quotes:check-expired')->dailyAt('08:00');
 // Cron de pull Odoo -> FidelisPlus (prospects/clients/flottes/devis créés ou modifiés
 // côté Odoo). Fréquence provisoire, ajustable. withoutOverlapping() évite un second
 // passage si Odoo répond lentement.
-Schedule::command('odoo:sync')->everyFifteenMinutes()->withoutOverlapping();
+Schedule::command('odoo:sync')->everyMinute()->withoutOverlapping();
 
 // Traitement de la file d'attente (jobs Sync*ToOdoo, ProvisionSiraAccountForMember,
 // etc. — QUEUE_CONNECTION=database). Sur un hébergement mutualisé, aucun worker
