@@ -16,6 +16,20 @@ Route::post('/internal/deploy-hook', [DeployController::class, 'hook'])
     ->middleware('throttle:5,1')
     ->name('internal.deploy-hook');
 
+// Route Web simple pour déclencher la synchronisation Odoo depuis le navigateur
+Route::get('/sync-odoo', function () {
+    \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
+    $logs = \App\Models\OdooSyncLog::latest('id')->take(6)->get();
+    return response()->json([
+        'success' => true,
+        'message' => 'Synchronisation Odoo exécutée avec succès.',
+        'recent_logs' => $logs,
+    ]);
+});
+Route::get('/odoo-sync', function () {
+    return redirect('/sync-odoo');
+});
+
 // Fallback pour le routage de la Single Page Application (Angular)
 Route::fallback(function () {
     if (request()->is('api/*') || request()->is('internal/*')) {
