@@ -299,8 +299,11 @@ class OdooIngestService
         if (array_key_exists('fuel', $payload)) {
             $vehicle->fuel_type = $payload['fuel'];
         }
-        if (array_key_exists('state_name', $payload)) {
-            $vehicle->status = $payload['state_name'];
+        if (! empty($payload['state_name'])) {
+            $stateName = strtolower(trim((string) $payload['state_name']));
+            if (in_array($stateName, ['jamais_controle', 'a_jour', 'bientot', 'en_retard'], true)) {
+                $vehicle->status = $stateName;
+            }
         }
 
         $vehicle->odoo_sync_status = 'synced';
