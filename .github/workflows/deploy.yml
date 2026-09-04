@@ -75,10 +75,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: production
-    # Validation manuelle : le job "build" tourne à chaque push (vérifie que ça
-    # compile), mais "deploy" ne se lance qu'en cliquant "Run workflow" à la main
-    # dans l'onglet Actions (jamais automatiquement sur un simple push).
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
