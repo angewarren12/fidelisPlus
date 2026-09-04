@@ -127,6 +127,13 @@ class AccountController extends Controller
                 }
             }
 
+            try {
+                \App\Jobs\SyncCompanyToOdoo::dispatchSync($company->id, $isClient ? 'converted_to_client' : 'prospect_created');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SyncCompanyToOdoo inline sync warning: ' . $e->getMessage());
+                \App\Jobs\SyncCompanyToOdoo::dispatch($company->id, $isClient ? 'converted_to_client' : 'prospect_created');
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Compte créé avec succès.',
@@ -192,6 +199,13 @@ class AccountController extends Controller
 
         $account->update($validated);
 
+        try {
+            \App\Jobs\SyncCompanyToOdoo::dispatchSync($account->id, 'company_updated');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncCompanyToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_updated');
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => 'Compte mis à jour.',
@@ -213,7 +227,12 @@ class AccountController extends Controller
 
         $account->delete();
 
-        \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_archived');
+        try {
+            \App\Jobs\SyncCompanyToOdoo::dispatchSync($account->id, 'company_archived');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncCompanyToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_archived');
+        }
 
         return response()->json([
             'status' => 'success',
@@ -235,7 +254,12 @@ class AccountController extends Controller
 
         $account->restore();
 
-        \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_restored');
+        try {
+            \App\Jobs\SyncCompanyToOdoo::dispatchSync($account->id, 'company_restored');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncCompanyToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncCompanyToOdoo::dispatch($account->id, 'company_restored');
+        }
 
         return response()->json([
             'status' => 'success',

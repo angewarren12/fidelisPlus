@@ -244,7 +244,12 @@ class QuoteController extends Controller
 
             $quote->update(['total_amount' => $total]);
 
-            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_created');
+            try {
+                \App\Jobs\SyncQuoteToOdoo::dispatchSync($quote->id, 'quote_created');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SyncQuoteToOdoo inline sync warning: ' . $e->getMessage());
+                \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_created');
+            }
 
             return response()->json([
                 'status' => 'success',
@@ -394,10 +399,20 @@ class QuoteController extends Controller
         // puis acceptation finale (validation du bon de commande par le commercial —
         // pas le simple upload, cf. uploadBonDeCommande() qui a son propre événement).
         if ($oldStatus !== 'sent' && $newStatus === 'sent') {
-            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_sent');
+            try {
+                \App\Jobs\SyncQuoteToOdoo::dispatchSync($quote->id, 'quote_sent');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SyncQuoteToOdoo inline sync warning: ' . $e->getMessage());
+                \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_sent');
+            }
         }
         if ($oldStatus !== 'accepted' && $newStatus === 'accepted') {
-            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_accepted');
+            try {
+                \App\Jobs\SyncQuoteToOdoo::dispatchSync($quote->id, 'quote_accepted');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SyncQuoteToOdoo inline sync warning: ' . $e->getMessage());
+                \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'quote_accepted');
+            }
         }
 
         // Si le devis est rattaché à une demande, on la marque comme traitée dès qu'il est envoyé / signé.
@@ -502,7 +517,12 @@ class QuoteController extends Controller
         // analyser le document reçu puis décider (Accepter / Refuser) via updateStatus.
         $quote->update(['bon_de_commande_url' => $path]);
 
-        \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'bon_de_commande_uploaded');
+        try {
+            \App\Jobs\SyncQuoteToOdoo::dispatchSync($quote->id, 'bon_de_commande_uploaded');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncQuoteToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncQuoteToOdoo::dispatch($quote->id, 'bon_de_commande_uploaded');
+        }
 
         $uploadedByClient = $user && $user->role === 'client';
 

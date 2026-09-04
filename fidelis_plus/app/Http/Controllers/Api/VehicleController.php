@@ -201,7 +201,12 @@ class VehicleController extends Controller
             report($e);
         }
 
-        \App\Jobs\SyncVehicleToOdoo::dispatch($vehicle->id, 'vehicle_created');
+        try {
+            \App\Jobs\SyncVehicleToOdoo::dispatchSync($vehicle->id, 'vehicle_created');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncVehicleToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncVehicleToOdoo::dispatch($vehicle->id, 'vehicle_created');
+        }
 
         return response()->json([
             'status' => 'success',
@@ -270,7 +275,12 @@ class VehicleController extends Controller
             report($e);
         }
 
-        \App\Jobs\SyncVehicleToOdoo::dispatch($vehicle->id, 'vehicle_updated');
+        try {
+            \App\Jobs\SyncVehicleToOdoo::dispatchSync($vehicle->id, 'vehicle_updated');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('SyncVehicleToOdoo inline sync warning: ' . $e->getMessage());
+            \App\Jobs\SyncVehicleToOdoo::dispatch($vehicle->id, 'vehicle_updated');
+        }
 
         return response()->json([
             'status' => 'success',
