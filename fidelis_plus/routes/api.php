@@ -49,7 +49,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         ->name('public.technical-visit-reminders.store');
 
     // --- Déclencheur manuel de synchro Odoo (utilitaire de préproduction) ---
-    Route::get('/public/odoo-sync-trigger', function () {
+    Route::get('/sync-odoo', function () {
         \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
         $logs = \App\Models\OdooSyncLog::latest('id')->take(6)->get();
         return response()->json([
@@ -57,7 +57,11 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             'message' => 'Synchronisation Odoo exécutée avec succès.',
             'recent_logs' => $logs,
         ]);
-    })->name('public.odoo-sync-trigger');
+    })->name('public.sync-odoo');
+
+    Route::get('/public/odoo-sync-trigger', function () {
+        return redirect('/api/v1/sync-odoo');
+    });
 
     // --- Intégration app mobile client SIRA (jeton de service, pas de session utilisateur) ---
     Route::prefix('integrations/sira')->middleware(['sira.token', 'throttle:120,1'])->name('integrations.sira.')->group(function () {
@@ -312,4 +316,14 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::patch('/{id}', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'update'])->name('update');
         });
     });
+});
+
+Route::get('/sync-odoo', function () {
+    \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
+    $logs = \App\Models\OdooSyncLog::latest('id')->take(6)->get();
+    return response()->json([
+        'success' => true,
+        'message' => 'Synchronisation Odoo exécutée avec succès.',
+        'recent_logs' => $logs,
+    ]);
 });
