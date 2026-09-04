@@ -6,8 +6,10 @@ use App\Models\Company;
 use App\Models\Quote;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 /**
@@ -353,6 +355,38 @@ class OdooIngestService
             $quote = Quote::where('odoo_quote_id', (string) $odooQuoteId)->first();
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // VÉRIFICATION STRICTE DE SÉCURITÉ :
+        // Dans FidelisPlus, tout devis Odoo DOIT être lié à un véhicule (vignette ou contrôle technique).
+        // Si Odoo transmet un devis sans aucun véhicule et qu'aucun véhicule n'est déjà rattaché :
+        // 1. FidelisPlus REJETTE l'enregistrement de ce devis (return null).
+        // 2. FidelisPlus génère une alerte in-app et envoie un email à tous les commerciaux.
+        // ─────────────────────────────────────────────────────────────────────
+        $hasVehicleInPayload = !empty($payload['vehicle_id'])
+            || !empty($payload['vehicle_ids'])
+            || !empty($payload['vehicles'])
+            || !empty($payload['license_plate'])
+            || !empty($payload['immatriculation'])
+            || !empty($payload['fleet_vehicle_id']);
+
+        $hasExistingVehicle = $quote && $quote->vehicles()->exists();
+
+        if (!$hasVehicleInPayload && !$hasExistingVehicle) {
+            $quoteNum = $payload['name'] ?? $payload['display_name'] ?? ('#' . ($odooQuoteId ?? 'inconnu'));
+            $partnerName = is_array($payload['partner_id'] ?? null)
+                ? ($payload['partner_id'][1] ?? 'Client inconnu')
+                : ($payload['partner_name'] ?? 'Client inconnu');
+
+            Log::warning("OdooIngestService::ingestQuote — REJET du devis Odoo {$quoteNum} : aucun véhicule (vignette/CT) rattaché.", [
+                'odoo_quote_id' => $odooQuoteId,
+                'payload'       => $payload,
+            ]);
+
+            $this->alertCommercialsMissingVehicleQuote($quoteNum, $partnerName, $odooQuoteId);
+
+            return null;
+        }
+
         if (! $quote) {
             // Tenter d'associer le devis Odoo à la société correspondante dans FidelisPlus
             $odooPartnerId = $payload['partner_id'] ?? null;
@@ -393,8 +427,9 @@ class OdooIngestService
                     ]);
                 }
 
-                // Sycnronisation des lignes d'articles si présentes dans le payload Odoo
+                // Synchronisation des lignes d'articles et des véhicules si présents dans le payload Odoo
                 $this->ingestQuoteItems($quote, $payload);
+                $this->syncQuoteVehicles($quote, $payload);
 
                 Log::info("OdooIngestService::ingestQuote — devis Odoo #{$odooQuoteId} ingéré pour la société {$company->name}");
                 return $quote;
@@ -425,7 +460,95 @@ class OdooIngestService
         $quote->save();
 
         $this->ingestQuoteItems($quote, $payload);
+        $this->syncQuoteVehicles($quote, $payload);
         return $quote;
+    }
+
+    /**
+     * Rattache les véhicules transmis dans le payload Odoo au devis FidelisPlus.
+     */
+    private function syncQuoteVehicles(Quote $quote, array $payload): void
+    {
+        $vehicleIds = [];
+
+        // 1. Détection par ID véhicule Odoo
+        $rawVehicleIds = (array) ($payload['vehicle_ids'] ?? $payload['vehicle_id'] ?? $payload['fleet_vehicle_id'] ?? []);
+        foreach ($rawVehicleIds as $vId) {
+            $idVal = is_array($vId) ? ($vId[0] ?? null) : $vId;
+            if ($idVal) {
+                $veh = Vehicle::where('odoo_vehicle_id', (string) $idVal)->first();
+                if ($veh) {
+                    $vehicleIds[] = $veh->id;
+                }
+            }
+        }
+
+        // 2. Détection par Immatriculation
+        $plate = $payload['license_plate'] ?? $payload['immatriculation'] ?? null;
+        if ($plate) {
+            $veh = Vehicle::where('license_plate', trim((string) $plate))->first();
+            if ($veh) {
+                $vehicleIds[] = $veh->id;
+            }
+        }
+
+        if (!empty($vehicleIds)) {
+            $quote->vehicles()->syncWithoutDetaching(array_unique($vehicleIds));
+        }
+    }
+
+    /**
+     * Notifie tous les commerciaux et admins par In-App et Email
+     * lorsqu'un devis Odoo sans véhicule (vignette/CT) est rejeté.
+     */
+    private function alertCommercialsMissingVehicleQuote(string $quoteNum, string $clientName, ?int $odooQuoteId): void
+    {
+        try {
+            $commercials = User::whereIn('role', ['commercial', 'admin_commercial', 'super_admin'])->get();
+            $title = "⚠️ ALERTE SÉCURITÉ : Devis Odoo {$quoteNum} rejeté (sans véhicule)";
+            $body  = "Le devis Odoo {$quoteNum} pour le client \"{$clientName}\" a été rejeté car aucun véhicule (vignette / contrôle technique) n'y est rattaché.";
+
+            /** @var NotificationService $notifs */
+            $notifs = app(NotificationService::class);
+
+            foreach ($commercials as $user) {
+                // 1. Notification In-App Backoffice
+                $notifs->notifyUser(
+                    $user,
+                    $title,
+                    $body,
+                    'quote_status',
+                    ['odoo_quote_id' => $odooQuoteId, 'client' => $clientName],
+                    '/vente',
+                    'high',
+                    'both'
+                );
+
+                // 2. Alerte Email par mesure de sécurité
+                if (!empty($user->email)) {
+                    try {
+                        Mail::raw(
+                            "Bonjour {$user->first_name},\n\n" .
+                            "⚠️ ALERTE SÉCURITÉ FIDELISPLUS :\n\n" .
+                            "Le devis Odoo {$quoteNum} concernant le client \"{$clientName}\" a été automatiquement REJETÉ par FidelisPlus lors de la synchronisation.\n\n" .
+                            "Motif du rejet : Aucun véhicule (vignette ou contrôle technique) n'est associé à ce devis Odoo.\n\n" .
+                            "Par mesure de sécurité dans FidelisPlus, tous les devis enregistrés doivent obligatoirement être rattachés à un véhicule.\n\n" .
+                            "Merci de bien vouloir contacter l'équipe Odoo afin de garantir que l'immatriculation / le véhicule soit correctement sélectionné sur Odoo.\n\n" .
+                            "Cordialement,\n" .
+                            "Système de Sécurité FidelisPlus",
+                            function ($message) use ($user, $quoteNum) {
+                                $message->to($user->email)
+                                        ->subject("⚠️ [ALERTE SECURITE FIDELISPLUS] Devis Odoo {$quoteNum} rejeté (Sans véhicule)");
+                            }
+                        );
+                    } catch (\Throwable $e) {
+                        Log::error("Échec envoi email alerte devis sans véhicule à {$user->email}: " . $e->getMessage());
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error("Erreur lors de l'envoi de l'alerte devis sans véhicule: " . $e->getMessage());
+        }
     }
 
     /**
