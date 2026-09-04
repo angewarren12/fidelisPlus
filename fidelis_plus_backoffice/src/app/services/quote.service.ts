@@ -25,6 +25,8 @@ export interface Quote {
   company?: any;
   vehicles?: any[];
   bon_de_commande_url?: string | null;
+  odoo_quote_id?: string | null;
+  odoo_sync_status?: string | null;
 }
 
 export interface QuoteListMeta {
