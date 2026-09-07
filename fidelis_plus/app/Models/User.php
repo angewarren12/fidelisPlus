@@ -34,6 +34,8 @@ class User extends Authenticatable
         'last_name',
         'email',
         'phone',
+        'function',            // Poste / fonction du contact (v0.0.20 Odoo)
+        'odoo_external_ref',   // Référence externe Odoo du contact enfant (v0.0.20)
         'avatar_path',
         'fcm_token',
         'notification_preferences',

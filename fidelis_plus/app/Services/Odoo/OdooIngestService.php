@@ -56,6 +56,11 @@ class OdooIngestService
      *   customer_code        (string|null) — code client Mayelia (ex: CLT-00001) → odoo_client_code
      *   is_mayelia_customer  (bool)        — client agréé Mayelia → odoo_is_mayelia_customer
      *   salesperson_first_name / salesperson_last_name / salesperson_email — rapprochement commercial
+     *
+     * Nouveauté v0.0.20 :
+     *   contacts  (array|null) — contacts enfants (type contact) de la société :
+     *               [{id, name, function, email, phone, external_ref}, ...]
+     *               Uniquement présent quand is_company=true et récupéré via GET /partners/{id}.
      */
     public function ingestCompany(array $payload): ?Company
     {
@@ -185,6 +190,17 @@ class OdooIngestService
             ]);
         }
 
+        // ── Contacts enfants (v0.0.20) ──────────────────────────────────────
+        // Disponibles uniquement quand is_company=true et récupérés via GET /partners/{id}.
+        // Chaque entrée : {id, name, function, email, phone, external_ref}.
+        if (!empty($payload['contacts']) && is_array($payload['contacts'])) {
+            foreach ($payload['contacts'] as $childContact) {
+                if (is_array($childContact)) {
+                    $this->syncChildContact($company, $childContact);
+                }
+            }
+        }
+
         return $company;
     }
 
@@ -228,6 +244,115 @@ class OdooIngestService
         } catch (\Throwable $e) {
             Log::warning('OdooIngestService::syncMainContact — échec', [
                 'company_id' => $company->id,
+                'message'    => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Synchronise un contact enfant Odoo vers un User FidelisPlus secondaire.
+     *
+     * Nouveauté v0.0.20 : GET /partners/{id} retourne contacts:[...] pour les sociétés.
+     * Chaque entrée contient : {id, name, function, email, phone, external_ref}
+     *
+     * Règles :
+     *  - Idempotence via external_ref Odoo du contact (champ odoo_external_ref sur User).
+     *  - Si external_ref absent, fallback sur l'email.
+     *  - Ne jamais modifier l'email d'un User existant (clé de connexion).
+     *  - is_main_contact reste false pour tous ces contacts secondaires.
+     */
+    private function syncChildContact(Company $company, array $data): void
+    {
+        try {
+            $odooContactRef = $data['external_ref'] ?? null;
+            $email          = $data['email'] ?? null;
+            $name           = $data['name'] ?? null;
+
+            if (! $name) {
+                return; // Entrée invalide
+            }
+
+            // Décomposition du nom complet en prénom / nom
+            $nameParts = explode(' ', trim($name), 2);
+            $firstName = $nameParts[0] ?? $name;
+            $lastName  = $nameParts[1] ?? '';
+
+            // 1. Résolution par external_ref Odoo (idempotence)
+            $existingUser = null;
+            if ($odooContactRef) {
+                $existingUser = User::where('company_id', $company->id)
+                    ->where('odoo_external_ref', $odooContactRef)
+                    ->first();
+            }
+
+            // 2. Fallback : résolution par email
+            if (! $existingUser && $email) {
+                $existingUser = User::where('email', mb_strtolower(trim($email)))->first();
+            }
+
+            if ($existingUser) {
+                // Mise à jour sans toucher à l'email
+                $updates = [
+                    'first_name' => $firstName,
+                    'last_name'  => $lastName,
+                    'phone'      => $data['phone'] ?? $existingUser->phone,
+                    'function'   => $data['function'] ?? $existingUser->function ?? null,
+                ];
+                if ($odooContactRef) {
+                    $updates['odoo_external_ref'] = $odooContactRef;
+                }
+                $existingUser->update($updates);
+
+                Log::info('OdooIngestService::syncChildContact — contact mis à jour', [
+                    'user_id'    => $existingUser->id,
+                    'company_id' => $company->id,
+                    'ref'        => $odooContactRef,
+                ]);
+                return;
+            }
+
+            // 3. Création — email obligatoire pour créer un User
+            if (! $email) {
+                Log::info('OdooIngestService::syncChildContact — contact ignoré (pas d\'email, pas de création possible)', [
+                    'company_id' => $company->id,
+                    'name'       => $name,
+                    'ref'        => $odooContactRef,
+                ]);
+                return;
+            }
+
+            // Vérifier que l'email n'est pas déjà utilisé par un autre User
+            if (User::where('email', mb_strtolower(trim($email)))->exists()) {
+                Log::warning('OdooIngestService::syncChildContact — email déjà utilisé, contact ignoré', [
+                    'company_id' => $company->id,
+                    'email'      => $email,
+                ]);
+                return;
+            }
+
+            $newUser = User::create([
+                'company_id'           => $company->id,
+                'role'                 => 'client',
+                'first_name'           => $firstName,
+                'last_name'            => $lastName,
+                'email'                => mb_strtolower(trim($email)),
+                'phone'                => $data['phone'] ?? null,
+                'function'             => $data['function'] ?? null,
+                'password'             => Hash::make(Str::random(40)),
+                'is_main_contact'      => false,
+                'must_change_password' => true,
+                'odoo_external_ref'    => $odooContactRef,
+            ]);
+
+            Log::info('OdooIngestService::syncChildContact — contact secondaire créé', [
+                'user_id'    => $newUser->id,
+                'company_id' => $company->id,
+                'ref'        => $odooContactRef,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('OdooIngestService::syncChildContact — échec', [
+                'company_id' => $company->id,
+                'name'       => $data['name'] ?? null,
                 'message'    => $e->getMessage(),
             ]);
         }
@@ -361,13 +486,29 @@ class OdooIngestService
         // Si Odoo transmet un devis sans aucun véhicule et qu'aucun véhicule n'est déjà rattaché :
         // 1. FidelisPlus REJETTE l'enregistrement de ce devis (return null).
         // 2. FidelisPlus génère une alerte in-app et envoie un email à tous les commerciaux.
+        //
+        // Nouveauté v0.0.20 :
+        //   - alert_type: "missing_vehicle" → signal officiel Odoo qu'aucun véhicule n'est rattaché.
+        //     On s'appuie sur ce champ en priorité quand il est présent (option "Alerter si véhicule
+        //     manquant" activée sur la clé API).
+        //   - vehicles: [{plate, vehicle_type, fleet_vehicle_id}] → liste dédupliquée des véhicules.
         // ─────────────────────────────────────────────────────────────────────
-        $hasVehicleInPayload = !empty($payload['vehicle_id'])
-            || !empty($payload['vehicle_ids'])
-            || !empty($payload['vehicles'])
-            || !empty($payload['license_plate'])
-            || !empty($payload['immatriculation'])
-            || !empty($payload['fleet_vehicle_id']);
+
+        // Détection officielle v0.0.20 via alert_type
+        $alertType = $payload['alert_type'] ?? null;
+
+        if ($alertType === 'missing_vehicle') {
+            // Odoo confirme explicitement qu'il n'y a pas de véhicule.
+            $hasVehicleInPayload = false;
+        } else {
+            // Détection heuristique (rétrocompatibilité quand alert_type n'est pas activé)
+            $hasVehicleInPayload = !empty($payload['vehicles'])
+                || !empty($payload['vehicle_id'])
+                || !empty($payload['vehicle_ids'])
+                || !empty($payload['license_plate'])
+                || !empty($payload['immatriculation'])
+                || !empty($payload['fleet_vehicle_id']);
+        }
 
         $hasExistingVehicle = $quote && $quote->vehicles()->exists();
 
@@ -466,29 +607,65 @@ class OdooIngestService
 
     /**
      * Rattache les véhicules transmis dans le payload Odoo au devis FidelisPlus.
+     *
+     * Nouveauté v0.0.20 : format structuré vehicles:[{plate, vehicle_type, fleet_vehicle_id}].
+     * La liste est dédupliquée par plaque côté Odoo et les véhicules sont automatiquement
+     * rapprochés des enregistrements fleet.vehicle à partir de leur immatriculation.
      */
     private function syncQuoteVehicles(Quote $quote, array $payload): void
     {
         $vehicleIds = [];
 
-        // 1. Détection par ID véhicule Odoo
-        $rawVehicleIds = (array) ($payload['vehicle_ids'] ?? $payload['vehicle_id'] ?? $payload['fleet_vehicle_id'] ?? []);
-        foreach ($rawVehicleIds as $vId) {
-            $idVal = is_array($vId) ? ($vId[0] ?? null) : $vId;
-            if ($idVal) {
-                $veh = Vehicle::where('odoo_vehicle_id', (string) $idVal)->first();
-                if ($veh) {
-                    $vehicleIds[] = $veh->id;
+        // ── Priorité 1 (v0.0.20) : tableau structuré vehicles:[{plate, vehicle_type, fleet_vehicle_id}] ──
+        if (!empty($payload['vehicles']) && is_array($payload['vehicles'])) {
+            foreach ($payload['vehicles'] as $vData) {
+                if (! is_array($vData)) {
+                    continue;
+                }
+
+                // Résolution par fleet_vehicle_id (ID Odoo fleet.vehicle)
+                $fleetVehicleId = $vData['fleet_vehicle_id'] ?? null;
+                if ($fleetVehicleId) {
+                    $veh = Vehicle::where('odoo_vehicle_id', (string) $fleetVehicleId)->first();
+                    if ($veh) {
+                        $vehicleIds[] = $veh->id;
+                        continue;
+                    }
+                }
+
+                // Fallback par plaque d'immatriculation
+                $plate = $vData['plate'] ?? null;
+                if ($plate) {
+                    $veh = Vehicle::where('license_plate', trim((string) $plate))->first();
+                    if ($veh) {
+                        $vehicleIds[] = $veh->id;
+                    }
                 }
             }
         }
 
-        // 2. Détection par Immatriculation
-        $plate = $payload['license_plate'] ?? $payload['immatriculation'] ?? null;
-        if ($plate) {
-            $veh = Vehicle::where('license_plate', trim((string) $plate))->first();
-            if ($veh) {
-                $vehicleIds[] = $veh->id;
+        // ── Priorité 2 : format heuristique (rétrocompatibilité) ──
+        // Utilisé quand le payload ne contient pas le tableau structuré vehicles[]
+        if (empty($vehicleIds)) {
+            // Détection par ID véhicule Odoo (scalaire ou tableau)
+            $rawVehicleIds = (array) ($payload['vehicle_ids'] ?? $payload['vehicle_id'] ?? $payload['fleet_vehicle_id'] ?? []);
+            foreach ($rawVehicleIds as $vId) {
+                $idVal = is_array($vId) ? ($vId[0] ?? null) : $vId;
+                if ($idVal) {
+                    $veh = Vehicle::where('odoo_vehicle_id', (string) $idVal)->first();
+                    if ($veh) {
+                        $vehicleIds[] = $veh->id;
+                    }
+                }
+            }
+
+            // Détection par immatriculation
+            $plate = $payload['license_plate'] ?? $payload['immatriculation'] ?? null;
+            if ($plate) {
+                $veh = Vehicle::where('license_plate', trim((string) $plate))->first();
+                if ($veh) {
+                    $vehicleIds[] = $veh->id;
+                }
             }
         }
 

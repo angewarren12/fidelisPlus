@@ -4,6 +4,7 @@ namespace App\Services\Odoo;
 
 use App\Models\Company;
 use App\Models\Quote;
+use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -30,6 +31,15 @@ use Illuminate\Support\Facades\Log;
  * Prévention des doublons : chaque ressource porte un external_ref stable
  * ("fidelis-company-{id}", "fidelis-vehicle-{id}", "fidelis-quote-{id}")
  * permettant le lookup by-ref avant toute création.
+ *
+ * Nouveautés v0.0.20 :
+ *   Sale Orders : champ alert_type: "missing_vehicle" si option "Alerter si véhicule manquant"
+ *                 activée sur la clé API. Tableau vehicles:[{plate, vehicle_type, fleet_vehicle_id}]
+ *                 retournable sur GET /sale_orders et GET /sale_orders/{id}.
+ *   Partners    : GET /partners/{id} retourne contacts:[{id, name, function, email, phone,
+ *                 external_ref}] pour les sociétés (is_company=true).
+ *                 POST|PUT /partners acceptent parent_id, parent_external_ref, parent_email,
+ *                 parent_name pour résoudre la société parente d'un contact enfant.
  */
 class OdooClient
 {
@@ -221,9 +231,75 @@ class OdooClient
             return ['odoo_partner_id' => $newId];
         } catch (\Throwable $e) {
             Log::warning('OdooClient::syncCompany exception', [
-                'message' => $e->getMessage(),
+                'message'    => $e->getMessage(),
                 'company_id' => $company->id,
-                'event' => $event,
+                'event'      => $event,
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Synchronise un contact enfant (User FidelisPlus) vers Odoo (res.partner enfant).
+     *
+     * Nouveauté v0.0.20 : POST|PUT /partners acceptent :
+     *   parent_id           : ID Odoo de la société parente (si déjà connu)
+     *   parent_external_ref : référence externe Fidelis de la société parente (recommandé)
+     *   parent_email        : fallback si ni parent_id ni parent_external_ref disponibles
+     *   parent_name         : désambiguïsaïtion en cas d'email ambigu (ne fonctionne jamais seul)
+     *
+     * La cascade retenue : parent_external_ref (priorité) > parent_id (si odoo_partner_id connu).
+     * parent_email n'est pas utilisé pour éviter les 422 en cas d'email ambigu.
+     *
+     * @return array{odoo_contact_id: int}|null  null = Odoo indisponible.
+     */
+    public function syncContact(Company $company, User $contact, string $event): ?array
+    {
+        $ref = 'fidelis-contact-' . $contact->id;
+
+        // Résolution de l'ID Odoo du contact.
+        $odooContactId = null;
+        if ($contact->odoo_external_ref) {
+            $odooContactId = $this->findPartnerByRef($contact->odoo_external_ref);
+        }
+        if (! $odooContactId) {
+            $odooContactId = $this->findPartnerByRef($ref);
+        }
+
+        $payload = array_filter([
+            'external_ref' => $ref,
+            'name'         => trim($contact->first_name . ' ' . $contact->last_name),
+            'email'        => $contact->email,
+            'phone'        => $contact->phone,
+            'function'     => $contact->function ?? null,
+            'is_company'   => false,
+            // Résolution de la société parente (cascade recommandée par l'API v0.0.20)
+            'parent_external_ref' => 'fidelis-company-' . $company->id, // Priorité 2 (recommandée)
+            'parent_id'           => $company->odoo_partner_id          // Priorité 1 si déjà connu
+                ? (int) $company->odoo_partner_id
+                : null,
+        ], fn($val) => $val !== null && $val !== '');
+
+        try {
+            if ($odooContactId) {
+                $data = $this->extractData(
+                    $this->http()->put("/api/sale_odoo/v1/partners/{$odooContactId}", $payload),
+                    'syncContact/PUT'
+                );
+                return $data !== null ? ['odoo_contact_id' => $odooContactId] : null;
+            }
+
+            $data = $this->extractData(
+                $this->http()->post('/api/sale_odoo/v1/partners', $payload),
+                'syncContact/POST'
+            );
+            return $data !== null ? ['odoo_contact_id' => (int) ($data['id'] ?? 0)] : null;
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::syncContact exception', [
+                'message'    => $e->getMessage(),
+                'contact_id' => $contact->id,
+                'company_id' => $company->id,
+                'event'      => $event,
             ]);
             return null;
         }
@@ -525,6 +601,31 @@ class OdooClient
     public function fetchUpdatedQuotes(?string $since): ?array
     {
         return $this->fetchAllPages('/api/sale_odoo/v1/sale_orders', $since, 'fetchUpdatedQuotes');
+    }
+
+    /**
+     * Récupère un devis Odoo individuel par son ID Odoo.
+     *
+     * Nouveauté v0.0.20 : GET /sale_orders/{id} retourne maintenant les champs
+     * alert_type et vehicles:[{plate, vehicle_type, fleet_vehicle_id}] permettant
+     * de réfétcher un devis spécifique avec les informations de véhicule complètes.
+     *
+     * @return array|null  null si Odoo est indisponible ou si le devis est introuvable.
+     */
+    public function fetchQuoteById(int $odooId): ?array
+    {
+        try {
+            return $this->extractData(
+                $this->http()->get("/api/sale_odoo/v1/sale_orders/{$odooId}"),
+                'fetchQuoteById'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('OdooClient::fetchQuoteById exception', [
+                'message'  => $e->getMessage(),
+                'odoo_id'  => $odooId,
+            ]);
+            return null;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
