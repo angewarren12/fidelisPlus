@@ -18,9 +18,20 @@ Route::post('/internal/deploy-hook', [DeployController::class, 'hook'])
 
 // Route Web Cron automatique (utilisée par la tâche Cron LWS) — exécute le scheduler Laravel
 Route::get('/internal/cron-runner', function () {
+    if (request()->has('clear_cache') || request()->has('reset')) {
+        \Illuminate\Support\Facades\Cache::flush();
+    }
+
     $exitCode = \Illuminate\Support\Facades\Artisan::call('schedule:run');
     $output   = \Illuminate\Support\Facades\Artisan::output();
-    $logs     = \App\Models\OdooSyncLog::latest('id')->take(5)->get();
+
+    // Si le scheduler indique qu'aucune commande n'est prête (ex: verrou mutex bloqué) ou si force=1 est spécifié
+    if (request()->has('force') || (request()->has('run') && str_contains($output, 'No scheduled commands'))) {
+        \Illuminate\Support\Facades\Artisan::call('odoo:sync');
+        $output .= "\n[Direct Run] " . \Illuminate\Support\Facades\Artisan::output();
+    }
+
+    $logs = \App\Models\OdooSyncLog::latest('id')->take(5)->get();
 
     return response()->json([
         'status'    => 'completed',

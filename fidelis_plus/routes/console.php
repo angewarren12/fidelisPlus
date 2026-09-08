@@ -105,9 +105,8 @@ Schedule::command('notifications:ct-reminders')->dailyAt('08:00');
 Schedule::command('quotes:check-expired')->dailyAt('08:00');
 
 // Cron de pull Odoo -> FidelisPlus (prospects/clients/flottes/devis créés ou modifiés
-// côté Odoo). Fréquence provisoire, ajustable. withoutOverlapping() évite un second
-// passage si Odoo répond lentement.
-Schedule::command('odoo:sync')->everyMinute()->withoutOverlapping();
+// côté Odoo). Fréquence provisoire, ajustable. withoutOverlapping(5) expire le verrou après 5 min max.
+Schedule::command('odoo:sync')->everyMinute()->withoutOverlapping(5);
 
 // Traitement de la file d'attente (jobs Sync*ToOdoo, ProvisionSiraAccountForMember,
 // etc. — QUEUE_CONNECTION=database). Sur un hébergement mutualisé, aucun worker
@@ -120,4 +119,4 @@ Schedule::command('odoo:sync')->everyMinute()->withoutOverlapping();
 // scheduler ET la queue — voir docs/ops/production-cron-queue-setup.md.
 Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=1')
     ->everyMinute()
-    ->withoutOverlapping();
+    ->withoutOverlapping(5);
