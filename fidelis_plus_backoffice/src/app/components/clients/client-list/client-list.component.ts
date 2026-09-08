@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -6,6 +6,8 @@ import { AccountService } from '../../../services/account.service';
 import { ToastService } from '../../../services/toast.service';
 import { downloadCsv } from '../../../utils/csv-download';
 import { openReportPreviewWindow } from '../../../utils/report-preview-window';
+import { LayoutService } from '../../../services/layout.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-client-list',
@@ -209,6 +211,8 @@ export class ClientListComponent implements OnInit {
 
   private accountService = inject(AccountService);
   private toastService = inject(ToastService);
+  private layoutService = inject(LayoutService);
+  private syncSub?: Subscription;
 
   availableSectors = computed(() => {
     const list = this.clients();
@@ -339,6 +343,11 @@ export class ClientListComponent implements OnInit {
 
   ngOnInit() {
     this.loadClients();
+    this.syncSub = this.layoutService.odooSync$.subscribe(() => this.loadClients());
+  }
+
+  ngOnDestroy() {
+    this.syncSub?.unsubscribe();
   }
 
   loadClients() {

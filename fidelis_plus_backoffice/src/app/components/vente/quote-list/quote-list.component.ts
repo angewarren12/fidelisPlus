@@ -1,9 +1,10 @@
-import { Component, OnInit, signal, inject, computed, DestroyRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, inject, computed, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
-import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, Subscription } from 'rxjs';
+import { LayoutService } from '../../../services/layout.service';
 import { QuoteService, Quote, QuoteListMeta, QuoteListSummary } from '../../../services/quote.service';
 import { ToastService } from '../../../services/toast.service';
 import { QuotePreviewModalComponent } from '../quote-preview-modal/quote-preview-modal.component';
@@ -495,7 +496,7 @@ import { SendQuoteModalComponent } from './send-quote-modal/send-quote-modal.com
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   `]
 })
-export class QuoteListComponent implements OnInit {
+export class QuoteListComponent implements OnInit, OnDestroy {
   quotes = signal<Quote[]>([]);
   requests = signal<QuoteRequest[]>([]);
   activeTab = signal<'quotes' | 'requests'>('quotes');
@@ -530,6 +531,8 @@ export class QuoteListComponent implements OnInit {
   private toastService = inject(ToastService);
   private destroyRef = inject(DestroyRef);
   private route = inject(ActivatedRoute);
+  private layoutService = inject(LayoutService);
+  private syncSub?: Subscription;
 
   statusCounts = computed(() => {
     const b = this.quoteSummary()?.by_status;
@@ -590,6 +593,11 @@ export class QuoteListComponent implements OnInit {
       });
     this.loadQuotes();
     this.loadRequests();
+    // Rafraîchissement silencieux après synchro Odoo (bouton sync du header)
+    this.syncSub = this.layoutService.odooSync$.subscribe(() => {
+      this.loadQuotes();
+      this.loadRequests();
+    });
 
     // Deep-link depuis une fiche véhicule : /vente?tab=requests&request_id=123
     const qp = this.route.snapshot.queryParamMap;
@@ -606,6 +614,10 @@ export class QuoteListComponent implements OnInit {
         });
       }
     }
+  }
+
+  ngOnDestroy(): void {
+    this.syncSub?.unsubscribe();
   }
 
   quoteMetaLastPage(): number {

@@ -1,14 +1,15 @@
-import { Component, OnInit, signal, inject, DestroyRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
-import { Subject, debounceTime, distinctUntilChanged, forkJoin } from 'rxjs';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, forkJoin } from 'rxjs';
 import { ProspectService, PaginatedMeta } from '../../../services/prospect.service';
 import { ToastService } from '../../../services/toast.service';
 import { Prospect } from '../../../models/prospect.model';
 import { AuthService } from '../../../services/auth.service';
 import { TeamService } from '../../../services/team.service';
+import { LayoutService } from '../../../services/layout.service';
 
 @Component({
   selector: 'app-prospect-list',
@@ -377,7 +378,7 @@ import { TeamService } from '../../../services/team.service';
     :host { display: block; }
   `],
 })
-export class ProspectListComponent implements OnInit {
+export class ProspectListComponent implements OnInit, OnDestroy {
   prospects = signal<Prospect[]>([]);
   meta = signal<PaginatedMeta | null>(null);
   summary = signal<any | null>(null);
@@ -401,7 +402,9 @@ export class ProspectListComponent implements OnInit {
   private toastService = inject(ToastService);
   private authService = inject(AuthService);
   private teamService = inject(TeamService);
+  private layoutService = inject(LayoutService);
   private destroyRef = inject(DestroyRef);
+  private syncSub?: Subscription;
 
   prospectToConvert = signal<Prospect | null>(null);
   convertSubmitting = signal(false);
@@ -411,6 +414,10 @@ export class ProspectListComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.syncSub = this.layoutService.odooSync$.subscribe(() => {
+      this.loadProspects();
+    });
+
     this.search$
       .pipe(debounceTime(320), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
@@ -440,6 +447,10 @@ export class ProspectListComponent implements OnInit {
     }
 
     this.loadProspects();
+  }
+
+  ngOnDestroy(): void {
+    this.syncSub?.unsubscribe();
   }
 
   metaLastPage(): number {

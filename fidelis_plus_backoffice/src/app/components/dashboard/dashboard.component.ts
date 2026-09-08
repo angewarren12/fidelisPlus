@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartData } from 'chart.js';
@@ -10,6 +10,8 @@ import { ToastService } from '../../services/toast.service';
 import { downloadCsv } from '../../utils/csv-download';
 import { buildDashboardStatsCsvRows } from '../../utils/dashboard-stats-export';
 import { openReportPreviewWindow } from '../../utils/report-preview-window';
+import { LayoutService } from '../../services/layout.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-dashboard',
@@ -203,7 +205,7 @@ import { openReportPreviewWindow } from '../../utils/report-preview-window';
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   `]
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   stats = signal<DashboardStats | null>(null);
   showQuoteRequests = signal(false);
   loading = signal(true);
@@ -214,6 +216,8 @@ export class DashboardComponent implements OnInit {
   private dashboardService = inject(DashboardService);
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
+  private layoutService = inject(LayoutService);
+  private syncSub?: Subscription;
 
   currentUser = computed(() => this.authService.getCurrentUser());
 
@@ -250,6 +254,12 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadStats();
+    // Rafraîchissement silencieux après synchro Odoo (bouton sync du header)
+    this.syncSub = this.layoutService.odooSync$.subscribe(() => this.loadStats());
+  }
+
+  ngOnDestroy(): void {
+    this.syncSub?.unsubscribe();
   }
 
   loadStats(): void {
