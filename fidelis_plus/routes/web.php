@@ -16,7 +16,21 @@ Route::post('/internal/deploy-hook', [DeployController::class, 'hook'])
     ->middleware('throttle:5,1')
     ->name('internal.deploy-hook');
 
-// Route Web simple pour déclencher la synchronisation Odoo depuis le navigateur
+// Route Web Cron automatique (utilisée par la tâche Cron LWS) — exécute le scheduler Laravel
+Route::get('/internal/cron-runner', function () {
+    $exitCode = \Illuminate\Support\Facades\Artisan::call('schedule:run');
+    $output   = \Illuminate\Support\Facades\Artisan::output();
+    $logs     = \App\Models\OdooSyncLog::latest('id')->take(5)->get();
+
+    return response()->json([
+        'status'    => 'completed',
+        'exit_code' => $exitCode,
+        'output'    => trim($output),
+        'recent_logs' => $logs,
+    ]);
+});
+
+// Route Web simple pour déclencher la synchronisation Odoo manuelle depuis le navigateur
 Route::get('/sync-odoo', function () {
     \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
     $logs = \App\Models\OdooSyncLog::latest('id')->take(6)->get();
