@@ -41,6 +41,23 @@ Route::get('/internal/cron-runner', function () {
     ]);
 });
 
+// Route Web dédiée spécifiquement à l'exécution des jobs SIRA en file d'attente (ProvisionSiraAccountForMember)
+Route::get('/internal/sira-runner', function () {
+    $exitCode = \Illuminate\Support\Facades\Artisan::call('queue:work', [
+        '--stop-when-empty' => true,
+        '--max-time' => 50,
+        '--tries' => 1,
+    ]);
+    $output = \Illuminate\Support\Facades\Artisan::output();
+
+    return response()->json([
+        'status'    => 'completed',
+        'service'   => 'sira-queue',
+        'exit_code' => $exitCode,
+        'output'    => trim($output) ?: 'Queue SIRA traitée avec succès (aucun job en attente).',
+    ]);
+});
+
 // Route Web simple pour déclencher la synchronisation Odoo manuelle depuis le navigateur
 Route::get('/sync-odoo', function () {
     \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
