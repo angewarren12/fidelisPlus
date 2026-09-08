@@ -185,17 +185,17 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   triggerOdooSync() {
     this.isSyncing.set(true);
-    this.http.get<any>(`${environment.apiUrl}/api/v1/sync-odoo`).subscribe({
+    // Appel direct sur la route web /sync-odoo (Laravel) — sans reload de page
+    this.http.get<any>(`${environment.apiUrl}/sync-odoo`).subscribe({
       next: (res) => {
         this.isSyncing.set(false);
         this.showOdooSyncModal.set(false);
         this.toast.success(res.message || 'Synchronisation Odoo exécutée avec succès !');
-        // Rafraîchir l'écran courant après 1 seconde
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        // Émettre le signal de rafraîchissement — les composants rechargent leurs données
+        // sans recharger toute la page
+        this.layoutService.triggerOdooDataRefresh();
       },
-      error: (err) => {
+      error: () => {
         this.isSyncing.set(false);
         this.showOdooSyncModal.set(false);
         this.toast.error('Erreur lors du déclenchement de la synchronisation Odoo.');
