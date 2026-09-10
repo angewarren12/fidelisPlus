@@ -41,15 +41,15 @@ import { Subscription } from 'rxjs';
 
           <!-- Dropdown Notifications -->
           <div *ngIf="showNotifications()" (click)="$event.stopPropagation()"
-               class="absolute right-0 mt-2 w-96 bg-white/95 backdrop-blur-md border border-slate-200/50 rounded-2xl shadow-xl z-50 overflow-hidden py-2 animate-fade-in-up">
-            <div class="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+               class="absolute right-0 mt-2 w-96 bg-white/95 backdrop-blur-md border border-slate-200/50 rounded-2xl shadow-xl z-50 overflow-hidden animate-fade-in-up">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <span class="font-headline font-bold text-sm text-on-surface">Notifications</span>
               <button *ngIf="unreadCount() > 0" (click)="markAllRead()" class="text-xs text-primary font-bold hover:underline">Tout marquer comme lu</button>
             </div>
 
             <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
               <div *ngFor="let item of notifications()"
-                   (click)="markRead(item)"
+                   (click)="onNotificationClick(item)"
                    [ngClass]="{'bg-teal-50/10': !item.read_at}"
                    class="px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3">
                 <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
@@ -65,7 +65,13 @@ import { Subscription } from 'rxjs';
                 <div class="flex-1 min-w-0">
                   <p class="text-xs text-on-surface font-semibold truncate">{{ item.title }}</p>
                   <p class="text-xs text-slate-600 line-clamp-2 mt-0.5">{{ item.body }}</p>
-                  <p class="text-[10px] text-outline mt-1">{{ item.created_at | date:'short' }}</p>
+                  <div class="flex items-center justify-between mt-1">
+                    <span class="text-[10px] text-outline">{{ item.created_at | date:'short' }}</span>
+                    <span class="text-[10px] font-bold text-[#15b9a3] hover:underline flex items-center gap-0.5">
+                      <span>Ouvrir</span>
+                      <span class="material-symbols-outlined text-[10px]">arrow_forward</span>
+                    </span>
+                  </div>
                 </div>
                 <div *ngIf="!item.read_at" class="w-2 h-2 rounded-full bg-[#15b9a3] shrink-0 self-center"></div>
               </div>
@@ -73,6 +79,14 @@ import { Subscription } from 'rxjs';
               <div *ngIf="notifications().length === 0" class="py-8 text-center text-xs text-outline italic">
                 Aucune notification.
               </div>
+            </div>
+
+            <!-- Footer: Voir toutes les notifications -->
+            <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-100 text-center">
+              <button (click)="openAllNotificationsModal()" class="w-full text-center text-xs font-bold text-[#15b9a3] hover:text-[#119684] transition-colors flex items-center justify-center gap-1.5 py-1">
+                <span class="material-symbols-outlined text-base">visibility</span>
+                <span>Voir toutes les notifications</span>
+              </button>
             </div>
           </div>
         </div>
@@ -114,6 +128,107 @@ import { Subscription } from 'rxjs';
           </div>
         </div>
       </div>
+
+      <!-- Modal Centre de Notifications complet -->
+      <div *ngIf="showAllNotificationsModal()" (click)="closeAllNotificationsModal()" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+        <div (click)="$event.stopPropagation()" class="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] overflow-hidden animate-scale-up">
+          <!-- Header Modal -->
+          <div class="p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-teal-50 text-[#15b9a3] flex items-center justify-center">
+                <span class="material-symbols-outlined text-xl">notifications</span>
+              </div>
+              <div>
+                <h3 class="font-headline font-black text-lg text-on-surface">Centre de Notifications</h3>
+                <p class="text-xs text-outline font-medium">Historique complet de vos alertes et activités</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button *ngIf="unreadCount() > 0" (click)="markAllRead()" class="px-3 py-1.5 rounded-xl text-xs font-bold text-[#15b9a3] bg-teal-50 hover:bg-teal-100 transition-colors">
+                Tout marquer comme lu
+              </button>
+              <button (click)="closeAllNotificationsModal()" class="w-9 h-9 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors flex items-center justify-center">
+                <span class="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Filtres -->
+          <div class="px-6 py-3 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white gap-4">
+            <div class="flex items-center gap-2">
+              <button (click)="allNotifsFilter.set('all'); loadAllNotificationsPage(1)"
+                      [ngClass]="allNotifsFilter() === 'all' ? 'bg-[#15b9a3] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                      class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors">
+                Toutes
+              </button>
+              <button (click)="allNotifsFilter.set('unread'); loadAllNotificationsPage(1)"
+                      [ngClass]="allNotifsFilter() === 'unread' ? 'bg-[#15b9a3] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                      class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5">
+                <span>Non lues</span>
+                <span *ngIf="unreadCount() > 0" class="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white font-bold">{{ unreadCount() }}</span>
+              </button>
+            </div>
+            <span class="text-xs text-outline font-medium" *ngIf="allNotifsTotal() > 0">
+              Total : {{ allNotifsTotal() }} notification(s)
+            </span>
+          </div>
+
+          <!-- Content List -->
+          <div class="flex-1 overflow-y-auto p-6 divide-y divide-slate-100">
+            <div *ngFor="let item of allNotificationsList()"
+                 (click)="onNotificationClick(item)"
+                 [ngClass]="{'bg-teal-50/20 border-l-4 border-l-[#15b9a3]': !item.read_at}"
+                 class="py-4 px-4 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer flex gap-4 my-1">
+              <div class="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center"
+                   [ngClass]="{
+                     'bg-teal-50 text-[#15b9a3]': item.priority === 'normal',
+                     'bg-red-50 text-red-600': item.priority === 'high',
+                     'bg-amber-50 text-amber-600': item.priority === 'low'
+                   }">
+                <span class="material-symbols-outlined text-xl">
+                  {{ item.priority === 'high' ? 'warning' : (item.type === 'alert' ? 'notifications_active' : 'info') }}
+                </span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <h4 class="text-xs sm:text-sm font-bold text-on-surface truncate">{{ item.title }}</h4>
+                  <span class="text-[11px] text-outline shrink-0">{{ item.created_at | date:'short' }}</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed mt-1">{{ item.body }}</p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="text-[10px] font-bold text-[#15b9a3] bg-teal-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[12px]">open_in_new</span>
+                    <span>Cliquer pour ouvrir</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="allNotificationsList().length === 0 && !loadingAllNotifs()" class="py-12 text-center text-slate-400">
+              <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">notifications_off</span>
+              <p class="text-sm font-medium">Aucune notification trouvée.</p>
+            </div>
+            <div *ngIf="loadingAllNotifs()" class="py-12 text-center text-slate-400">
+              <span class="material-symbols-outlined text-3xl animate-spin text-[#15b9a3]">sync</span>
+            </div>
+          </div>
+
+          <!-- Pagination Footer -->
+          <div class="p-4 border-t border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50" *ngIf="allNotifsTotalPages() > 1">
+            <span class="text-xs text-outline font-medium">Page {{ allNotifsPage() }} sur {{ allNotifsTotalPages() }}</span>
+            <div class="flex items-center gap-2">
+              <button (click)="loadAllNotificationsPage(allNotifsPage() - 1)" [disabled]="allNotifsPage() <= 1"
+                      class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 disabled:opacity-50 hover:bg-slate-100 transition-colors">
+                Précédent
+              </button>
+              <button (click)="loadAllNotificationsPage(allNotifsPage() + 1)" [disabled]="allNotifsPage() >= allNotifsTotalPages()"
+                      class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 disabled:opacity-50 hover:bg-slate-100 transition-colors">
+                Suivant
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
   `,
   styles: [`
@@ -140,6 +255,14 @@ export class HeaderComponent implements OnInit, OnDestroy {
   unreadCount = signal(0);
   showOdooSyncModal = signal(false);
   isSyncing = signal(false);
+
+  showAllNotificationsModal = signal(false);
+  allNotificationsList = signal<NotificationItem[]>([]);
+  allNotifsPage = signal(1);
+  allNotifsTotal = signal(0);
+  allNotifsTotalPages = signal(1);
+  allNotifsFilter = signal<'all' | 'unread'>('all');
+  loadingAllNotifs = signal(false);
 
   layoutService = inject(LayoutService);
   private http = inject(HttpClient);
@@ -185,14 +308,11 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   triggerOdooSync() {
     this.isSyncing.set(true);
-    // Appel direct sur la route web /sync-odoo (Laravel) — sans reload de page
     this.http.get<any>(`${environment.apiUrl}/sync-odoo`).subscribe({
       next: (res) => {
         this.isSyncing.set(false);
         this.showOdooSyncModal.set(false);
         this.toast.success(res.message || 'Synchronisation Odoo exécutée avec succès !');
-        // Émettre le signal de rafraîchissement — les composants rechargent leurs données
-        // sans recharger toute la page
         this.layoutService.triggerOdooDataRefresh();
       },
       error: () => {
@@ -237,7 +357,97 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.notificationService.markAllAsRead().subscribe({
       next: () => {
         this.notifications().forEach(n => n.read_at = new Date().toISOString());
+        this.allNotificationsList().forEach(n => n.read_at = new Date().toISOString());
         this.unreadCount.set(0);
+      }
+    });
+  }
+
+  onNotificationClick(item: NotificationItem) {
+    this.markRead(item);
+    this.showNotifications.set(false);
+    this.showAllNotificationsModal.set(false);
+
+    if (!item) return;
+
+    // 1. Action explicite (URL ou identifier)
+    if (item.action) {
+      if (item.action.startsWith('/')) {
+        this.router.navigateByUrl(item.action);
+        return;
+      }
+      if (item.action === 'vehicle_detail') {
+        if (item.data?.company_id && item.data?.vehicle_id) {
+          this.router.navigate(['/clients', item.data.company_id, 'vehicules', item.data.vehicle_id]);
+          return;
+        }
+        this.router.navigate(['/fleet']);
+        return;
+      }
+      if (item.action === 'quote_detail') {
+        this.router.navigate(['/vente']);
+        return;
+      }
+    }
+
+    // 2. Navigation basée sur les données (data) / types
+    if (item.data?.vehicle_id || item.type === 'fleet_ct') {
+      if (item.data?.company_id && item.data?.vehicle_id) {
+        this.router.navigate(['/clients', item.data.company_id, 'vehicules', item.data.vehicle_id]);
+        return;
+      }
+      this.router.navigate(['/fleet']);
+      return;
+    }
+
+    if (item.data?.quote_id || item.data?.odoo_quote_id || item.type === 'quote_status') {
+      this.router.navigate(['/vente']);
+      return;
+    }
+
+    if (item.data?.company_id || item.data?.client_id) {
+      const clientId = item.data.client_id || item.data.company_id;
+      this.router.navigate(['/clients', clientId]);
+      return;
+    }
+
+    if (item.data?.prospect_id) {
+      this.router.navigate(['/prospection']);
+      return;
+    }
+
+    // Fallback par défaut
+    this.router.navigate(['/dashboard']);
+  }
+
+  openAllNotificationsModal() {
+    this.showNotifications.set(false);
+    this.showAllNotificationsModal.set(true);
+    this.loadAllNotificationsPage(1);
+  }
+
+  closeAllNotificationsModal() {
+    this.showAllNotificationsModal.set(false);
+  }
+
+  loadAllNotificationsPage(page: number) {
+    if (page < 1) page = 1;
+    this.loadingAllNotifs.set(true);
+    this.allNotifsPage.set(page);
+
+    this.notificationService.getNotifications(page, 15).subscribe({
+      next: (res) => {
+        let items = res.items || [];
+        if (this.allNotifsFilter() === 'unread') {
+          items = items.filter(n => !n.read_at);
+        }
+        this.allNotificationsList.set(items);
+        this.allNotifsTotal.set(res.total || items.length);
+        this.allNotifsTotalPages.set(Math.ceil((res.total || items.length) / 15) || 1);
+        this.loadingAllNotifs.set(false);
+      },
+      error: () => {
+        this.loadingAllNotifs.set(false);
       }
     });
   }
