@@ -5,6 +5,15 @@ RewriteBase /
 # Transmet l'en-tête Authorization (nécessaire pour les tokens Bearer Sanctum)
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+# Désactive le cache navigateur sur index.html pour charger immédiatement les nouveaux builds
+<IfModule mod_headers.c>
+    <FilesMatch "^index\.html$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires 0
+    </FilesMatch>
+</IfModule>
+
 # Bloque l'accès direct au code Laravel, sauf son front controller laravel/public/
 RewriteRule ^laravel/(?!public/) - [F,L]
 

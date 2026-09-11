@@ -78,22 +78,28 @@ Route::fallback(function () {
         abort(404);
     }
 
+    $noCacheHeaders = [
+        'Cache-Control' => 'no-cache, no-store, must-revalidate',
+        'Pragma'        => 'no-cache',
+        'Expires'       => '0',
+    ];
+
     // Chemin 1 : index.html à la racine du sous-domaine (dossier parent de laravel/)
     $path1 = public_path('../../index.html');
     if (file_exists($path1)) {
-        return response()->file($path1);
+        return response()->file($path1, $noCacheHeaders);
     }
 
     // Chemin 2 : index.html dans le dossier public/ de Laravel
     $path2 = public_path('index.html');
     if (file_exists($path2)) {
-        return response()->file($path2);
+        return response()->file($path2, $noCacheHeaders);
     }
 
     // Chemin 3 : index.html dans le dossier laravel/ (parent de public/)
     $path3 = public_path('../index.html');
     if (file_exists($path3)) {
-        return response()->file($path3);
+        return response()->file($path3, $noCacheHeaders);
     }
 
     abort(404);
