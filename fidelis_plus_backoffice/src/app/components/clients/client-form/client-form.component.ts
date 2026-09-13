@@ -181,8 +181,8 @@ export class ClientFormComponent implements OnInit {
       observations: [''],
     });
 
-    this.accountService.getClients().subscribe(clients => {
-      this.clients = clients;
+    this.accountService.getClients({ per_page: 500 }).subscribe(res => {
+      this.clients = res.data;
     });
   }
 

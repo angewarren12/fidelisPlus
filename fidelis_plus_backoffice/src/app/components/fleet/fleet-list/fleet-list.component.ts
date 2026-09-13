@@ -570,8 +570,8 @@ export class FleetListComponent implements OnInit {
     this.importResult.set(null);
     this.showImportModal.set(true);
     if (this.clients().length === 0) {
-      this.accountService.getClients().subscribe({
-        next: (list) => this.clients.set(list),
+      this.accountService.getClients({ per_page: 500 }).subscribe({
+        next: (res) => this.clients.set(res.data),
         error: () => this.toastService.error('Erreur lors du chargement de la liste des clients.'),
       });
     }

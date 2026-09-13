@@ -1185,8 +1185,8 @@ export class QuoteFormComponent implements OnInit {
     // (company_id / request_id) UNIQUEMENT une fois clients() chargé, pour éviter la
     // course où le véhicule/client est "prêt" en mémoire mais jamais reflété dans le <select>
     // tant que l'utilisateur ne le rouvre pas manuellement.
-    this.accountService.getClients().subscribe(data => {
-      this.clients.set(data);
+    this.accountService.getClients({ per_page: 500 }).subscribe(res => {
+      this.clients.set(res.data);
 
       const editParam = this.route.snapshot.queryParamMap.get('edit');
       if (editParam) {

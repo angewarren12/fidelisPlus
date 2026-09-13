@@ -411,7 +411,7 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
                         </span>
                       </div>
                       <p class="text-xs text-outline mt-1 font-medium">
-                        Créé pour {{ client()?.name }} • {{ q.items?.length || 0 }} article(s)
+                        Créé pour {{ client()?.name }} • {{ q.items.length || 0 }} article(s)
                       </p>
                     </div>
                   </div>
