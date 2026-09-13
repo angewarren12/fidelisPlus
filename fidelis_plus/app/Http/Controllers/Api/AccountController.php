@@ -400,5 +400,75 @@ class AccountController extends Controller
             'data' => $user
         ], 201);
     }
+
+    /**
+     * Modifier un correspondant (contact) d'un compte.
+     */
+    public function updateContact(Request $request, $id, $contactId)
+    {
+        $account = Company::findOrFail($id);
+
+        $user = request()->user();
+        if ($user && $user->role === 'commercial' && (int) $account->commercial_id !== (int) $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'Action refusée.'], 403);
+        }
+
+        $contact = User::where('id', $contactId)
+            ->where('company_id', $account->id)
+            ->firstOrFail();
+
+        $validator = Validator::make($request->all(), [
+            'first_name' => 'sometimes|required|string|max:255',
+            'last_name'  => 'sometimes|required|string|max:255',
+            'email'      => 'sometimes|required|email|unique:users,email,' . $contactId,
+            'phone'      => 'nullable|string|max:255',
+            'position'   => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        $contact->update($request->only(['first_name', 'last_name', 'email', 'phone', 'position']));
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Correspondant mis à jour.',
+            'data'    => $contact->fresh(),
+        ]);
+    }
+
+    /**
+     * Supprimer un correspondant (contact) d'un compte.
+     */
+    public function deleteContact($id, $contactId)
+    {
+        $account = Company::findOrFail($id);
+
+        $user = request()->user();
+        if ($user && $user->role === 'commercial' && (int) $account->commercial_id !== (int) $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'Action refusée.'], 403);
+        }
+
+        $contact = User::where('id', $contactId)
+            ->where('company_id', $account->id)
+            ->firstOrFail();
+
+        // Empêcher de supprimer le dernier correspondant (évite compte orphelin)
+        $contactsCount = User::where('company_id', $account->id)->count();
+        if ($contactsCount <= 1) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Impossible de supprimer le dernier correspondant du compte.',
+            ], 422);
+        }
+
+        $contact->delete();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Correspondant supprimé.',
+        ]);
+    }
 }
 

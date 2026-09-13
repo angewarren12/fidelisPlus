@@ -159,6 +159,8 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
                 Route::post('/{id}/recharge', [AccountController::class, 'updateBalance'])->name('recharge');
                 Route::post('/{id}/convert', [AccountController::class, 'convert'])->name('convert');
                 Route::post('/{id}/contacts', [AccountController::class, 'addContact'])->name('contacts');
+                Route::put('/{id}/contacts/{contactId}', [AccountController::class, 'updateContact'])->name('contacts.update');
+                Route::delete('/{id}/contacts/{contactId}', [AccountController::class, 'deleteContact'])->name('contacts.delete');
                 Route::get('/{id}/subscription-contract', [\App\Http\Controllers\Api\SubscriptionContractController::class, 'show'])->name('subscription-contract.show');
                 Route::post('/{id}/subscription-contract', [\App\Http\Controllers\Api\SubscriptionContractController::class, 'store'])->name('subscription-contract.store');
             });

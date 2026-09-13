@@ -2,12 +2,13 @@ import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { AccountService } from '../../../services/account.service';
+import { AccountService, ClientListMeta } from '../../../services/account.service';
 import { ToastService } from '../../../services/toast.service';
 import { downloadCsv } from '../../../utils/csv-download';
 import { openReportPreviewWindow } from '../../../utils/report-preview-window';
 import { LayoutService } from '../../../services/layout.service';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 @Component({
   selector: 'app-client-list',
@@ -22,36 +23,31 @@ import { Subscription } from 'rxjs';
           <div class="relative">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]" aria-hidden="true">search</span>
             <input id="search-clients" type="text" [(ngModel)]="searchQuery"
+                   (ngModelChange)="onSearchChange($event)"
                    placeholder="Rechercher par entreprise, contact, email, secteur..."
                    class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20">
           </div>
         </div>
-        <div class="min-w-[150px]">
-          <select [(ngModel)]="vehicleCountFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
-            <option value="all">Toutes les flottes</option>
-            <option value="1-5">1 à 5 véhicules</option>
-            <option value="6-20">6 à 20 véhicules</option>
-            <option value="20+">Plus de 20 véhicules</option>
-          </select>
-        </div>
         <div class="min-w-[140px]">
-          <select [(ngModel)]="statusFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+          <select [(ngModel)]="statusFilter" (ngModelChange)="onFilterChange()" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
             <option value="all">Tous statuts</option>
             <option value="active">Actifs</option>
             <option value="inactive">Inactifs</option>
           </select>
         </div>
         <div class="min-w-[150px]">
-          <select [(ngModel)]="sourceFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+          <select [(ngModel)]="sourceFilter" (ngModelChange)="onFilterChange()" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
             <option value="all">Toutes sources</option>
             <option value="odoo">Via Odoo</option>
             <option value="fidelis">FidelisPlus direct</option>
           </select>
         </div>
-        <div class="min-w-[150px]">
-          <select [(ngModel)]="sectorFilter" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
-            <option value="all">Tous secteurs</option>
-            <option *ngFor="let s of availableSectors()" [value]="s">{{ s }}</option>
+        <div class="min-w-[80px]">
+          <select [(ngModel)]="perPage" (ngModelChange)="onPerPageChange()" class="w-full px-3 py-2 bg-surface-container-low border-none rounded-lg text-sm font-medium outline-none">
+            <option [ngValue]="10">10</option>
+            <option [ngValue]="15">15</option>
+            <option [ngValue]="25">25</option>
+            <option [ngValue]="50">50</option>
           </select>
         </div>
         <div class="flex items-center gap-3 ml-auto">
@@ -66,7 +62,7 @@ import { Subscription } from 'rxjs';
         </div>
       </section>
 
-      <!-- Stats Overview (Asymmetric/Bento element) -->
+      <!-- Stats Overview -->
       <div class="grid grid-cols-12 gap-6 mb-8">
         <div class="col-span-12 lg:col-span-8 bg-gradient-to-br from-[#1a1831] to-[#2a2745] p-6 rounded-xl text-white relative overflow-hidden shadow-sm">
           <div class="relative z-10">
@@ -74,16 +70,15 @@ import { Subscription } from 'rxjs';
             <p class="text-white/60 text-sm mb-6">Performance de rétention et croissance mensuelle.</p>
             <div class="flex flex-wrap gap-12">
               <div>
-                <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Total Actifs</p>
-                <p class="text-3xl font-headline font-extrabold text-[#15b9a3]">{{ clients().length }}</p>
+                <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Total</p>
+                <p class="text-3xl font-headline font-extrabold text-[#15b9a3]">{{ meta()?.total ?? 0 }}</p>
               </div>
               <div>
-                <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Nouveaux (Mois)</p>
-                <p class="text-3xl font-headline font-extrabold">+{{ newThisMonthCount() }}</p>
+                <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Page {{ meta()?.current_page ?? 1 }} / {{ meta()?.last_page ?? 1 }}</p>
+                <p class="text-3xl font-headline font-extrabold">{{ clients().length }}</p>
               </div>
             </div>
           </div>
-          <!-- Decorative background elements -->
           <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-primary-container/10 rounded-full blur-3xl"></div>
           <div class="absolute right-12 top-6">
             <span class="material-symbols-outlined text-white/10 text-[120px]">analytics</span>
@@ -110,12 +105,12 @@ import { Subscription } from 'rxjs';
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-center">Flotte</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Secteur</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Provenance</th>
-                <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Dernière Modification</th>
+                <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Date création</th>
                 <th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Statut</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-outline-variant/10">
-              <tr *ngFor="let c of filteredClients()" [routerLink]="['/clients', c.id]" class="hover:bg-surface-container-low/50 transition-colors group cursor-pointer">
+              <tr *ngFor="let c of clients()" [routerLink]="['/clients', c.id]" class="hover:bg-surface-container-low/50 transition-colors group cursor-pointer">
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface font-bold">
@@ -135,12 +130,12 @@ import { Subscription } from 'rxjs';
                       </ng-container>
                       <ng-template #noContact><span class="text-xs text-outline italic">Aucun contact</span></ng-template>
                     </p>
-                    <p class="text-xs text-outline mt-0.5">{{ c.phone || c.contacts?.[0]?.phone || '—' }}</p>
+                    <p class="text-xs text-outline mt-0.5">{{ c.contacts?.[0]?.phone ? c.contacts[0].phone : (c.phone || '—') }}</p>
                     <p class="text-xs text-outline mt-0.5">{{ c.email || '—' }}</p>
                   </div>
                 </td>
                 <td class="px-6 py-4 text-center">
-                  <span class="px-2.5 py-1 bg-surface-container text-on-surface-variant rounded-full text-xs font-bold">{{ c.vehicles_count || 0 }}</span>
+                  <span class="px-2.5 py-1 bg-surface-container text-on-surface-variant rounded-full text-xs font-bold">{{ c.vehicles_count ?? 0 }}</span>
                 </td>
                 <td class="px-6 py-4 text-sm text-outline">{{ c.sector || '—' }}</td>
                 <td class="px-6 py-4">
@@ -149,8 +144,9 @@ import { Subscription } from 'rxjs';
                 </td>
                 <td class="px-6 py-4">
                   <span class="text-xs font-semibold text-on-surface">
-                    {{ (c.updated_at || c.created_at) | date:'dd/MM/yyyy HH:mm' }}
+                    {{ c.created_at | date:'dd/MM/yyyy' }}
                   </span>
+                  <p class="text-[10px] text-outline mt-0.5">{{ c.created_at | date:'HH:mm' }}</p>
                 </td>
                 <td class="px-6 py-4">
                   <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
@@ -180,7 +176,7 @@ import { Subscription } from 'rxjs';
                 </td>
               </tr>
               <!-- Empty -->
-              <tr *ngIf="!loading() && !error() && filteredClients().length === 0">
+              <tr *ngIf="!loading() && !error() && clients().length === 0">
                 <td colspan="7" class="px-6 py-20 text-center">
                   <span class="material-symbols-outlined text-6xl text-outline/30 block mb-3">group_off</span>
                   <p class="text-on-surface font-bold text-lg mb-1">Aucun client trouvé</p>
@@ -194,91 +190,47 @@ import { Subscription } from 'rxjs';
             </tbody>
           </table>
         </div>
+
+        <!-- Pagination -->
+        <div *ngIf="meta() && (meta()?.last_page ?? 1) > 1" class="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10">
+          <span class="text-xs font-semibold text-outline">
+            Page {{ meta()?.current_page ?? 1 }} / {{ meta()?.last_page ?? 1 }} — {{ meta()?.total ?? 0 }} client(s)
+          </span>
+          <div class="flex gap-2">
+            <button type="button" (click)="goPage(-1)"
+                    [disabled]="loading() || (meta()?.current_page ?? 1) <= 1"
+                    class="px-4 py-1.5 rounded-xl bg-white border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest disabled:opacity-40 hover:bg-surface-container transition-all">
+              Précédent
+            </button>
+            <button type="button" (click)="goPage(1)"
+                    [disabled]="loading() || (meta()?.current_page ?? 1) >= (meta()?.last_page ?? 1)"
+                    class="px-4 py-1.5 rounded-xl bg-white border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest disabled:opacity-40 hover:bg-surface-container transition-all">
+              Suivant
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   `
 })
-export class ClientListComponent implements OnInit {
-  // Angular Signals — requis en mode zoneless (Angular 21 sans zone.js)
+export class ClientListComponent implements OnInit, OnDestroy {
   clients = signal<any[]>([]);
+  meta = signal<ClientListMeta | null>(null);
   loading = signal(true);
   error = signal(false);
-  vehicleCountFilter = signal<'all' | '1-5' | '6-20' | '20+'>('all');
+
   statusFilter = signal<'all' | 'active' | 'inactive'>('all');
   sourceFilter = signal<'all' | 'odoo' | 'fidelis'>('all');
-  sectorFilter = signal<string>('all');
   searchQuery = signal('');
+  page = signal(1);
+  perPage = signal(15);
 
   private accountService = inject(AccountService);
   private toastService = inject(ToastService);
   private layoutService = inject(LayoutService);
   private syncSub?: Subscription;
-
-  availableSectors = computed(() => {
-    const list = this.clients();
-    const set = new Set<string>();
-    for (const c of list) {
-      if (c.sector) set.add(c.sector);
-    }
-    return Array.from(set).sort();
-  });
-
-  filteredClients = computed(() => {
-    let list = this.clients();
-
-    // Filtre véhicules
-    const filterVehicles = this.vehicleCountFilter();
-    if (filterVehicles !== 'all') {
-      list = list.filter((c: any) => {
-        const count = c.vehicles_count || 0;
-        if (filterVehicles === '1-5') return count >= 1 && count <= 5;
-        if (filterVehicles === '6-20') return count >= 6 && count <= 20;
-        return count > 20;
-      });
-    }
-
-    // Filtre statut d'activité
-    const st = this.statusFilter();
-    if (st !== 'all') {
-      list = list.filter((c: any) => st === 'active' ? c.is_active : !c.is_active);
-    }
-
-    // Filtre provenance Odoo vs Fidelis
-    const src = this.sourceFilter();
-    if (src !== 'all') {
-      list = list.filter((c: any) => src === 'odoo' ? !!c.created_via_odoo : !c.created_via_odoo);
-    }
-
-    // Filtre secteur
-    const sec = this.sectorFilter();
-    if (sec !== 'all') {
-      list = list.filter((c: any) => c.sector === sec);
-    }
-
-    // Recherche textuelle
-    const q = this.searchQuery().trim().toLowerCase();
-    if (q) {
-      list = list.filter((c: any) => {
-        const contact = c.contacts?.[0];
-        const haystack = [
-          c.name, c.sector, c.email, c.phone,
-          contact?.first_name, contact?.last_name, contact?.email, contact?.phone,
-        ].filter(Boolean).join(' ').toLowerCase();
-        return haystack.includes(q);
-      });
-    }
-
-    return list;
-  });
-
-  newThisMonthCount = computed(() => {
-    const now = new Date();
-    return this.clients().filter((c: any) => {
-      if (!c.created_at) return false;
-      const created = new Date(c.created_at);
-      return created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth();
-    }).length;
-  });
+  private searchSubject = new Subject<string>();
+  private searchSub?: Subscription;
 
   inactiveSixMonthsCount = computed(() => {
     const cutoff = new Date();
@@ -290,6 +242,31 @@ export class ClientListComponent implements OnInit {
     }).length;
   });
 
+  onSearchChange(val: string): void {
+    this.searchSubject.next(val);
+  }
+
+  onFilterChange(): void {
+    this.page.set(1);
+    this.loadClients();
+  }
+
+  onPerPageChange(): void {
+    this.page.set(1);
+    this.loadClients();
+  }
+
+  goPage(delta: number): void {
+    const m = this.meta();
+    const cur = m?.current_page ?? 1;
+    const last = m?.last_page ?? 1;
+    const next = Math.min(Math.max(1, cur + delta), last);
+    if (next !== cur) {
+      this.page.set(next);
+      this.loadClients();
+    }
+  }
+
   exportClientsCsv(): void {
     const list = this.clients();
     if (!list.length) {
@@ -299,7 +276,7 @@ export class ClientListComponent implements OnInit {
     openReportPreviewWindow({
       title: 'Export clients',
       subject: 'Liste courante',
-      meta: [{ label: 'Total', value: String(list.length) }],
+      meta: [{ label: 'Total', value: String(this.meta()?.total ?? list.length) }],
       kpis: [
         { label: 'Clients', value: String(list.length), accent: 'brand' },
         {
@@ -317,11 +294,11 @@ export class ClientListComponent implements OnInit {
         return {
           label: `${c.name ?? ''}`.trim(),
           value: String(c.vehicles_count ?? 0),
-          hint: `${contactName || '—'} • ${ct?.phone ?? '—'} • dernière activité: ${c.last_contact ?? c.created_at ?? '—'}`,
+          hint: `${contactName || '—'} • ${ct?.phone ?? '—'} • créé le: ${c.created_at ?? '—'}`,
         };
       }),
     });
-    const header = ['ID', 'Nom entreprise', 'Contact principal', 'Téléphone', 'Véhicules', 'Dernière activité'];
+    const header = ['ID', 'Nom entreprise', 'Contact principal', 'Téléphone', 'Véhicules', 'Date création'];
     const rows: (string | number)[][] = [
       header,
       ...list.map((c: any) => {
@@ -333,7 +310,7 @@ export class ClientListComponent implements OnInit {
           contactName,
           ct?.phone ?? '',
           c.vehicles_count ?? 0,
-          c.last_contact ?? c.created_at ?? '',
+          c.created_at ?? '',
         ];
       }),
     ];
@@ -344,18 +321,33 @@ export class ClientListComponent implements OnInit {
   ngOnInit() {
     this.loadClients();
     this.syncSub = this.layoutService.odooSync$.subscribe(() => this.loadClients());
+    this.searchSub = this.searchSubject.pipe(
+      debounceTime(350),
+      distinctUntilChanged()
+    ).subscribe(() => {
+      this.page.set(1);
+      this.loadClients();
+    });
   }
 
   ngOnDestroy() {
     this.syncSub?.unsubscribe();
+    this.searchSub?.unsubscribe();
   }
 
   loadClients() {
     this.loading.set(true);
     this.error.set(false);
-    this.accountService.getClients().subscribe({
-      next: (data) => {
-        this.clients.set(data);
+    this.accountService.getClients({
+      page: this.page(),
+      per_page: this.perPage(),
+      search: this.searchQuery() || undefined,
+      status: this.statusFilter() !== 'all' ? this.statusFilter() : undefined,
+      source: this.sourceFilter() !== 'all' ? this.sourceFilter() : undefined,
+    }).subscribe({
+      next: (res) => {
+        this.clients.set(res.data);
+        this.meta.set(res.meta);
         this.loading.set(false);
       },
       error: (err) => {

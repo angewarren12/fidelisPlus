@@ -4,9 +4,9 @@ import { ActivatedRoute, RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AccountService } from '../../../services/account.service';
 import { VehicleService, Vehicle, VehicleImportResult } from '../../../services/vehicle.service';
+import { QuoteService, Quote } from '../../../services/quote.service';
 import { ToastService } from '../../../services/toast.service';
 import { AuthService } from '../../../services/auth.service';
-import { SubscriptionContractService } from '../../../services/subscription-contract.service';
 import { ConfirmModalComponent } from '../../ui/confirm-modal/confirm-modal.component';
 import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehicle-status';
 
@@ -62,22 +62,16 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
               </div>
             </div>
           </div>
-          <div class="flex flex-col gap-3 min-w-[240px]">
+          <div class="flex flex-col gap-3 min-w-[220px]">
             <a [routerLink]="['/vente/nouveau']" [queryParams]="{ company_id: client()!.id }"
-              class="w-full px-8 py-3.5 rounded-xl font-headline font-bold text-sm bg-gradient-to-br from-primary to-secondary text-white shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 text-center no-underline">
+              class="w-full px-6 py-3.5 rounded-xl font-headline font-bold text-sm bg-gradient-to-br from-primary to-secondary text-white shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 text-center no-underline">
               <span class="material-symbols-outlined">description</span>
               Créer un devis
             </a>
-            <div class="grid grid-cols-2 gap-3">
-              <button [routerLink]="['/clients', client().id, 'vehicules', 'nouveau']" class="px-4 py-3 rounded-xl font-headline font-bold text-xs bg-primary text-white hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-sm shadow-primary/20">
-                <span class="material-symbols-outlined text-sm">add</span>
-                Véhicule
-              </button>
-              <button [routerLink]="['/clients', client().id, 'modifier']" class="px-4 py-3 rounded-xl font-headline font-bold text-xs bg-white border border-outline-variant/30 text-on-surface hover:bg-surface-container transition-all flex items-center justify-center gap-2">
-                <span class="material-symbols-outlined text-sm">edit</span>
-                Modifier
-              </button>
-            </div>
+            <button [routerLink]="['/clients', client().id, 'modifier']" class="w-full px-6 py-3.5 rounded-xl font-headline font-bold text-xs bg-white border border-outline-variant/30 text-on-surface hover:bg-surface-container transition-all flex items-center justify-center gap-2 shadow-sm">
+              <span class="material-symbols-outlined text-sm">edit</span>
+              Modifier profil
+            </button>
           </div>
         </div>
       </header>
@@ -102,14 +96,14 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
           <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10">
             <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-4 block">Aperçu Solde</span>
             <div class="flex items-end gap-3">
-              <span class="text-3xl font-headline font-black text-white leading-none">{{ (client()?.balance || 0) | number:'1.0-0' }}</span>
+              <span class="text-3xl font-headline font-black text-white leading-none">{{ (client()?.account_balance ?? client()?.balance ?? 0) | number:'1.0-0' }}</span>
               <span class="text-[10px] font-bold text-white/60 mb-1 tracking-widest uppercase">FCFA</span>
             </div>
           </div>
           <div class="bg-primary/20 backdrop-blur-md rounded-2xl p-6 border border-primary/20 flex flex-col justify-between">
             <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-2 block">Statut Financier</span>
-            <div class="bg-secondary text-white text-[10px] font-black px-3 py-1.5 rounded-lg w-fit uppercase tracking-widest shadow-lg shadow-secondary/20">
-              Solvabilité élevée
+            <div [class]="getFinancialStatusBadgeClass()">
+              {{ getFinancialStatusLabel() }}
             </div>
           </div>
         </div>
@@ -124,18 +118,18 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
             <div class="space-y-6">
               <div class="flex items-center justify-between">
                 <h3 class="text-xl font-headline font-extrabold text-on-surface">Coordonnées</h3>
-                <button [routerLink]="['/clients', client().id, 'modifier']" class="text-primary hover:bg-primary/10 p-2 rounded-lg transition-colors">
+                <button [routerLink]="['/clients', client().id, 'modifier']" class="text-primary hover:bg-primary/10 p-2 rounded-lg transition-colors" title="Modifier les coordonnées">
                    <span class="material-symbols-outlined text-lg">edit_note</span>
                 </button>
               </div>
               <div class="bg-white rounded-3xl border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
                 <div class="p-6">
-                  <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 shadow-sm block">Registre de Commerce (RCCM)</span>
+                  <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 block">Registre de Commerce (RCCM)</span>
                   <p class="font-bold text-on-surface">{{ client()?.rccm || 'N/A' }}</p>
                 </div>
                 <div class="p-6">
                   <span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1 block">Téléphone</span>
-                  <ng-container *ngIf="client()?.phone; else noClientPhone">
+                  <ng-container *ngIf="client()?.phone && client()?.phone !== '0' && client()?.phone !== '00'; else noClientPhone">
                     <a class="font-bold text-on-surface hover:text-primary transition-colors" [href]="'tel:' + client()?.phone">{{ client()?.phone }}</a>
                   </ng-container>
                   <ng-template #noClientPhone>
@@ -181,30 +175,40 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
               <div class="flex items-center justify-between">
                 <h3 class="text-xl font-headline font-extrabold text-on-surface">Correspondants</h3>
                 <button
-                  [routerLink]="['/clients', client().id, 'contacts', 'nouveau']"
-                  class="px-4 py-2.5 rounded-xl font-headline font-bold text-xs bg-primary text-white hover:brightness-110 transition-all flex items-center gap-2 shadow-sm shadow-primary/20"
+                  (click)="openAddContactModal()"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-white hover:brightness-110 transition-all flex items-center gap-1 shadow-sm"
                 >
                   <span class="material-symbols-outlined text-sm">person_add</span>
-                  Ajouter un correspondant
+                  Ajouter
                 </button>
               </div>
               <div class="space-y-4">
                 <div *ngFor="let contact of client()?.contacts" class="bg-white p-5 rounded-3xl border border-outline-variant/10 shadow-sm flex items-center justify-between group hover:border-primary/30 transition-all">
-                  <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center text-primary font-bold text-lg">
+                  <div class="flex items-center gap-4 flex-1">
+                    <div class="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center text-primary font-bold text-lg shrink-0">
                       {{ contact.first_name?.charAt(0) }}{{ contact.last_name?.charAt(0) }}
                     </div>
-                    <div>
-                      <h4 class="font-bold text-on-surface text-sm">{{ contact.first_name }} {{ contact.last_name }}</h4>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center justify-between gap-2">
+                        <h4 class="font-bold text-on-surface text-sm truncate">{{ contact.first_name }} {{ contact.last_name }}</h4>
+                        <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                          <button (click)="openEditContactModal(contact)" title="Modifier" class="p-1 rounded-lg hover:bg-primary/10 text-primary transition-colors">
+                            <span class="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <button (click)="deleteContact(contact)" title="Supprimer" class="p-1 rounded-lg hover:bg-error/10 text-error transition-colors">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </div>
+                      </div>
                       <p class="text-[11px] text-outline font-medium uppercase tracking-tighter">{{ contact.position || 'Responsable' }}</p>
                       <div class="mt-2 space-y-1">
-                        <div *ngIf="contact.phone" class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                        <div *ngIf="contact.phone && contact.phone !== '0'" class="flex items-center gap-2 text-xs font-bold text-on-surface">
                           <span class="material-symbols-outlined text-sm text-outline">call</span>
                           <a class="hover:text-primary transition-colors" [href]="'tel:' + contact.phone">{{ contact.phone }}</a>
                         </div>
-                        <div *ngIf="contact.email" class="flex items-center gap-2 text-xs font-bold text-on-surface">
-                          <span class="material-symbols-outlined text-sm text-outline">mail</span>
-                          <a class="hover:text-primary transition-colors" [href]="'mailto:' + contact.email">{{ contact.email }}</a>
+                        <div *ngIf="contact.email" class="flex items-center gap-2 text-xs font-bold text-on-surface truncate">
+                          <span class="material-symbols-outlined text-sm text-outline shrink-0">mail</span>
+                          <a class="hover:text-primary transition-colors truncate" [href]="'mailto:' + contact.email">{{ contact.email }}</a>
                         </div>
                       </div>
                     </div>
@@ -217,28 +221,41 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
             </div>
           </div>
 
-          <!-- Column: Fleet (Right) -->
+          <!-- Column: Fleet & Quotes Tabs (Right) -->
           <div class="col-span-12 lg:col-span-8 space-y-8">
             <!-- Tabs Header -->
             <div class="flex items-center justify-between border-b border-outline-variant/10 pb-4 mb-6">
               <div class="flex gap-8">
                 <button (click)="activeTab.set('fleet')"
-                        [class]="'text-lg font-headline font-extrabold pb-2 relative transition-all ' + (activeTab() === 'fleet' ? 'text-primary border-b-2 border-primary' : 'text-outline hover:text-on-surface')">
-                  Parc Automobile
+                        [class]="'text-lg font-headline font-extrabold pb-2 relative transition-all flex items-center gap-2 ' + (activeTab() === 'fleet' ? 'text-primary border-b-2 border-primary' : 'text-outline hover:text-on-surface')">
+                  <span class="material-symbols-outlined text-xl">directions_car</span>
+                  Parc Automobile ({{ vehicles().length }})
+                </button>
+                <button (click)="switchTab('quotes')"
+                        [class]="'text-lg font-headline font-extrabold pb-2 relative transition-all flex items-center gap-2 ' + (activeTab() === 'quotes' ? 'text-primary border-b-2 border-primary' : 'text-outline hover:text-on-surface')">
+                  <span class="material-symbols-outlined text-xl">description</span>
+                  Gestion des Devis ({{ quotes().length }})
                 </button>
               </div>
               <!-- Action Buttons for Parc Automobile -->
               <div *ngIf="activeTab() === 'fleet'" class="flex items-center gap-3">
-                <button (click)="openImportModal()" class="px-5 py-2.5 rounded-xl bg-white border border-outline-variant/30 text-on-surface text-xs font-bold flex items-center gap-2 hover:bg-surface-container transition-all">
+                <button (click)="openImportModal()" class="px-4 py-2 rounded-xl bg-white border border-outline-variant/30 text-on-surface text-xs font-bold flex items-center gap-2 hover:bg-surface-container transition-all">
                   <span class="material-symbols-outlined text-sm">upload_file</span> Importer (Excel)
                 </button>
-                <button [routerLink]="['/clients', client().id, 'vehicules', 'nouveau']" class="px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-105 transition-all">
+                <button [routerLink]="['/clients', client().id, 'vehicules', 'nouveau']" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-105 transition-all">
                   <span class="material-symbols-outlined text-sm">add</span> Nouveau Véhicule
                 </button>
               </div>
+              <!-- Action Buttons for Quotes -->
+              <div *ngIf="activeTab() === 'quotes'" class="flex items-center gap-3">
+                <a [routerLink]="['/vente/nouveau']" [queryParams]="{ company_id: client()!.id }"
+                   class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-105 transition-all no-underline">
+                  <span class="material-symbols-outlined text-sm">add</span> Nouveau Devis
+                </a>
+              </div>
             </div>
 
-            <!-- Tab: Fleet (Vehicles) -->
+            <!-- Tab 1: Fleet (Vehicles) -->
             <div *ngIf="activeTab() === 'fleet'" class="space-y-6">
 
               <!-- Search + view toggle -->
@@ -332,7 +349,6 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
                     <div class="flex justify-between items-start mb-4">
                       <div class="bg-surface-container-low px-3 py-1 rounded-lg text-[9px] font-black text-primary uppercase tracking-widest">{{ v.brand }}</div>
                       <div class="flex items-center gap-2">
-                         <!-- Badges Admin -->
                          <span *ngIf="hasDoc(v, 'carte_grise')" class="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center" title="Carte Grise Disponible">
                            <span class="material-symbols-outlined text-sm">description</span>
                          </span>
@@ -367,6 +383,59 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
               </div>
             </div>
 
+            <!-- Tab 2: Devis (Quotes) -->
+            <div *ngIf="activeTab() === 'quotes'" class="space-y-6">
+              <div *ngIf="loadingQuotes()" class="flex justify-center py-20">
+                <span class="material-symbols-outlined animate-spin text-primary text-5xl">sync</span>
+              </div>
+
+              <div *ngIf="!loadingQuotes() && quotes().length === 0" class="bg-white p-12 rounded-3xl border border-dashed border-outline-variant/20 text-center space-y-3">
+                <span class="material-symbols-outlined text-4xl text-outline/40">description</span>
+                <p class="text-outline text-sm font-bold">Aucun devis créé pour ce client.</p>
+                <a [routerLink]="['/vente/nouveau']" [queryParams]="{ company_id: client()!.id }" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold no-underline hover:brightness-110">
+                  <span class="material-symbols-outlined text-sm">add</span> Créer un premier devis
+                </a>
+              </div>
+
+              <div *ngIf="!loadingQuotes() && quotes().length > 0" class="bg-white rounded-3xl border border-outline-variant/10 shadow-sm overflow-hidden divide-y divide-outline-variant/10">
+                <div *ngFor="let q of quotes()" class="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-surface-container-low/40 transition-colors">
+                  <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <span class="material-symbols-outlined text-2xl">request_quote</span>
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-3">
+                        <span class="font-headline font-black text-on-surface text-base">{{ q.quote_number || ('Devis #' + q.id) }}</span>
+                        <span [class]="getQuoteStatusBadgeClass(q.status)">
+                          {{ getQuoteStatusLabel(q.status) }}
+                        </span>
+                      </div>
+                      <p class="text-xs text-outline mt-1 font-medium">
+                        Créé pour {{ client()?.name }} • {{ q.items?.length || 0 }} article(s)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between md:justify-end gap-6">
+                    <div class="text-right">
+                      <span class="text-[10px] font-bold text-outline uppercase tracking-widest block">Montant Total</span>
+                      <span class="text-lg font-headline font-black text-primary">{{ (q.total_amount || 0) | number:'1.0-0' }} FCFA</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <a [routerLink]="['/vente/devis', q.id]" class="px-4 py-2 rounded-xl bg-surface-container-low text-on-surface hover:bg-primary hover:text-white font-bold text-xs transition-all no-underline flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">visibility</span> Voir
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Modals -->
     <app-confirm-modal *ngIf="vehicleToDelete()"
       title="Retirer le véhicule"
@@ -376,6 +445,74 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
       (confirm)="onConfirmDeleteVehicle()"
       (cancel)="vehicleToDelete.set(null)">
     </app-confirm-modal>
+
+    <app-confirm-modal *ngIf="contactToDelete()"
+      title="Supprimer le correspondant"
+      [message]="'Voulez-vous vraiment supprimer ' + contactToDelete()?.first_name + ' ' + contactToDelete()?.last_name + ' ?'"
+      confirmText="Oui, supprimer"
+      cancelText="Annuler"
+      (confirm)="onConfirmDeleteContact()"
+      (cancel)="contactToDelete.set(null)">
+    </app-confirm-modal>
+
+    <!-- Modal Formulaire Correspondant (Ajout / Édition) -->
+    <div *ngIf="showContactModal()" class="fixed inset-0 z-[200] overflow-y-auto flex items-center justify-center p-4 bg-[#1b1932]/40 backdrop-blur-sm animate-fade-in">
+      <div class="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden border border-outline-variant/10 p-8">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-xl font-headline font-black text-on-surface">
+            {{ contactFormModel.id ? 'Modifier le correspondant' : 'Nouveau correspondant' }}
+          </h3>
+          <button (click)="showContactModal.set(false)" class="text-outline hover:text-on-surface p-1">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <form (ngSubmit)="saveContact()" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline mb-1 block">Prénom *</label>
+              <input type="text" [(ngModel)]="contactFormModel.first_name" name="first_name" required
+                     class="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline mb-1 block">Nom *</label>
+              <input type="text" [(ngModel)]="contactFormModel.last_name" name="last_name" required
+                     class="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+            </div>
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-outline mb-1 block">Email *</label>
+            <input type="email" [(ngModel)]="contactFormModel.email" name="email" required
+                   class="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline mb-1 block">Téléphone</label>
+              <input type="tel" [(ngModel)]="contactFormModel.phone" name="phone"
+                     class="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder="+225...">
+            </div>
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-outline mb-1 block">Fonction / Poste</label>
+              <input type="text" [(ngModel)]="contactFormModel.position" name="position"
+                     class="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex: Gérant">
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-6">
+            <button type="button" (click)="showContactModal.set(false)" class="px-5 py-2.5 text-outline hover:text-on-surface font-bold text-xs uppercase tracking-widest transition-colors">
+              Annuler
+            </button>
+            <button type="submit" [disabled]="savingContact() || !contactFormModel.first_name || !contactFormModel.last_name || !contactFormModel.email"
+                    class="px-6 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 disabled:opacity-40 transition-all flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm animate-spin" *ngIf="savingContact()">sync</span>
+              {{ savingContact() ? 'Enregistrement...' : (contactFormModel.id ? 'Mettre à jour' : 'Ajouter') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- Import Excel Modal -->
     <div *ngIf="showImportModal()" class="fixed inset-0 z-[200] overflow-y-auto flex items-start justify-center p-4 py-10 bg-[#1b1932]/40 backdrop-blur-sm animate-fade-in">
@@ -443,33 +580,12 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
   `,
   styles: [`
     :host { display: block; }
-    /* Pas de transform sur cette anim: un transform sur ce conteneur racine casserait le
-       "position: fixed" des modals imbriqués (import Excel, suppression véhicule...). */
     .animate-fade-in-up {
       animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     @keyframes fadeInUp {
       from { opacity: 0; }
       to { opacity: 1; }
-    }
-    @media print {
-      body * {
-        visibility: hidden !important;
-      }
-      #printable-contract, #printable-contract * {
-        visibility: visible !important;
-      }
-      #printable-contract {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: 100% !important;
-        border: 2px solid #006b5d !important;
-        padding: 2rem !important;
-        border-radius: 1.5rem !important;
-        background: white !important;
-        color: black !important;
-      }
     }
   `]
 })
@@ -479,8 +595,10 @@ export class ClientDetailComponent implements OnInit {
   client = signal<any>(null);
   error = signal<string | null>(null);
   vehicles = signal<any[]>([]);
+  quotes = signal<Quote[]>([]);
   loadingVehicles = signal(true);
-  activeTab = signal<'fleet'>('fleet');
+  loadingQuotes = signal(false);
+  activeTab = signal<'fleet' | 'quotes'>('fleet');
   fleetSearch = signal('');
   fleetView = signal<'grid' | 'list'>('grid');
 
@@ -493,6 +611,19 @@ export class ClientDetailComponent implements OnInit {
     });
   });
 
+  // Contact Modal State
+  showContactModal = signal(false);
+  savingContact = signal(false);
+  contactToDelete = signal<any>(null);
+  contactFormModel = {
+    id: undefined as number | undefined,
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    position: ''
+  };
+
   showImportModal = signal(false);
   downloadingTemplate = signal(false);
   importing = signal(false);
@@ -502,6 +633,7 @@ export class ClientDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private accountService = inject(AccountService);
   private vehicleService = inject(VehicleService);
+  private quoteService = inject(QuoteService);
   private toastService = inject(ToastService);
   private authService = inject(AuthService);
 
@@ -516,6 +648,7 @@ export class ClientDetailComponent implements OnInit {
         next: (data) => {
           this.client.set(data);
           this.loadVehicles(+id);
+          this.loadQuotes(+id);
         },
         error: (err) => {
           this.error.set('Données indisponibles.');
@@ -537,6 +670,154 @@ export class ClientDetailComponent implements OnInit {
     });
   }
 
+  loadQuotes(clientId: number): void {
+    this.loadingQuotes.set(true);
+    this.quoteService.getPage({ company_id: clientId, per_page: 100 }).subscribe({
+      next: (res) => {
+        this.quotes.set(res.data || []);
+        this.loadingQuotes.set(false);
+      },
+      error: () => {
+        this.loadingQuotes.set(false);
+      }
+    });
+  }
+
+  switchTab(tab: 'fleet' | 'quotes'): void {
+    this.activeTab.set(tab);
+    const client = this.client();
+    if (tab === 'quotes' && client?.id && !this.quotes().length) {
+      this.loadQuotes(client.id);
+    }
+  }
+
+  // Financial status helper
+  getFinancialStatusLabel(): string {
+    const bal = this.client()?.account_balance ?? this.client()?.balance ?? 0;
+    if (bal > 100000) return 'Solvabilité élevée';
+    if (bal > 0) return 'Solvabilité normale';
+    if (bal === 0) return 'Compte standard';
+    return 'Solde débiteur';
+  }
+
+  getFinancialStatusBadgeClass(): string {
+    const bal = this.client()?.account_balance ?? this.client()?.balance ?? 0;
+    if (bal > 0) {
+      return 'bg-[#15b9a3]/20 text-[#15b9a3] border border-[#15b9a3]/30 text-[10px] font-black px-3 py-1.5 rounded-lg w-fit uppercase tracking-widest shadow-sm';
+    }
+    if (bal === 0) {
+      return 'bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-black px-3 py-1.5 rounded-lg w-fit uppercase tracking-widest shadow-sm';
+    }
+    return 'bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-black px-3 py-1.5 rounded-lg w-fit uppercase tracking-widest shadow-sm';
+  }
+
+  // Quote badges
+  getQuoteStatusLabel(status: string): string {
+    const map: Record<string, string> = {
+      draft: 'Brouillon',
+      sent: 'Envoyé',
+      accepted: 'Accepté',
+      declined: 'Refusé',
+      expired: 'Expiré'
+    };
+    return map[status] || status;
+  }
+
+  getQuoteStatusBadgeClass(status: string): string {
+    const classes: Record<string, string> = {
+      draft: 'bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest',
+      sent: 'bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest',
+      accepted: 'bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest',
+      declined: 'bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest',
+      expired: 'bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest'
+    };
+    return classes[status] || 'bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest';
+  }
+
+  // Contact Operations
+  openAddContactModal(): void {
+    this.contactFormModel = {
+      id: undefined,
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      position: ''
+    };
+    this.showContactModal.set(true);
+  }
+
+  openEditContactModal(contact: any): void {
+    this.contactFormModel = {
+      id: contact.id,
+      first_name: contact.first_name || '',
+      last_name: contact.last_name || '',
+      email: contact.email || '',
+      phone: contact.phone === '0' ? '' : (contact.phone || ''),
+      position: contact.position || ''
+    };
+    this.showContactModal.set(true);
+  }
+
+  saveContact(): void {
+    const client = this.client();
+    if (!client?.id) return;
+
+    this.savingContact.set(true);
+    if (this.contactFormModel.id) {
+      // Update
+      this.accountService.updateContact(client.id, this.contactFormModel.id, this.contactFormModel).subscribe({
+        next: () => {
+          this.savingContact.set(false);
+          this.showContactModal.set(false);
+          this.toastService.success('Correspondant mis à jour.');
+          this.refreshClientData();
+        },
+        error: () => {
+          this.savingContact.set(false);
+          this.toastService.error('Erreur lors de la mise à jour du correspondant.');
+        }
+      });
+    } else {
+      // Create
+      this.accountService.addContact(client.id, this.contactFormModel).subscribe({
+        next: () => {
+          this.savingContact.set(false);
+          this.showContactModal.set(false);
+          this.toastService.success('Correspondant ajouté avec succès.');
+          this.refreshClientData();
+        },
+        error: () => {
+          this.savingContact.set(false);
+          this.toastService.error('Erreur lors de la création du correspondant.');
+        }
+      });
+    }
+  }
+
+  deleteContact(contact: any): void {
+    this.contactToDelete.set(contact);
+  }
+
+  onConfirmDeleteContact(): void {
+    const contact = this.contactToDelete();
+    const client = this.client();
+    if (!contact || !client?.id) return;
+
+    this.accountService.deleteContact(client.id, contact.id).subscribe({
+      next: () => {
+        this.toastService.success('Correspondant supprimé.');
+        this.contactToDelete.set(null);
+        this.refreshClientData();
+      },
+      error: () => {
+        this.toastService.error('Impossible de supprimer le correspondant.');
+        this.contactToDelete.set(null);
+      }
+    });
+  }
+
+  // Import Modal
   openImportModal(): void {
     this.selectedImportFile = null;
     this.importResult.set(null);
