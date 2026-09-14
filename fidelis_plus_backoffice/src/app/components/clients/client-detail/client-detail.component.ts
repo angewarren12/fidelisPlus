@@ -77,35 +77,92 @@ import { vehicleStatusLabel, vehicleStatusBadgeClass } from '../../../utils/vehi
       </header>
 
       <!-- Stats Bar -->
-      <section class="bg-[#1b1932] py-12 rounded-b-3xl mb-8">
-        <div class="max-w-7xl mx-auto px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10">
-            <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-4 block">Parc Total</span>
-            <div class="flex items-end gap-3">
-              <span class="text-4xl font-headline font-black text-white leading-none">{{ vehicles().length || 0 }}</span>
-              <span class="text-xs font-bold text-white/60 mb-1 uppercase tracking-wider">Véhicules</span>
+      <section class="bg-[#1b1932] py-10 rounded-b-3xl mb-8">
+        <div class="max-w-7xl mx-auto px-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          
+          <!-- Card 1: Flotte Automobile -->
+          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex flex-col justify-between hover:bg-white/[0.08] transition-all">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Flotte Enregistrée</span>
+              <span class="w-8 h-8 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                <span class="material-symbols-outlined text-lg">directions_car</span>
+              </span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-4xl font-headline font-black text-white leading-none">{{ vehicles().length }}</span>
+                <span class="text-xs font-bold text-white/60 uppercase tracking-wider">véhicules</span>
+              </div>
+              <p class="text-[11px] font-bold text-white/50 mt-3 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                {{ countByStatus('a_jour') }} véhicule(s) à jour
+              </p>
             </div>
           </div>
-          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10">
-            <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-4 block">À Jour</span>
-            <div class="flex items-end gap-3">
-              <span class="text-4xl font-headline font-black text-[#15b9a3] leading-none">{{ countByStatus('a_jour') }}</span>
-              <span class="text-xs font-bold text-white/60 mb-1 uppercase tracking-wider">Flotte</span>
+
+          <!-- Card 2: Santé Visites Techniques -->
+          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex flex-col justify-between hover:bg-white/[0.08] transition-all">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Conformité Visites</span>
+              <span [class]="'w-8 h-8 rounded-xl flex items-center justify-center ' + (getLateVehiclesCount() > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400')">
+                <span class="material-symbols-outlined text-lg">{{ getLateVehiclesCount() > 0 ? 'warning' : 'verified' }}</span>
+              </span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span [class]="'text-4xl font-headline font-black leading-none ' + (getLateVehiclesCount() > 0 ? 'text-amber-400' : 'text-[#15b9a3]')">
+                  {{ getConformityRate() }}%
+                </span>
+                <span class="text-xs font-bold text-white/60 uppercase tracking-wider">à jour</span>
+              </div>
+              <p class="text-[11px] font-bold mt-3 flex items-center gap-1.5" [ngClass]="getLateVehiclesCount() > 0 ? 'text-amber-300' : 'text-emerald-400'">
+                <span class="material-symbols-outlined text-sm">{{ getLateVehiclesCount() > 0 ? 'schedule' : 'check_circle' }}</span>
+                {{ getLateVehiclesCount() > 0 ? getLateVehiclesCount() + ' véhicule(s) en retard' : 'Toutes les visites valides' }}
+              </p>
             </div>
           </div>
-          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10">
-            <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-4 block">Aperçu Solde</span>
-            <div class="flex items-end gap-3">
-              <span class="text-3xl font-headline font-black text-white leading-none">{{ (client()?.account_balance ?? client()?.balance ?? 0) | number:'1.0-0' }}</span>
-              <span class="text-[10px] font-bold text-white/60 mb-1 tracking-widest uppercase">FCFA</span>
+
+          <!-- Card 3: Devis & Activité -->
+          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex flex-col justify-between hover:bg-white/[0.08] transition-all">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Activité Commerciale</span>
+              <span class="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                <span class="material-symbols-outlined text-lg">description</span>
+              </span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-4xl font-headline font-black text-white leading-none">{{ quotes().length }}</span>
+                <span class="text-xs font-bold text-white/60 uppercase tracking-wider">devis</span>
+              </div>
+              <p class="text-[11px] font-bold text-white/60 mt-3 flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm text-primary">payments</span>
+                {{ getTotalAcceptedQuotesAmount() | number:'1.0-0' }} FCFA engagés
+              </p>
             </div>
           </div>
-          <div class="bg-primary/20 backdrop-blur-md rounded-2xl p-6 border border-primary/20 flex flex-col justify-between">
-            <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-2 block">Statut Financier</span>
-            <div [class]="getFinancialStatusBadgeClass()">
-              {{ getFinancialStatusLabel() }}
+
+          <!-- Card 4: Compte & Solde Prépayé -->
+          <div class="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex flex-col justify-between hover:bg-white/[0.08] transition-all">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Solde Compte Client</span>
+              <span class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center">
+                <span class="material-symbols-outlined text-lg">account_balance_wallet</span>
+              </span>
+            </div>
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span class="text-3xl font-headline font-black text-white leading-none">{{ (client()?.account_balance ?? client()?.balance ?? 0) | number:'1.0-0' }}</span>
+                <span class="text-[10px] font-bold text-white/60 tracking-widest uppercase">FCFA</span>
+              </div>
+              <div class="mt-3 flex items-center justify-between">
+                <span [class]="getFinancialStatusBadgeClass()">
+                  {{ getFinancialStatusLabel() }}
+                </span>
+              </div>
             </div>
           </div>
+
         </div>
       </section>
 
@@ -689,6 +746,23 @@ export class ClientDetailComponent implements OnInit {
     if (tab === 'quotes' && client?.id && !this.quotes().length) {
       this.loadQuotes(client.id);
     }
+  }
+
+  getLateVehiclesCount(): number {
+    return this.vehicles().filter((v: any) => v.status !== 'a_jour').length;
+  }
+
+  getConformityRate(): number {
+    if (!this.vehicles() || this.vehicles().length === 0) return 100;
+    const aJour = this.countByStatus('a_jour');
+    return Math.round((aJour / this.vehicles().length) * 100);
+  }
+
+  getTotalAcceptedQuotesAmount(): number {
+    if (!this.quotes()) return 0;
+    return this.quotes()
+      .filter((q: any) => q.status === 'accepted')
+      .reduce((sum: number, q: any) => sum + (q.total_amount || 0), 0);
   }
 
   // Financial status helper
