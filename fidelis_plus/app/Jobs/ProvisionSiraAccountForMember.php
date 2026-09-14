@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Mail\SiraAccessProvided;
 use App\Models\LoyaltyMember;
 use App\Services\Sira\SiraClient;
 use Illuminate\Bus\Queueable;
@@ -10,13 +9,14 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 /**
- * Provisionne un compte SIRA pour un client créé au guichet/marketing qui n'a pas encore
- * de sira_client_id : vérifie s'il existe déjà côté SIRA, sinon le crée, puis envoie ses
- * accès par email. Ne bloque jamais la création du LoyaltyMember côté Fidelis en cas
- * d'échec — le statut reste "failed" et un réessai manuel reste possible.
+ * Provisionne un compte SIRA pour un client créé au guichet/marketing.
+ * Conforme à la spec SIRA v2.1 :
+ * - POST /users renvoie 202 Accepted (status: pending)
+ * - SIRA valide et envoie directement les accès (SMS / Email) au client.
+ * - Fidelis enregistre le sira_client_id et suit le statut ("pending" ou "provisioned").
  */
 class ProvisionSiraAccountForMember implements ShouldQueue
 {
@@ -33,6 +33,7 @@ class ProvisionSiraAccountForMember implements ShouldQueue
             return;
         }
 
+        // 1. Vérifier si le client a déjà un compte SIRA via son téléphone
         $lookup = $sira->lookupUser($member->contact);
 
         if ($lookup === null) {
@@ -44,12 +45,19 @@ class ProvisionSiraAccountForMember implements ShouldQueue
 
         if ($lookup['exists'] && ! empty($lookup['sira_client_id'])) {
             $member->sira_client_id = $lookup['sira_client_id'];
-            $member->sira_provisioning_status = 'provisioned';
+            $member->sira_provisioning_status = ($lookup['status'] === 'active') ? 'provisioned' : 'pending';
             $member->save();
+
+            Log::info("ProvisionSiraAccountForMember: Compte SIRA existant associé", [
+                'member_id' => $member->id,
+                'sira_client_id' => $member->sira_client_id,
+                'status' => $member->sira_provisioning_status,
+            ]);
 
             return;
         }
 
+        // 2. Déposer la demande de création de compte SIRA (202 Accepted)
         $created = $sira->createUser($member);
 
         if ($created === null) {
@@ -60,15 +68,13 @@ class ProvisionSiraAccountForMember implements ShouldQueue
         }
 
         $member->sira_client_id = $created['sira_client_id'];
-        $member->sira_provisioning_status = 'provisioned';
+        $member->sira_provisioning_status = ($created['status'] === 'active') ? 'provisioned' : 'pending';
         $member->save();
 
-        if ($member->email) {
-            Mail::to($member->email)->send(new SiraAccessProvided(
-                $member,
-                $created['login'],
-                $created['temporary_password'],
-            ));
-        }
+        Log::info("ProvisionSiraAccountForMember: Demande SIRA v2.1 soumise avec succès", [
+            'member_id' => $member->id,
+            'sira_client_id' => $member->sira_client_id,
+            'status' => $member->sira_provisioning_status,
+        ]);
     }
 }
