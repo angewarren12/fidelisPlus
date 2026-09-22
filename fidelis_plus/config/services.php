@@ -58,4 +58,11 @@ return [
         'outbound_token' => env('ODOO_OUTBOUND_TOKEN', ''),
     ],
 
+    // API immatriculation — consultation plaque & visite technique (lecture seule).
+    // Endpoint : GET {base_url}/api/immat/getVisite?Immatriculation={PLATE}
+    // Pas d'authentification requise. Voir app/Services/Immat/ImmatClient.php.
+    'immat' => [
+        'base_url' => env('IMMATRICULATION_API_BASE_URL', 'http://160.154.200.210:5588'),
+    ],
+
 ];

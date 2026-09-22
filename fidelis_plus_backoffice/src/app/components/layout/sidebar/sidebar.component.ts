@@ -106,6 +106,10 @@ import { ROLE_LABELS, UserRoles } from '../../../models/user-roles';
           <span class="material-symbols-outlined text-[20px]">inbox</span>
           Demandes SIRA
         </a>
+        <a *ngIf="showLoyaltyReadNav" routerLink="/marketing/fidelite" [queryParams]="{tab: 'sira'}" [class]="navLink" [routerLinkActive]="navLinkActive">
+          <span class="material-symbols-outlined text-[20px]">sync</span>
+          Synchro SIRA
+        </a>
         <a *ngIf="showLoyaltyNav" routerLink="/marketing/studio-carte" [class]="navLink" [routerLinkActive]="navLinkActive">
           <span class="material-symbols-outlined text-[20px]">badge</span>
           Studio Cartes PVC

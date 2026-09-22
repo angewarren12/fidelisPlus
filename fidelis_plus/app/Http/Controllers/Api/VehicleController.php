@@ -8,8 +8,10 @@ use App\Models\Document;
 use App\Http\Resources\VehicleResource;
 use App\Traits\ScopesByRole;
 use App\Events\VehicleChanged;
+use App\Services\Immat\ImmatClient;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -424,6 +426,122 @@ class VehicleController extends Controller
             'status' => 'success',
             'message' => 'Entretien enregistré et statut mis à jour.',
             'data' => new VehicleResource($vehicle->load(['documents', 'visits']))
+        ]);
+    }
+
+    // =========================================================================
+    // API Immatriculation — Lookup & Refresh temps réel
+    // =========================================================================
+
+    /**
+     * Interroge l'API immatriculation pour une plaque donnée et retourne
+     * les informations brutes normalisées (sans modifier la base de données).
+     *
+     * GET /api/v1/vehicles/lookup-immat?plate=3954KA01
+     *
+     * Retour :
+     *  { status, data: { ...champsFiche, ct_status, history } }
+     */
+    public function lookupImmat(Request $request)
+    {
+        $request->validate([
+            'plate' => 'required|string|max:30',
+        ]);
+
+        $client  = new ImmatClient();
+        $current = $client->getVisite($request->string('plate')->toString());
+
+        if (! $current) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Plaque introuvable ou API immatriculation indisponible.',
+            ], 404);
+        }
+
+        // Historique complet (optionnel, activé par ?with_history=1)
+        $history = [];
+        if ($request->boolean('with_history')) {
+            $history = $client->getVisiteHistory($request->string('plate')->toString());
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => array_merge($current, ['history' => $history]),
+        ]);
+    }
+
+    /**
+     * Met à jour un véhicule existant depuis l'API immatriculation et
+     * déclenche un broadcast temps réel vers le mobile et le backoffice.
+     *
+     * POST /api/v1/vehicles/{id}/refresh-immat
+     *
+     * Retour :
+     *  { status, message, data: VehicleResource, immat_data: {...} }
+     */
+    public function refreshImmat(Request $request, int $id)
+    {
+        $query = Vehicle::query();
+        $this->scopeForUser($query);
+        $vehicle = $query->findOrFail($id);
+
+        $client = new ImmatClient();
+        $immat  = $client->getVisite($vehicle->license_plate);
+
+        if (! $immat) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Aucune donnée retournée par l\'API immatriculation pour la plaque « ' . $vehicle->license_plate . ' ».',
+            ], 422);
+        }
+
+        // Construire le tableau de mise à jour
+        $updateData = [
+            'immat_api_synced_at'     => now(),
+            'numero_serie'            => $immat['numero_serie'],
+            'couleur'                 => $immat['couleur'],
+            'numero_certificat_visite' => $immat['numero_certificat_visite'],
+        ];
+
+        // Synchroniser la marque/modèle/énergie/places/puissance seulement si vides
+        if (empty($vehicle->brand))           $updateData['brand']            = $immat['marque'];
+        if (empty($vehicle->model))           $updateData['model']            = $immat['type_vehicule'];
+        if (empty($vehicle->fuel_type))       $updateData['fuel_type']        = $immat['energie'];
+        if (empty($vehicle->seats))           $updateData['seats']            = $immat['nombre_place'] ?: null;
+        if (empty($vehicle->fiscal_power_cv)) $updateData['fiscal_power_cv']  = $immat['puissance_fiscale'] ?: null;
+        if (empty($vehicle->registration_date) && $immat['date_mise_en_circulation']) {
+            $updateData['registration_date'] = $immat['date_mise_en_circulation'];
+        }
+
+        // Toujours mettre à jour la date de validité CT (c'est la donnée principale)
+        if ($immat['date_validite_fin']) {
+            $nextCtDate               = Carbon::parse($immat['date_validite_fin']);
+            $updateData['next_ct_date'] = $nextCtDate->toDateString();
+            $updateData['status']       = Vehicle::statusFromNextCtDate($nextCtDate);
+        }
+
+        // Mettre à jour les montants si fournis
+        if ($immat['montant_visite'] > 0)    $updateData['ct_amount_ttc']   = $immat['montant_visite'];
+        if ($immat['montant_vignette'] > 0)  $updateData['vignette_amount'] = $immat['montant_vignette'];
+
+        $vehicle->update($updateData);
+
+        // Broadcast temps réel → mobile + backoffice
+        try {
+            event(new VehicleChanged(
+                vehicleId: (int) $vehicle->id,
+                companyId: (int) $vehicle->company_id,
+                event: 'updated',
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('refreshImmat: broadcast VehicleChanged échoué', ['vehicle_id' => $vehicle->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json([
+            'status'     => 'success',
+            'message'    => 'Véhicule synchronisé depuis l\'API immatriculation.',
+            'data'       => new VehicleResource($vehicle->fresh(['company', 'visits', 'documents'])),
+            'immat_data' => $immat,
         ]);
     }
 

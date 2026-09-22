@@ -84,7 +84,7 @@ export class AccountService {
   }
 
   // Ajoute un correspondant (contact) à un compte existant
-  addContact(companyId: string, data: any): Observable<any> {
+  addContact(companyId: string | number, data: any): Observable<any> {
     return this.http.post<any>(`${this.API_URL}/${companyId}/contacts`, data).pipe(
       map(res => res?.data ?? res)
     );

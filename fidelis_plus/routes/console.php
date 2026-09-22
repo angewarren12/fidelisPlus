@@ -104,6 +104,9 @@ Artisan::command('notifications:ct-reminders', function (NotificationService $no
 Schedule::command('notifications:ct-reminders')->dailyAt('08:00');
 Schedule::command('quotes:check-expired')->dailyAt('08:00');
 
+// Synchronisation automatique des statuts SIRA pending (toutes les 6h)
+Schedule::command('sira:sync-pending-statuses')->everySixHours();
+
 // Cron de pull Odoo -> FidelisPlus (prospects/clients/flottes/devis créés ou modifiés
 // côté Odoo). Fréquence provisoire, ajustable. withoutOverlapping(5) expire le verrou après 5 min max.
 Schedule::command('odoo:sync')->everyMinute()->withoutOverlapping(5);

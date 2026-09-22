@@ -14,6 +14,8 @@ import {
   PaginatedMeta,
   LoyaltyMemberRow,
   CreateLoyaltyMemberPayload,
+  RecordPassagePayload,
+  SiraSyncStats,
 } from '../../../services/loyalty.service';
 import { QrCameraScannerComponent } from '../qr-camera-scanner/qr-camera-scanner.component';
 import { ToastService } from '../../../services/toast.service';
@@ -35,7 +37,8 @@ type LoyaltyTab =
   | 'settings'
   | 'stations'
   | 'reminders'
-  | 'requests';
+  | 'requests'
+  | 'sira';
 
 import { StationListComponent } from '../station-list/station-list.component';
 import { MarketingBgPatternComponent } from '../../ui/marketing-bg-pattern/marketing-bg-pattern.component';
@@ -191,10 +194,35 @@ export class LoyaltyDashboardComponent implements OnInit {
   adjustReason = '';
   adjustSaving = signal(false);
 
+  // Enregistrer un passage manuel (Admin Marketing)
+  showRecordPassageModal = signal(false);
+  recordPassageTarget = signal<LoyaltyAccountRow | null>(null);
+  recordPassageForm = {
+    station_id: 0,
+    vehicle_registration: '',
+    vehicle_brand: '',
+    vehicle_color: '',
+    visit_type: 'visite_technique',
+    points_credited: undefined as number | undefined,
+    occurred_at: '',
+  };
+  recordingPassage = signal(false);
+  stationsList = signal<{ id: number; name: string }[]>([]);
+
   showRewardForm = signal(false);
   editingReward: LoyaltyRewardRow | null = null;
   rewardForm = { name: '', description: '', points_cost: 100, is_active: true, sort_order: 0 };
   rewardSaving = signal(false);
+
+  // Supervision Synchronisation SIRA
+  siraSyncList = signal<LoyaltyMemberRow[]>([]);
+  siraSyncMeta = signal<PaginatedMeta | null>(null);
+  siraSyncStats = signal<SiraSyncStats | null>(null);
+  loadingSiraSync = signal<boolean>(false);
+  siraStatusFilter = signal<string>('all');
+  siraSearchQuery = signal<string>('');
+  processingSiraMemberId = signal<number | null>(null);
+  syncingAllSira = signal<boolean>(false);
 
   ngOnInit(): void {
     const td = this.todayInputDate();
@@ -224,6 +252,7 @@ export class LoyaltyDashboardComponent implements OnInit {
       stations: 'Stations',
       reminders: 'Rappels Visite Technique',
       requests: 'Demandes de carte SIRA',
+      sira: 'Supervision Synchronisation SIRA',
     };
     return titles[this.tab()] ?? 'Espace Fidélité';
   }
@@ -237,6 +266,73 @@ export class LoyaltyDashboardComponent implements OnInit {
     else if (t === 'rewards') this.loadRewards();
     else if (t === 'reminders') this.loadReminders();
     else if (t === 'requests') this.loadMemberRequests();
+    else if (t === 'sira') this.loadSiraSync();
+  }
+
+  loadSiraSync(page = 1): void {
+    this.loadingSiraSync.set(true);
+    this.loyaltyService.getSiraSyncList({
+      page,
+      per_page: 25,
+      sira_status: this.siraStatusFilter() === 'all' ? undefined : this.siraStatusFilter(),
+      search: this.siraSearchQuery().trim() || undefined,
+    }).subscribe({
+      next: (res) => {
+        this.siraSyncList.set(res.data);
+        this.siraSyncMeta.set(res.meta);
+        this.siraSyncStats.set(res.stats);
+        this.loadingSiraSync.set(false);
+      },
+      error: () => {
+        this.loadingSiraSync.set(false);
+        this.toastService.error('Erreur lors du chargement des données de synchronisation SIRA.');
+      },
+    });
+  }
+
+  syncOneSira(member: LoyaltyMemberRow): void {
+    this.processingSiraMemberId.set(member.id);
+    this.loyaltyService.syncOneSiraMember(member.id).subscribe({
+      next: (res) => {
+        this.processingSiraMemberId.set(null);
+        this.toastService.success(res.message || 'Statut SIRA vérifié avec succès.');
+        this.loadSiraSync(this.siraSyncMeta()?.current_page || 1);
+      },
+      error: (err) => {
+        this.processingSiraMemberId.set(null);
+        this.toastService.error(err.error?.message || 'Erreur lors de la vérification SIRA.');
+      },
+    });
+  }
+
+  retrySira(member: LoyaltyMemberRow): void {
+    this.processingSiraMemberId.set(member.id);
+    this.loyaltyService.retrySiraProvisioning(member.id).subscribe({
+      next: (res) => {
+        this.processingSiraMemberId.set(null);
+        this.toastService.success(res.message || 'Demande de provisioning SIRA relancée.');
+        this.loadSiraSync(this.siraSyncMeta()?.current_page || 1);
+      },
+      error: (err) => {
+        this.processingSiraMemberId.set(null);
+        this.toastService.error(err.error?.message || 'Erreur lors de la relance SIRA.');
+      },
+    });
+  }
+
+  syncAllSira(): void {
+    this.syncingAllSira.set(true);
+    this.loyaltyService.syncAllSiraPending().subscribe({
+      next: (res) => {
+        this.syncingAllSira.set(false);
+        this.toastService.success(res.message || 'Synchronisation SIRA globale terminée.');
+        this.loadSiraSync();
+      },
+      error: (err) => {
+        this.syncingAllSira.set(false);
+        this.toastService.error(err.error?.message || 'Erreur lors de la synchronisation globale.');
+      },
+    });
   }
 
   loadReminders(page = 1): void {
@@ -470,6 +566,72 @@ export class LoyaltyDashboardComponent implements OnInit {
   closeVehiclesModal(): void {
     this.showVehiclesModal.set(false);
     this.vehiclesAccount.set(null);
+  }
+
+  openRecordPassageModal(account: LoyaltyAccountRow): void {
+    this.recordPassageTarget.set(account);
+    const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    this.recordPassageForm = {
+      station_id: this.stationsList().length > 0 ? this.stationsList()[0].id : 0,
+      vehicle_registration: account.company?.name || '',
+      vehicle_brand: '',
+      vehicle_color: '',
+      visit_type: 'visite_technique',
+      points_credited: undefined,
+      occurred_at: nowLocal,
+    };
+    if (this.stationsList().length === 0) {
+      this.loyaltyService.listStations().subscribe({
+        next: (stations) => {
+          this.stationsList.set(stations);
+          if (stations.length > 0 && !this.recordPassageForm.station_id) {
+            this.recordPassageForm.station_id = stations[0].id;
+          }
+        },
+      });
+    }
+    this.showRecordPassageModal.set(true);
+  }
+
+  closeRecordPassageModal(): void {
+    this.showRecordPassageModal.set(false);
+    this.recordPassageTarget.set(null);
+  }
+
+  submitRecordPassage(): void {
+    const account = this.recordPassageTarget();
+    if (!account) return;
+    if (!this.recordPassageForm.station_id) {
+      this.toastService.error('Veuillez sélectionner une station.');
+      return;
+    }
+
+    this.recordingPassage.set(true);
+    this.loyaltyService
+      .recordPassage(account.id, {
+        station_id: Number(this.recordPassageForm.station_id),
+        vehicle_registration: this.recordPassageForm.vehicle_registration || undefined,
+        vehicle_brand: this.recordPassageForm.vehicle_brand || undefined,
+        vehicle_color: this.recordPassageForm.vehicle_color || undefined,
+        visit_type: this.recordPassageForm.visit_type || 'visite_technique',
+        points_credited: this.recordPassageForm.points_credited ? Number(this.recordPassageForm.points_credited) : undefined,
+        occurred_at: this.recordPassageForm.occurred_at || undefined,
+      })
+      .subscribe({
+        next: (res) => {
+          this.recordingPassage.set(false);
+          this.toastService.success(`Passage enregistré avec succès ! +${res.points_credited} points attribués.`);
+          this.closeRecordPassageModal();
+          this.loadAccounts(this.accountsMeta()?.current_page ?? 1);
+          if (this.selectedAccountDetail()?.id === account.id) {
+            this.openAccountDetail(account);
+          }
+        },
+        error: (err) => {
+          this.recordingPassage.set(false);
+          this.toastService.error(err?.error?.message || 'Erreur lors de l\'enregistrement du passage.');
+        },
+      });
   }
 
   /** Regroupe l'historique des scans déjà chargé par véhicule (plaque). */

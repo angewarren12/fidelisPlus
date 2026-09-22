@@ -47,6 +47,11 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
     Route::post('/technical-visit-reminders', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'store'])
         ->middleware('throttle:20,1')
         ->name('public.technical-visit-reminders.store');
+    // Lookup public : pré-remplit le formulaire QR station depuis la plaque
+    Route::get('/technical-visit-reminders/lookup', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'lookupByPlate'])
+        ->middleware('throttle:30,1')
+        ->name('public.technical-visit-reminders.lookup');
+
 
     // --- Déclencheur manuel de synchro Odoo (utilitaire de préproduction) ---
     Route::get('/sync-odoo', function () {
@@ -181,6 +186,8 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
         Route::prefix('vehicles')->middleware('role:admin_commercial,admin_marketing,super_admin,commercial,client,marketing')->name('vehicles.')->group(function () {
             Route::get('/stats', [VehicleController::class, 'fleetStatsSimple'])->name('stats');
             Route::get('/stats/summary', [VehicleController::class, 'fleetStats'])->name('stats.summary');
+            // Lookup API immatriculation (sans modifier la BD — consultation pure)
+            Route::get('/lookup-immat', [VehicleController::class, 'lookupImmat'])->name('lookup-immat');
             Route::get('/', [VehicleController::class, 'index'])->name('index');
             Route::post('/', [VehicleController::class, 'store'])->name('store');
             Route::get('/import/template', [VehicleController::class, 'downloadImportTemplate'])->name('import.template');
@@ -192,7 +199,10 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::delete('/{id}', [VehicleController::class, 'destroy'])->name('destroy');
             Route::post('/{id}/documents', [VehicleController::class, 'uploadDocs'])->name('documents');
             Route::post('/{id}/visit', [VehicleController::class, 'recordVisit'])->name('visit');
+            // Synchronisation depuis l'API immatriculation (mise à jour temps réel + broadcast)
+            Route::post('/{id}/refresh-immat', [VehicleController::class, 'refreshImmat'])->name('refresh-immat');
         });
+
 
         Route::prefix('quotes')->middleware('role:admin_commercial,super_admin,commercial,client')->name('quotes.')->group(function () {
             Route::get('/', [QuoteController::class, 'index'])->name('index');
@@ -293,6 +303,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::get('/accounts/{id}/card-pdf', [LoyaltyAccountController::class, 'downloadCard'])->name('accounts.card-pdf');
             Route::patch('/accounts/{id}', [LoyaltyAccountController::class, 'update'])->name('accounts.update');
             Route::post('/accounts/{id}/associate-card', [LoyaltyAccountController::class, 'associateCard'])->name('accounts.associate-card');
+            Route::post('/accounts/{id}/passages', [LoyaltyAccountController::class, 'recordPassage'])->name('accounts.record-passage');
 
             // Liste de clients propre au marketing (indépendante du CRM commercial).
             Route::get('/members', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'index'])->name('members.index');
@@ -315,13 +326,22 @@ Route::prefix('v1')->name('api.v1.')->middleware('throttle:180,1')->group(functi
             Route::post('/card-batches', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'store'])->name('card-batches.store');
             Route::get('/card-batches/{id}/download', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'download'])->name('card-batches.download');
             Route::patch('/card-batches/{id}/status', [\App\Http\Controllers\Api\LoyaltyCardBatchController::class, 'updateStatus'])->name('card-batches.update-status');
+
+            // Supervision de la synchronisation SIRA
+            Route::get('/sira-sync', [\App\Http\Controllers\Api\SiraSyncController::class, 'index'])->name('sira-sync.index');
+            Route::post('/sira-sync/sync-all', [\App\Http\Controllers\Api\SiraSyncController::class, 'syncAllPending'])->name('sira-sync.sync-all');
+            Route::post('/sira-sync/{id}/sync-one', [\App\Http\Controllers\Api\SiraSyncController::class, 'syncOne'])->name('sira-sync.sync-one');
+            Route::post('/sira-sync/{id}/retry', [\App\Http\Controllers\Api\SiraSyncController::class, 'retryProvisioning'])->name('sira-sync.retry');
         });
 
         /** Call center marketing : relances visite technique (formulaire QR station). */
         Route::prefix('technical-visit-reminders')->middleware('role:admin_commercial,admin_marketing,super_admin,marketing,commercial')->name('technical-visit-reminders.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'index'])->name('index');
             Route::patch('/{id}', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'update'])->name('update');
+            // Lookup plaque depuis le backoffice call center (identique à la route publique mais avec auth)
+            Route::get('/lookup', [\App\Http\Controllers\Api\TechnicalVisitReminderController::class, 'lookupByPlate'])->name('lookup');
         });
+
     });
 });
 

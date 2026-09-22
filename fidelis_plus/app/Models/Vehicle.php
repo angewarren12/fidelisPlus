@@ -16,6 +16,9 @@ class Vehicle extends Model
         'license_plate',
         'brand',
         'model',
+        'numero_serie',
+        'couleur',
+        'numero_certificat_visite',
         'vehicle_type',
         'ptac_kg',
         'seats',
@@ -37,6 +40,7 @@ class Vehicle extends Model
         'status',
         'created_via_odoo',
         'odoo_vehicle_id',
+        'immat_api_synced_at',
     ];
 
     protected $casts = [
@@ -51,6 +55,7 @@ class Vehicle extends Model
         'next_pollution_date' => 'date',
         'created_via_odoo' => 'boolean',
         'odoo_synced_at' => 'datetime',
+        'immat_api_synced_at' => 'datetime',
     ];
 
     protected $appends = ['has_required_doc'];

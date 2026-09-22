@@ -28,10 +28,12 @@ class LoyaltyMember extends Model
         'requested_at',
         'rejection_reason',
         'sira_provisioning_status',
+        'sira_status_changed_at',
     ];
 
     protected $casts = [
-        'requested_at' => 'datetime',
+        'requested_at'           => 'datetime',
+        'sira_status_changed_at' => 'datetime',
     ];
 
     public function loyaltyAccount(): HasOne

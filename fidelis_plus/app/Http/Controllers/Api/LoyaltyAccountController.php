@@ -5,15 +5,21 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\LoyaltyAccount;
+use App\Models\LoyaltyPosScanEvent;
+use App\Models\Station;
 use App\Models\User;
 use App\Services\Loyalty\LoyaltyAccountFactory;
 use App\Services\Loyalty\LoyaltyCommercialVisibility;
+use App\Services\Loyalty\LoyaltyCommercialVisitNotifier;
+use App\Services\Loyalty\LoyaltyMilestoneService;
 use App\Services\Loyalty\LoyaltyPointsService;
 use App\Services\Loyalty\LoyaltyRulesService;
 use App\Services\Loyalty\SignedLoyaltyQrService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class LoyaltyAccountController extends Controller
 {
@@ -335,4 +341,87 @@ class LoyaltyAccountController extends Controller
             ],
         ]);
     }
+
+    public function recordPassage(Request $request, int $id, LoyaltyCommercialVisitNotifier $visitNotifier): JsonResponse
+    {
+        $request->validate([
+            'station_id' => 'required|integer|exists:stations,id',
+            'vehicle_registration' => 'nullable|string|max:30',
+            'vehicle_brand' => 'nullable|string|max:60',
+            'vehicle_color' => 'nullable|string|max:40',
+            'visit_type' => 'nullable|string|max:40',
+            'points_credited' => 'nullable|integer|min:0',
+            'occurred_at' => 'nullable|date',
+        ]);
+
+        $account = LoyaltyAccount::query()->findOrFail($id);
+
+        if ($account->holder_type === 'unassigned') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cette carte est encore vierge (pas encore remise à un client).',
+            ], 422);
+        }
+
+        if ($account->isBlocked()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Compte fidélité bloqué.',
+            ], 422);
+        }
+
+        $defaultPoints = (int) config('loyalty.scan_points', 10);
+        $points = $request->filled('points_credited') ? (int) $request->input('points_credited') : $defaultPoints;
+        $user = $request->user();
+        $stationId = (int) $request->input('station_id');
+        $occurredAt = $request->filled('occurred_at') ? \Carbon\Carbon::parse($request->input('occurred_at')) : now();
+
+        $result = DB::transaction(function () use ($account, $request, $points, $user, $stationId, $occurredAt) {
+            app(LoyaltyMilestoneService::class)->processScan($account, $points);
+
+            $account->points_balance += $points;
+            $account->save();
+
+            $scanUuid = (string) Str::uuid();
+
+            $scanEvent = LoyaltyPosScanEvent::query()->create([
+                'idempotency_key' => 'manual_admin_' . $scanUuid,
+                'qr_jti' => 'manual_admin_' . $scanUuid,
+                'loyalty_account_id' => $account->id,
+                'cashier_user_id' => $user->id,
+                'station_id' => $stationId,
+                'points_credited' => $points,
+                'payload_hash' => hash('sha256', 'manual_admin_' . $scanUuid),
+                'device_id' => 'backoffice_admin',
+                'vehicle_registration' => $request->input('vehicle_registration'),
+                'vehicle_brand' => $request->input('vehicle_brand'),
+                'vehicle_color' => $request->input('vehicle_color'),
+                'visit_type' => $request->input('visit_type', 'visite_technique'),
+                'created_at' => $occurredAt,
+                'updated_at' => now(),
+            ]);
+
+            return [
+                'account' => $account->fresh(['company', 'user', 'member']),
+                'scan_event' => $scanEvent,
+                'points_credited' => $points,
+            ];
+        });
+
+        $station = Station::query()->find($stationId);
+        if ($station) {
+            $visitNotifier->notifyVisitValidated($result['account'], $station, $points);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Passage enregistré avec succès.',
+            'data' => [
+                'points_credited' => $result['points_credited'],
+                'new_balance' => $result['account']->points_balance,
+                'scan_event' => $result['scan_event'],
+            ],
+        ]);
+    }
 }
+

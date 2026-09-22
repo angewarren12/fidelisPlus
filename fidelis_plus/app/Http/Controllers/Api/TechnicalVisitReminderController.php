@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\TechnicalVisitReminder;
+use App\Services\Immat\ImmatClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+
 
 class TechnicalVisitReminderController extends Controller
 {
@@ -114,7 +116,55 @@ class TechnicalVisitReminderController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $reminder->fresh(['vehicles', 'station:id,name', 'handler:id,first_name,last_name']),
+            'data'   => $reminder->fresh(['vehicles', 'station:id,name', 'handler:id,first_name,last_name']),
+        ]);
+    }
+
+    /**
+     * Interroge l'API immatriculation pour pré-remplir le formulaire de relance CT.
+     *
+     * GET /api/v1/technical-visit-reminders/lookup?plate=3954KA01
+     *
+     * Accessible sans authentification (depuis le QR de la station) ET avec auth
+     * (depuis le backoffice call center).
+     *
+     * Retour :
+     *  {
+     *    status, data: {
+     *      plate, proprietaire, marque, type_vehicule, date_validite_fin,
+     *      ct_status, montant_visite, montant_vignette
+     *    }
+     *  }
+     */
+    public function lookupByPlate(Request $request): JsonResponse
+    {
+        $request->validate([
+            'plate' => 'required|string|max:30',
+        ]);
+
+        $client = new ImmatClient();
+        $visite = $client->getVisite($request->string('plate')->toString());
+
+        if (! $visite) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Plaque introuvable ou API immatriculation indisponible.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'plate'              => $visite['immatriculation'],
+                'proprietaire'       => $visite['nom_proprietaire'],
+                'marque'             => $visite['marque'],
+                'type_vehicule'      => $visite['type_vehicule'],
+                'date_validite_fin'  => $visite['date_validite_fin'],
+                'ct_status'          => $visite['ct_status'],
+                'montant_visite'     => $visite['montant_visite'],
+                'montant_vignette'   => $visite['montant_vignette'],
+            ],
         ]);
     }
 }
+

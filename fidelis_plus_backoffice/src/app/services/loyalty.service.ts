@@ -126,9 +126,25 @@ export interface LoyaltyMemberRow {
   status: 'pending' | 'validated' | 'rejected';
   requested_at: string | null;
   rejection_reason: string | null;
-  sira_provisioning_status: 'not_applicable' | 'pending' | 'provisioned' | 'failed';
+  sira_provisioning_status: 'not_applicable' | 'pending' | 'provisioned' | 'failed' | 'rejected' | 'none';
+  sira_status_changed_at?: string | null;
   created_at: string;
   loyalty_account?: LoyaltyAccountRow;
+}
+
+export interface SiraSyncStats {
+  total: number;
+  provisioned: number;
+  pending: number;
+  failed: number;
+  rejected: number;
+  none: number;
+}
+
+export interface SiraSyncResponse {
+  stats: SiraSyncStats;
+  data: LoyaltyMemberRow[];
+  meta: PaginatedMeta;
 }
 
 /** Studio Carte : modèle visuel (fond + positionnement % du QR et des champs texte). */
@@ -175,6 +191,16 @@ export interface CreateLoyaltyMemberPayload {
   registre_commerce?: string;
   nom_abonne?: string;
   fonction?: string;
+}
+
+export interface RecordPassagePayload {
+  station_id: number;
+  vehicle_registration?: string;
+  vehicle_brand?: string;
+  vehicle_color?: string;
+  visit_type?: string;
+  points_credited?: number;
+  occurred_at?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -272,6 +298,12 @@ export class LoyaltyService {
   adjustPoints(accountId: number, delta_points: number, reason: string): Observable<{ new_balance: number }> {
     return this.http
       .post<any>(`${this.base}/accounts/${accountId}/adjust`, { delta_points, reason })
+      .pipe(map((res) => res.data));
+  }
+
+  recordPassage(accountId: number, payload: RecordPassagePayload): Observable<{ points_credited: number; new_balance: number; scan_event: any }> {
+    return this.http
+      .post<any>(`${this.base}/accounts/${accountId}/passages`, payload)
       .pipe(map((res) => res.data));
   }
 
@@ -475,6 +507,30 @@ export class LoyaltyService {
 
   assignCard(memberId: number, qrPayload: string): Observable<{ member: LoyaltyMemberRow; loyalty_account: LoyaltyAccountRow }> {
     return this.http.post<any>(`${this.base}/members/${memberId}/assign-card`, { qr_payload: qrPayload }).pipe(map((res) => res.data));
+  }
+
+  // ─── Supervision de la synchronisation SIRA ─────────────────────────────────
+
+  getSiraSyncList(params: { page?: number; per_page?: number; sira_status?: string; search?: string } = {}): Observable<SiraSyncResponse> {
+    let httpParams = new HttpParams();
+    if (params.page) httpParams = httpParams.set('page', String(params.page));
+    if (params.per_page) httpParams = httpParams.set('per_page', String(params.per_page));
+    if (params.sira_status) httpParams = httpParams.set('sira_status', params.sira_status);
+    if (params.search) httpParams = httpParams.set('search', params.search);
+
+    return this.http.get<SiraSyncResponse>(`${this.base}/sira-sync`, { params: httpParams });
+  }
+
+  syncOneSiraMember(memberId: number): Observable<any> {
+    return this.http.post<any>(`${this.base}/sira-sync/${memberId}/sync-one`, {});
+  }
+
+  retrySiraProvisioning(memberId: number): Observable<any> {
+    return this.http.post<any>(`${this.base}/sira-sync/${memberId}/retry`, {});
+  }
+
+  syncAllSiraPending(): Observable<any> {
+    return this.http.post<any>(`${this.base}/sira-sync/sync-all`, {});
   }
 }
 
