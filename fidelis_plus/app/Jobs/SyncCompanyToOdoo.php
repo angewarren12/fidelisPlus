@@ -32,6 +32,11 @@ class SyncCompanyToOdoo implements ShouldQueue
             return;
         }
 
+        if (empty($company->email)) {
+            $company->email = "prospect-{$company->id}@fidelis.local";
+            $company->save();
+        }
+
         $result = $odoo->syncCompany($company, $this->event);
 
         if ($result === null) {
