@@ -40,6 +40,8 @@ class Vehicle extends Model
         'status',
         'created_via_odoo',
         'odoo_vehicle_id',
+        'odoo_sync_status',
+        'odoo_synced_at',
         'immat_api_synced_at',
     ];
 

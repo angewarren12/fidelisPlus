@@ -8,11 +8,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Quote extends Model
 {
-    protected $fillable = ['company_id', 'quote_request_id', 'quote_number', 'status', 'total_amount', 'currency', 'valid_until', 'payment_term_id', 'bon_de_commande_url'];
+    protected $fillable = [
+        'company_id',
+        'quote_request_id',
+        'quote_number',
+        'status',
+        'total_amount',
+        'currency',
+        'valid_until',
+        'payment_term_id',
+        'bon_de_commande_url',
+        'odoo_quote_id',
+        'odoo_sync_status',
+        'odoo_synced_at',
+    ];
 
     protected $casts = [
         'valid_until' => 'date',
         'total_amount' => 'decimal:2',
+        'odoo_synced_at' => 'datetime',
     ];
 
     public function getBonDeCommandeUrlAttribute($value)

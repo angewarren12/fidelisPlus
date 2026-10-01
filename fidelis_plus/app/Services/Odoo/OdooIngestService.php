@@ -397,13 +397,98 @@ class OdooIngestService
             $vehicle = Vehicle::where('odoo_vehicle_id', (string) $odooVehicleId)->first();
         }
 
+        $licensePlate = trim((string) ($payload['license_plate'] ?? $payload['immatriculation'] ?? ''));
+
+        // Rapprochement par immatriculation si non trouvé par ID / ref
+        if (! $vehicle && $licensePlate !== '') {
+            $vehicle = Vehicle::where('license_plate', $licensePlate)->first();
+        }
+
+        // Si le véhicule n'existe pas encore dans FidelisPlus, on le crée !
         if (! $vehicle) {
-            // Les véhicules ne sont jamais créés depuis Odoo dans notre workflow.
-            Log::info('OdooIngestService::ingestVehicle — véhicule Odoo inconnu dans FidelisPlus, ignoré', [
-                'odoo_vehicle_id' => $odooVehicleId,
-                'external_ref'    => $externalRef,
+            $ownerOdooId = is_array($payload['owner_id'] ?? null)
+                ? ($payload['owner_id'][0] ?? null)
+                : ($payload['owner_id'] ?? $payload['partner_id'] ?? null);
+
+            $company = null;
+            if ($ownerOdooId) {
+                $company = Company::where('odoo_partner_id', (string) $ownerOdooId)->first();
+            }
+
+            if (! $company && ! empty($payload['owner_name'])) {
+                $company = Company::where('name', $payload['owner_name'])->first();
+            }
+
+            if (! $company && ! empty($payload['driver_id'])) {
+                $driverId = is_array($payload['driver_id']) ? ($payload['driver_id'][0] ?? null) : $payload['driver_id'];
+                if ($driverId) {
+                    $company = Company::where('odoo_partner_id', (string) $driverId)->first();
+                }
+            }
+
+            // Si aucune société n'est associée, tentative avec le premier client actif ou fallback
+            if (! $company) {
+                Log::warning('OdooIngestService::ingestVehicle — véhicule Odoo ignoré : société propriétaire introuvable dans FidelisPlus', [
+                    'odoo_vehicle_id' => $odooVehicleId,
+                    'owner_id'        => $ownerOdooId,
+                    'owner_name'      => $payload['owner_name'] ?? null,
+                    'license_plate'   => $licensePlate,
+                ]);
+                return null;
+            }
+
+            if ($licensePlate === '') {
+                Log::warning('OdooIngestService::ingestVehicle — véhicule Odoo ignoré : immatriculation vide', [
+                    'odoo_vehicle_id' => $odooVehicleId,
+                ]);
+                return null;
+            }
+
+            $brand = is_array($payload['brand'] ?? null)
+                ? ($payload['brand']['name'] ?? null)
+                : ($payload['brand_name'] ?? null);
+
+            $model = is_array($payload['model'] ?? null)
+                ? ($payload['model']['name'] ?? null)
+                : ($payload['model_name'] ?? null);
+
+            $fuel = $payload['fuel_type'] ?? $payload['fuel'] ?? null;
+            $year = $payload['year'] ?? $payload['model_year'] ?? null;
+
+            $status = 'jamais_controle';
+            if (! empty($payload['state_name'])) {
+                $stateName = strtolower(trim((string) $payload['state_name']));
+                if (in_array($stateName, ['jamais_controle', 'a_jour', 'bientot', 'en_retard'], true)) {
+                    $status = $stateName;
+                }
+            }
+
+            $vehicle = Vehicle::create([
+                'company_id'       => $company->id,
+                'license_plate'    => $licensePlate,
+                'brand'            => $brand ?: 'Non spécifié',
+                'model'            => $model ?: 'Non spécifié',
+                'year'             => $year ? (int) $year : null,
+                'fuel_type'        => $fuel ?: 'diesel',
+                'status'           => $status,
+                'odoo_vehicle_id'  => $odooVehicleId ? (string) $odooVehicleId : null,
+                'odoo_sync_status' => 'synced',
+                'odoo_synced_at'   => now(),
+                'created_via_odoo' => true,
             ]);
-            return null;
+
+            try {
+                event(new \App\Events\VehicleChanged(
+                    vehicleId: (int) $vehicle->id,
+                    companyId: (int) $vehicle->company_id,
+                    event: 'created',
+                ));
+            } catch (\Throwable $e) {
+                // Ne bloque pas l'ingestion
+            }
+
+            Log::info("OdooIngestService::ingestVehicle — véhicule Odoo #{$odooVehicleId} ({$licensePlate}) créé avec succès pour la société {$company->name}");
+            return $vehicle;
         }
 
         if ($odooVehicleId) {
@@ -411,20 +496,23 @@ class OdooIngestService
         }
 
         // Synchronisation des champs véhicule depuis Odoo.
-        if (array_key_exists('license_plate', $payload)) {
+        if (array_key_exists('license_plate', $payload) && !empty($payload['license_plate'])) {
             $vehicle->license_plate = $payload['license_plate'];
         }
-        if (array_key_exists('brand_name', $payload)) {
-            $vehicle->brand = $payload['brand_name'];
+        $brand = is_array($payload['brand'] ?? null) ? ($payload['brand']['name'] ?? null) : ($payload['brand_name'] ?? null);
+        if ($brand) {
+            $vehicle->brand = $brand;
         }
-        if (array_key_exists('model_name', $payload)) {
-            $vehicle->model = $payload['model_name'];
+        $model = is_array($payload['model'] ?? null) ? ($payload['model']['name'] ?? null) : ($payload['model_name'] ?? null);
+        if ($model) {
+            $vehicle->model = $model;
         }
-        if (array_key_exists('year', $payload)) {
-            $vehicle->year = $payload['year'];
+        if (array_key_exists('year', $payload) || array_key_exists('model_year', $payload)) {
+            $vehicle->year = $payload['year'] ?? $payload['model_year'] ?? $vehicle->year;
         }
-        if (array_key_exists('fuel', $payload)) {
-            $vehicle->fuel_type = $payload['fuel'];
+        $fuel = $payload['fuel_type'] ?? $payload['fuel'] ?? null;
+        if ($fuel) {
+            $vehicle->fuel_type = $fuel;
         }
         if (! empty($payload['state_name'])) {
             $stateName = strtolower(trim((string) $payload['state_name']));
@@ -616,7 +704,7 @@ class OdooIngestService
     {
         $vehicleIds = [];
 
-        // ── Priorité 1 (v0.0.20) : tableau structuré vehicles:[{plate, vehicle_type, fleet_vehicle_id}] ──
+        // ── Priorité 1 (v0.0.20) : tableau structuré vehicles:[{license_plate, plate, vehicle_type, fleet_vehicle_id}] ──
         if (!empty($payload['vehicles']) && is_array($payload['vehicles'])) {
             foreach ($payload['vehicles'] as $vData) {
                 if (! is_array($vData)) {
@@ -625,6 +713,7 @@ class OdooIngestService
 
                 // Résolution par fleet_vehicle_id (ID Odoo fleet.vehicle)
                 $fleetVehicleId = $vData['fleet_vehicle_id'] ?? null;
+                $veh = null;
                 if ($fleetVehicleId) {
                     $veh = Vehicle::where('odoo_vehicle_id', (string) $fleetVehicleId)->first();
                     if ($veh) {
@@ -633,11 +722,42 @@ class OdooIngestService
                     }
                 }
 
-                // Fallback par plaque d'immatriculation
-                $plate = $vData['plate'] ?? null;
-                if ($plate) {
-                    $veh = Vehicle::where('license_plate', trim((string) $plate))->first();
+                // Fallback par plaque d'immatriculation (Odoo renvoie 'license_plate' ou 'plate' ou 'immatriculation')
+                $plate = trim((string) ($vData['license_plate'] ?? $vData['plate'] ?? $vData['immatriculation'] ?? ''));
+                if ($plate !== '') {
+                    $veh = Vehicle::where('license_plate', $plate)->first();
+                    if (! $veh && $quote->company_id) {
+                        // Le véhicule n'existe pas encore dans FidelisPlus : on le crée automatiquement
+                        // rattaché à la société du devis pour garantir la cohérence métier.
+                        $veh = Vehicle::create([
+                            'company_id'       => $quote->company_id,
+                            'license_plate'    => $plate,
+                            'brand'            => 'Non spécifié',
+                            'model'            => 'Non spécifié',
+                            'vehicle_type'     => $vData['vehicle_type_name'] ?? null,
+                            'status'           => 'jamais_controle',
+                            'created_via_odoo' => true,
+                            'odoo_vehicle_id'  => $fleetVehicleId ? (string) $fleetVehicleId : null,
+                            'odoo_sync_status' => 'synced',
+                            'odoo_synced_at'   => now(),
+                        ]);
+
+                        try {
+                            event(new \App\Events\VehicleChanged(
+                                vehicleId: (int) $veh->id,
+                                companyId: (int) $veh->company_id,
+                                event: 'created',
+                            ));
+                        } catch (\Throwable $e) {
+                            // Ignorer
+                        }
+                    }
+
                     if ($veh) {
+                        if ($fleetVehicleId && empty($veh->odoo_vehicle_id)) {
+                            $veh->odoo_vehicle_id = (string) $fleetVehicleId;
+                            $veh->saveQuietly();
+                        }
                         $vehicleIds[] = $veh->id;
                     }
                 }
@@ -645,7 +765,6 @@ class OdooIngestService
         }
 
         // ── Priorité 2 : format heuristique (rétrocompatibilité) ──
-        // Utilisé quand le payload ne contient pas le tableau structuré vehicles[]
         if (empty($vehicleIds)) {
             // Détection par ID véhicule Odoo (scalaire ou tableau)
             $rawVehicleIds = (array) ($payload['vehicle_ids'] ?? $payload['vehicle_id'] ?? $payload['fleet_vehicle_id'] ?? []);
@@ -660,9 +779,32 @@ class OdooIngestService
             }
 
             // Détection par immatriculation
-            $plate = $payload['license_plate'] ?? $payload['immatriculation'] ?? null;
-            if ($plate) {
-                $veh = Vehicle::where('license_plate', trim((string) $plate))->first();
+            $plate = trim((string) ($payload['license_plate'] ?? $payload['immatriculation'] ?? $payload['plate'] ?? ''));
+            if ($plate !== '') {
+                $veh = Vehicle::where('license_plate', $plate)->first();
+                if (! $veh && $quote->company_id) {
+                    $veh = Vehicle::create([
+                        'company_id'       => $quote->company_id,
+                        'license_plate'    => $plate,
+                        'brand'            => 'Non spécifié',
+                        'model'            => 'Non spécifié',
+                        'status'           => 'jamais_controle',
+                        'created_via_odoo' => true,
+                        'odoo_vehicle_id'  => !empty($payload['fleet_vehicle_id']) ? (string) $payload['fleet_vehicle_id'] : null,
+                        'odoo_sync_status' => 'synced',
+                        'odoo_synced_at'   => now(),
+                    ]);
+
+                    try {
+                        event(new \App\Events\VehicleChanged(
+                            vehicleId: (int) $veh->id,
+                            companyId: (int) $veh->company_id,
+                            event: 'created',
+                        ));
+                    } catch (\Throwable $e) {
+                        // Ignorer
+                    }
+                }
                 if ($veh) {
                     $vehicleIds[] = $veh->id;
                 }
@@ -681,6 +823,13 @@ class OdooIngestService
     private function alertCommercialsMissingVehicleQuote(string $quoteNum, string $clientName, ?int $odooQuoteId): void
     {
         try {
+            // Anti-spam et évitement des blocages SMTP répétés à chaque pull cron
+            $cacheKey = "odoo_missing_veh_alert_" . ($odooQuoteId ?? md5($quoteNum));
+            if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                return;
+            }
+            \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addDay());
+
             $commercials = User::whereIn('role', ['commercial', 'admin_commercial', 'super_admin'])->get();
             $title = "⚠️ ALERTE SÉCURITÉ : Devis Odoo {$quoteNum} rejeté (sans véhicule)";
             $body  = "Le devis Odoo {$quoteNum} pour le client \"{$clientName}\" a été rejeté car aucun véhicule (vignette / contrôle technique) n'y est rattaché.";

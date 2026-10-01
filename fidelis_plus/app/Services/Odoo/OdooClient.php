@@ -363,6 +363,25 @@ class OdooClient
      *
      * @return array{odoo_vehicle_id: int}|null
      */
+    public function findVehicleByPlate(string $plate): ?int
+    {
+        try {
+            $response = $this->http()->get('/api/sale_odoo/v1/vehicles', ['license_plate' => $plate, 'limit' => 5]);
+            if ($response->successful()) {
+                $json = $response->json();
+                $records = $json['data']['records'] ?? (isset($json['data'][0]) ? $json['data'] : []);
+                foreach ($records as $rec) {
+                    if (strcasecmp(trim($rec['license_plate'] ?? ''), trim($plate)) === 0) {
+                        return (int) $rec['id'];
+                    }
+                }
+            }
+            return null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function syncVehicle(Vehicle $vehicle, string $event): ?array
     {
         $ref = 'fidelis-vehicle-' . $vehicle->id;
@@ -370,6 +389,10 @@ class OdooClient
         $odooId = $vehicle->odoo_vehicle_id
             ? (int) $vehicle->odoo_vehicle_id
             : $this->findVehicleByRef($ref);
+
+        if (!$odooId && !empty($vehicle->license_plate)) {
+            $odooId = $this->findVehicleByPlate($vehicle->license_plate);
+        }
 
         if ($event === 'vehicle_archived') {
             if (!$odooId) {
@@ -382,7 +405,17 @@ class OdooClient
             ? (int) $vehicle->company->odoo_partner_id
             : null;
 
-        $payload = [
+        // Si la société n'a pas encore été synchronisée dans Odoo, on la pousse d'abord
+        if (! $ownerOdooId && $vehicle->company) {
+            $companySync = $this->syncCompany($vehicle->company, 'prospect_created');
+            if ($companySync && !empty($companySync['odoo_partner_id'])) {
+                $ownerOdooId = (int) $companySync['odoo_partner_id'];
+                $vehicle->company->odoo_partner_id = (string) $ownerOdooId;
+                $vehicle->company->saveQuietly();
+            }
+        }
+
+        $payload = array_filter([
             'external_ref' => $ref,
             'license_plate' => $vehicle->license_plate,
             'brand_name' => $vehicle->brand,
@@ -396,10 +429,11 @@ class OdooClient
             'state_id' => $this->resolveVehicleStateId($vehicle->status),
             'partner_id' => $ownerOdooId,
             'owner_id' => $ownerOdooId,
+            'driver_id' => $ownerOdooId,
             'partner_ref' => $vehicle->company_id
                 ? 'fidelis-company-' . $vehicle->company_id
                 : null,
-        ];
+        ], fn($val) => $val !== null && $val !== '');
 
         try {
             if ($odooId) {
