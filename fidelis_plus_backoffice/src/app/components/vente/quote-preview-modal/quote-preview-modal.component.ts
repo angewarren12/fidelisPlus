@@ -149,7 +149,7 @@ import { SettingService } from '../../../services/setting.service';
                         <span class="font-bold text-on-surface">{{ totalHT() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                      <div class="flex items-center justify-between">
-                        <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA ({{ tvaRate() }}%)</span>
+                        <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA ({{ effectiveTvaRate() }}%)</span>
                         <span class="font-bold text-on-surface">{{ totalTVA() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                      <div class="flex items-center justify-between pt-4 border-t-2 border-on-surface mt-4">
@@ -221,25 +221,37 @@ export class QuotePreviewModalComponent {
 
   totalHT = computed(() => {
     if (this.quoteData?.items && this.quoteData.items.length > 0) {
-      return this.quoteData.items.reduce((sum: number, item: any) => sum + (item.price * (item.quantity || 1)), 0);
+      return this.quoteData.items.reduce((sum: number, item: any) => sum + (Number(item.price || 0) * (Number(item.quantity) || 1)), 0);
     }
     const totalTtc = Number(this.quoteData?.total_amount) || 0;
     return totalTtc > 0 ? totalTtc / (1 + (this.tvaRate() / 100)) : 0;
   });
 
-  totalTVA = computed(() => {
-    if (this.quoteData?.items && this.quoteData.items.length > 0) {
-      return this.totalHT() * (this.tvaRate() / 100);
+  totalTTC = computed(() => {
+    const totalAmount = Number(this.quoteData?.total_amount);
+    if (Number.isFinite(totalAmount) && totalAmount > 0) {
+      return totalAmount;
     }
-    const totalTtc = Number(this.quoteData?.total_amount) || 0;
-    return totalTtc > 0 ? totalTtc - this.totalHT() : 0;
+    const ht = this.totalHT();
+    return ht + (ht * (this.tvaRate() / 100));
   });
 
-  totalTTC = computed(() => {
-    if (this.quoteData?.items && this.quoteData.items.length > 0) {
-      return this.totalHT() + this.totalTVA();
+  totalTVA = computed(() => {
+    const totalTtc = this.totalTTC();
+    const ht = this.totalHT();
+    if (totalTtc > 0 && ht > 0 && totalTtc >= ht) {
+      return totalTtc - ht;
     }
-    return Number(this.quoteData?.total_amount) || 0;
+    return ht * (this.tvaRate() / 100);
+  });
+
+  effectiveTvaRate = computed(() => {
+    const ht = this.totalHT();
+    const tva = this.totalTVA();
+    if (ht > 0 && tva >= 0) {
+      return Math.round((tva / ht) * 100);
+    }
+    return this.tvaRate();
   });
 
   groupedItems = computed(() => {

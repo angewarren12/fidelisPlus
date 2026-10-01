@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { QuoteService, Quote } from '../../../services/quote.service';
@@ -105,15 +105,15 @@ import { QuoteService, Quote } from '../../../services/quote.service';
            <div class="w-72 space-y-4">
               <div class="flex justify-between items-center text-sm font-bold text-outline">
                  <span>Total HT</span>
-                 <span>{{ quote()?.total_amount | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
+                 <span>{{ totalHT() | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
               <div class="flex justify-between items-center text-sm font-bold text-outline">
-                 <span>TVA (18%)</span>
-                 <span>{{ (quote()!.total_amount * 0.18) | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
+                 <span>TVA ({{ effectiveTvaRate() }}%)</span>
+                 <span>{{ totalTVA() | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
               <div class="flex justify-between items-center p-4 bg-primary text-white rounded-2xl shadow-xl shadow-primary/20">
                  <span class="text-xs font-black uppercase tracking-widest">Total TTC</span>
-                 <span class="text-xl font-black">{{ (quote()!.total_amount * 1.18) | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
+                 <span class="text-xl font-black">{{ totalTTC() | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
            </div>
         </div>
@@ -148,6 +148,42 @@ export class QuotePrintComponent implements OnInit {
   quote = signal<Quote | null>(null);
   loading = signal(true);
   today = new Date();
+
+  totalHT = computed(() => {
+    const q = this.quote();
+    if (q?.items && q.items.length > 0) {
+      return q.items.reduce((sum, item) => sum + (Number(item.price || 0) * (Number(item.quantity) || 1)), 0);
+    }
+    const totalTtc = Number(q?.total_amount) || 0;
+    return totalTtc > 0 ? totalTtc / 1.18 : 0;
+  });
+
+  totalTTC = computed(() => {
+    const q = this.quote();
+    const totalAmount = Number(q?.total_amount);
+    if (Number.isFinite(totalAmount) && totalAmount > 0) {
+      return totalAmount;
+    }
+    return this.totalHT() * 1.18;
+  });
+
+  totalTVA = computed(() => {
+    const totalTtc = this.totalTTC();
+    const ht = this.totalHT();
+    if (totalTtc > 0 && ht > 0 && totalTtc >= ht) {
+      return totalTtc - ht;
+    }
+    return ht * 0.18;
+  });
+
+  effectiveTvaRate = computed(() => {
+    const ht = this.totalHT();
+    const tva = this.totalTVA();
+    if (ht > 0 && tva >= 0) {
+      return Math.round((tva / ht) * 100);
+    }
+    return 18;
+  });
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
