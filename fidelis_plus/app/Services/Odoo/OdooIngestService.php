@@ -847,7 +847,7 @@ class OdooIngestService
                     ['odoo_quote_id' => $odooQuoteId, 'client' => $clientName],
                     '/vente',
                     'high',
-                    'both'
+                    'database'
                 );
 
                 // 2. Alerte Email par mesure de sécurité
@@ -883,6 +883,16 @@ class OdooIngestService
     private function ingestQuoteItems(Quote $quote, array $payload): void
     {
         $lines = $payload['order_line'] ?? $payload['order_lines'] ?? $payload['lines'] ?? $payload['items'] ?? null;
+        if ((! is_array($lines) || empty($lines)) && !empty($payload['id'])) {
+            $detailed = app(OdooClient::class)->fetchQuoteById((int) $payload['id']);
+            if ($detailed) {
+                $lines = $detailed['order_line'] ?? $detailed['order_lines'] ?? $detailed['lines'] ?? $detailed['items'] ?? null;
+                if (!empty($detailed['vehicles'])) {
+                    $this->syncQuoteVehicles($quote, $detailed);
+                }
+            }
+        }
+
         if (! is_array($lines) || empty($lines)) {
             return;
         }
