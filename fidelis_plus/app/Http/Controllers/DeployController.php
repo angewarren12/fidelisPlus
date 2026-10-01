@@ -24,11 +24,45 @@ class DeployController extends Controller
             abort(403);
         }
 
-        Artisan::call('migrate', ['--force' => true]);
-        Artisan::call('config:cache');
-        Artisan::call('route:cache');
-        Artisan::call('view:cache');
+        $results = [];
+        $errors = [];
 
-        return response()->json(['success' => true]);
+        // 1. Migrations
+        try {
+            Artisan::call('migrate', ['--force' => true]);
+            $results['migrate'] = trim(Artisan::output());
+        } catch (\Throwable $e) {
+            $errors['migrate'] = $e->getMessage();
+        }
+
+        // 2. Nettoyage des caches précédents
+        try {
+            Artisan::call('optimize:clear');
+            $results['clear'] = trim(Artisan::output());
+        } catch (\Throwable $e) {
+            $errors['clear'] = $e->getMessage();
+        }
+
+        // 3. Mise en cache de la config
+        try {
+            Artisan::call('config:cache');
+            $results['config'] = trim(Artisan::output());
+        } catch (\Throwable $e) {
+            $errors['config'] = $e->getMessage();
+        }
+
+        // 4. Mise en cache des vues
+        try {
+            Artisan::call('view:cache');
+            $results['view'] = trim(Artisan::output());
+        } catch (\Throwable $e) {
+            $errors['view'] = $e->getMessage();
+        }
+
+        return response()->json([
+            'success' => empty($errors),
+            'results' => $results,
+            'errors'  => $errors,
+        ], 200);
     }
 }
