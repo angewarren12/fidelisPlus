@@ -149,7 +149,7 @@ import { SettingService } from '../../../services/setting.service';
                         <span class="font-bold text-on-surface">{{ totalHT() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                      <div class="flex items-center justify-between">
-                        <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA ({{ effectiveTvaRate() }}%)</span>
+                        <span class="text-[10px] uppercase font-black tracking-widest text-outline">TVA ({{ displayTvaRate() }}%)</span>
                         <span class="font-bold text-on-surface">{{ totalTVA() | number:'1.0-0' }} {{ currency }}</span>
                      </div>
                      <div class="flex items-center justify-between pt-4 border-t-2 border-on-surface mt-4">
@@ -221,35 +221,33 @@ export class QuotePreviewModalComponent {
 
   totalHT = computed(() => {
     if (this.quoteData?.items && this.quoteData.items.length > 0) {
-      return this.quoteData.items.reduce((sum: number, item: any) => sum + (Number(item.price || 0) * (Number(item.quantity) || 1)), 0);
+      return this.quoteData.items.reduce((sum: number, item: any) => sum + (item.price * (item.quantity || 1)), 0);
     }
-    const totalTtc = Number(this.quoteData?.total_amount) || 0;
-    return totalTtc > 0 ? totalTtc / (1 + (this.tvaRate() / 100)) : 0;
+    const totalRecorded = Number(this.quoteData?.total_amount) || 0;
+    return totalRecorded > 0 ? totalRecorded / (1 + (this.tvaRate() / 100)) : 0;
   });
 
   totalTTC = computed(() => {
-    const totalAmount = Number(this.quoteData?.total_amount);
-    if (Number.isFinite(totalAmount) && totalAmount > 0) {
-      return totalAmount;
-    }
+    const totalRecorded = Number(this.quoteData?.total_amount) || 0;
     const ht = this.totalHT();
-    return ht + (ht * (this.tvaRate() / 100));
+    // Si le total enregistré en DB est supérieur au HT (ex: devis Odoo avec taxes incluses), on respecte scrupuleusement ce total TTC officiel
+    if (totalRecorded > ht) {
+      return totalRecorded;
+    }
+    // Sinon, règle standard FidelisPlus : HT + TVA
+    return ht > 0 ? ht + (ht * (this.tvaRate() / 100)) : totalRecorded;
   });
 
   totalTVA = computed(() => {
-    const totalTtc = this.totalTTC();
-    const ht = this.totalHT();
-    if (totalTtc > 0 && ht > 0 && totalTtc >= ht) {
-      return totalTtc - ht;
-    }
-    return ht * (this.tvaRate() / 100);
+    return Math.max(0, this.totalTTC() - this.totalHT());
   });
 
-  effectiveTvaRate = computed(() => {
+  displayTvaRate = computed(() => {
     const ht = this.totalHT();
     const tva = this.totalTVA();
-    if (ht > 0 && tva >= 0) {
-      return Math.round((tva / ht) * 100);
+    if (ht > 0 && tva > 0) {
+      const rate = (tva / ht) * 100;
+      return Number.isInteger(rate) ? rate : Number(rate.toFixed(1));
     }
     return this.tvaRate();
   });

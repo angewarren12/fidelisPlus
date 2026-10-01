@@ -242,7 +242,12 @@ class QuoteController extends Controller
                 ]);
             }
 
-            $quote->update(['total_amount' => $total]);
+            $submittedTotal = $request->input('total_amount');
+            $finalTotal = ($submittedTotal !== null && (float) $submittedTotal > 0)
+                ? (float) $submittedTotal
+                : round($total * 1.18, 2);
+
+            $quote->update(['total_amount' => $finalTotal]);
 
             try {
                 \App\Jobs\SyncQuoteToOdoo::dispatchSync($quote->id, 'quote_created');
@@ -357,7 +362,12 @@ class QuoteController extends Controller
                 ]);
             }
 
-            $quote->update(['total_amount' => $total]);
+            $submittedTotal = $request->input('total_amount');
+            $finalTotal = ($submittedTotal !== null && (float) $submittedTotal > 0)
+                ? (float) $submittedTotal
+                : round($total * 1.18, 2);
+
+            $quote->update(['total_amount' => $finalTotal]);
 
             return response()->json([
                 'status' => 'success',

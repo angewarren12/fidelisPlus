@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { QuoteService, Quote } from '../../../services/quote.service';
@@ -108,7 +108,7 @@ import { QuoteService, Quote } from '../../../services/quote.service';
                  <span>{{ totalHT() | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
               <div class="flex justify-between items-center text-sm font-bold text-outline">
-                 <span>TVA ({{ effectiveTvaRate() }}%)</span>
+                 <span>TVA ({{ displayTvaRate() }}%)</span>
                  <span>{{ totalTVA() | number:'1.0-0' }} {{ quote()?.currency || 'XOF' }}</span>
               </div>
               <div class="flex justify-between items-center p-4 bg-primary text-white rounded-2xl shadow-xl shadow-primary/20">
@@ -150,37 +150,33 @@ export class QuotePrintComponent implements OnInit {
   today = new Date();
 
   totalHT = computed(() => {
-    const q = this.quote();
-    if (q?.items && q.items.length > 0) {
-      return q.items.reduce((sum, item) => sum + (Number(item.price || 0) * (Number(item.quantity) || 1)), 0);
+    const items = this.quote()?.items;
+    if (items && items.length > 0) {
+      return items.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
     }
-    const totalTtc = Number(q?.total_amount) || 0;
-    return totalTtc > 0 ? totalTtc / 1.18 : 0;
+    const totalRecorded = Number(this.quote()?.total_amount) || 0;
+    return totalRecorded > 0 ? totalRecorded / 1.18 : 0;
   });
 
   totalTTC = computed(() => {
-    const q = this.quote();
-    const totalAmount = Number(q?.total_amount);
-    if (Number.isFinite(totalAmount) && totalAmount > 0) {
-      return totalAmount;
+    const totalRecorded = Number(this.quote()?.total_amount) || 0;
+    const ht = this.totalHT();
+    if (totalRecorded > ht) {
+      return totalRecorded;
     }
-    return this.totalHT() * 1.18;
+    return ht > 0 ? ht * 1.18 : totalRecorded;
   });
 
   totalTVA = computed(() => {
-    const totalTtc = this.totalTTC();
-    const ht = this.totalHT();
-    if (totalTtc > 0 && ht > 0 && totalTtc >= ht) {
-      return totalTtc - ht;
-    }
-    return ht * 0.18;
+    return Math.max(0, this.totalTTC() - this.totalHT());
   });
 
-  effectiveTvaRate = computed(() => {
+  displayTvaRate = computed(() => {
     const ht = this.totalHT();
     const tva = this.totalTVA();
-    if (ht > 0 && tva >= 0) {
-      return Math.round((tva / ht) * 100);
+    if (ht > 0 && tva > 0) {
+      const rate = (tva / ht) * 100;
+      return Number.isInteger(rate) ? rate : Number(rate.toFixed(1));
     }
     return 18;
   });
