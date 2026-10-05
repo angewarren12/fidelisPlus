@@ -58,6 +58,40 @@ Route::get('/internal/sira-runner', function () {
     ]);
 });
 
+// Route Cron HTTP — Synchronisation des statuts SIRA pending (active/rejected).
+// Appelée par cron-job.org toutes les minutes avec le header Authorization ou le paramètre ?token=...
+// Protégée par SIRA_CRON_TOKEN (ajouter dans .env et dans le dashboard cron-job.org).
+// URL à configurer : https://fidelisplus.cieria-app.com/internal/sira-sync-runner?token=VOTRE_TOKEN
+Route::get('/internal/sira-sync-runner', function () {
+    $expectedToken = (string) config('services.sira.cron_token', '');
+
+    // Accepter le token via query-string OU via header Authorization: Bearer ...
+    $provided = request()->query('token')
+        ?? str_replace('Bearer ', '', (string) request()->header('Authorization', ''));
+
+    if (empty($expectedToken) || ! hash_equals($expectedToken, trim($provided))) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $exitCode = \Illuminate\Support\Facades\Artisan::call('sira:sync-pending-statuses');
+    $output   = \Illuminate\Support\Facades\Artisan::output();
+
+    // Compter les membres encore en attente pour le monitoring
+    $stillPending = \App\Models\LoyaltyMember::query()
+        ->whereNotNull('sira_client_id')
+        ->where('sira_provisioning_status', 'pending')
+        ->count();
+
+    return response()->json([
+        'status'        => 'completed',
+        'service'       => 'sira-sync-pending-statuses',
+        'exit_code'     => $exitCode,
+        'output'        => trim($output) ?: 'Aucun membre en attente de provisioning SIRA.',
+        'still_pending' => $stillPending,
+        'ran_at'        => now()->toIso8601String(),
+    ]);
+});
+
 // Route Web simple pour déclencher la synchronisation Odoo manuelle depuis le navigateur
 Route::get('/sync-odoo', function () {
     \Illuminate\Support\Facades\Artisan::call('odoo:sync', ['--full' => true]);
