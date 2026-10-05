@@ -104,6 +104,13 @@ jobs:
           lftp -u "${{ secrets.SSH_USER }},${{ secrets.SSH_PASSWORD }}" sftp://${{ secrets.SSH_HOST }} -e "
             set sftp:auto-confirm yes
             set net:max-retries 2
+            # Étape 1 : supprimer les anciens chunks JS/CSS Angular pour éviter les
+            # SyntaxError (module export mismatch) causés par des fichiers orphelins.
+            # Les chunks ont des hash dans leur nom donc --delete sans cette étape laisserait
+            # coexister les anciens et nouveaux chunks sur le serveur.
+            glob -a rm ${{ secrets.DEPLOY_PATH }}/*.js || true
+            glob -a rm ${{ secrets.DEPLOY_PATH }}/*.css || true
+            # Étape 2 : upload complet du release (Angular + Laravel)
             mirror -R --parallel=4 --verbose release ${{ secrets.DEPLOY_PATH }}
             quit
           "

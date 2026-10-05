@@ -12,6 +12,12 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
         Header set Pragma "no-cache"
         Header set Expires 0
     </FilesMatch>
+    # Les chunks Angular ont un hash dans leur nom → contenu immuable → cache 1 an (best practice)
+    # Cela évite que le navigateur re-télécharge les mêmes chunks à chaque visite
+    # ET garantit qu'une fois un nouveau hash servi, le navigateur charge toujours le bon fichier.
+    <FilesMatch "\.(js|css)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
 </IfModule>
 
 # Bloque l'accès direct au code Laravel, sauf son front controller laravel/public/
